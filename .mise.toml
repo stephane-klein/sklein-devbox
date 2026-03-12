@@ -3,5 +3,5 @@ run = "podman build -t sklein-devbox ."
 description = "Build the sklein-devbox container image"
 
 [tasks.enter]
-run = "podman run -it --rm sklein-devbox"
+run = "podman run -it --rm --userns=keep-id -v $(pwd):/workspace sklein-devbox"
 description = "Enter the sklein-devbox container shell"

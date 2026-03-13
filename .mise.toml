@@ -3,5 +3,25 @@ run = "podman build -t sklein-devbox ."
 description = "Build the sklein-devbox container image"
 
 [tasks.enter]
-run = "podman run -it --rm --userns=keep-id -v $(pwd):/workspace sklein-devbox"
+quiet = true
+run = """
+mkdir -p $(pwd)/.sklein-devbox-home
+podman run -it --rm \
+    --userns=keep-id \
+    --cap-add=SETUID \
+    --cap-add=SETGID \
+    -v $(pwd):/workspace \
+    -v $(pwd)/.sklein-devbox-home:/home/sklein \
+    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh \
+    -e CHEZMOI_SOURCE_DIR=/workspace/chezmoi \
+    sklein-devbox
+"""
 description = "Enter the sklein-devbox container shell"
+
+[tasks.clean-home]
+run = "rm -rf $(pwd)/.sklein-devbox-home"
+description = "Remove the container home directory to reset the development environment"
+
+[tasks.fresh-enter]
+run = "mise clean-home && mise enter"
+description = "Clean the container home and enter the container (fresh start)"

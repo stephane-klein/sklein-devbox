@@ -14,6 +14,9 @@ RUN dnf update -y && \
         && \
     dnf clean all
 
+# Install Starship in /usr/local/bin
+RUN curl -sS https://starship.rs/install.sh | sh -s -- -y --bin-dir /usr/local/bin
+
 # Create user sklein
 RUN groupadd -r sklein && \
     useradd -r -g sklein -s /bin/zsh -m sklein
@@ -31,6 +34,23 @@ USER sklein
 RUN mkdir -p ${XDG_CONFIG_HOME} ${XDG_DATA_HOME} ${XDG_CACHE_HOME} ${XDG_STATE_HOME}
 RUN curl https://mise.run | sh && \
     echo 'eval "$(~/.local/bin/mise activate zsh)"' >> ~/.zshrc
+
+# Install OhMyZsh
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+
+# Install OhMyZsh plugins
+RUN git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions && \
+    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+
+# Configure OhMyZsh: disable theme (Starship will handle prompt) and add plugins
+RUN sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME=""/' ~/.zshrc && \
+    sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' ~/.zshrc
+
+# Enable Starship (after OhMyZsh init)
+RUN echo 'eval "$(starship init zsh)"' >> ~/.zshrc
+
+# Pre-generate zsh caches to avoid first-launch delay
+RUN zsh -c 'exit'
 
 # Set Zsh as default shell
 ENV SHELL=/bin/zsh

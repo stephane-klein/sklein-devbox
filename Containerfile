@@ -6,11 +6,6 @@ RUN dnf update -y && \
         git \
         wget \
         zsh \
-        neovim \
-        ripgrep \
-        fd-find \
-        fzf \
-        tmux \
         && \
     dnf clean all
 

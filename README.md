@@ -10,7 +10,7 @@ Designed to keep each project's toolchain and dependencies isolated.
 - [OpenCode](https://opencode.ai) — AI coding agent
 - [Chezmoi](https://www.chezmoi.io/) — dotfiles manager
 
-## Getting started
+## Development commands
 
 ```sh
 $ mise install

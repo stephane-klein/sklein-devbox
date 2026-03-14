@@ -36,14 +36,7 @@ func runEnter() {
 		os.Exit(1)
 	}
 
-	entrypointPath := filepath.Join(cwd, "entrypoint.sh")
-	if _, err := os.Stat(entrypointPath); os.IsNotExist(err) {
-		entrypointPath = "/usr/local/bin/entrypoint.sh"
-	}
-
-	chezmoiSourceDir := filepath.Join(cwd, "chezmoi")
-
-	if err := podman.Run(homeDir, cwd, entrypointPath, chezmoiSourceDir); err != nil {
+	if err := podman.Run(homeDir, cwd); err != nil {
 		printError("%v", err)
 		os.Exit(1)
 	}

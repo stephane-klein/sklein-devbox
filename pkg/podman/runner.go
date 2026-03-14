@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-func Run(homeDir, workspaceDir, entrypointPath, chezmoiSourceDir string) error {
+func Run(homeDir, workspaceDir string) error {
 	podmanPath, err := exec.LookPath("podman")
 	if err != nil {
 		return fmt.Errorf("podman not found: %w", err)
@@ -22,8 +22,6 @@ func Run(homeDir, workspaceDir, entrypointPath, chezmoiSourceDir string) error {
 		"-e", "TERM",
 		"-v", workspaceDir + ":/workspace",
 		"-v", homeDir + ":/home/sklein",
-		"-v", entrypointPath + ":/usr/local/bin/entrypoint.sh",
-		"-e", "CHEZMOI_SOURCE_DIR=/workspace/chezmoi",
 		"sklein-devbox",
 	}
 

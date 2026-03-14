@@ -22,14 +22,18 @@ This project uses **Podman**, not Docker.
 - **Base**: Fedora 43
 - **Tools**: Mise, Zsh, Neovim
 
-## Build
+## Development commands
 
-```bash
-$ mise run build
-```
+```sh
+$ mise install
 
-## Run
+$ mise run build-image      # Build the container image
 
-```bash
-$ mise run enter
+$ mise run build-cli        # Build the CLI application
+
+$ mise run enter            # Enter the container shell
+
+$ mise run clean-home       # Remove the persistent home directory
+
+$ mise run fresh-enter      # Clean home + enter (fresh start)
 ```

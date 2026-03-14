@@ -8,6 +8,10 @@ It consists of two main parts:
 - A Go CLI (`sklein-devbox`) that allows instantiating containers based on this image. The home directory of these 
   environments is persistent, allowing data and configurations to be preserved between sessions.
 
+# Language
+
+All content must be in English: source code, comments, and documentation.
+
 # Image Reference
 
 This project uses **Podman**, not Docker.

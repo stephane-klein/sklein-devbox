@@ -13,13 +13,17 @@ Designed to keep each project's toolchain and dependencies isolated.
 ## Getting started
 
 ```sh
-$ mise run build          # Build the container image
+$ mise install
 
-$ mise run enter          # Enter the container shell
+$ mise run build-image      # Build the container image
 
-$ mise run clean-home     # Remove the persistent home directory
+$ mise run build-cli        # Build the CLI application
 
-$ mise run fresh-enter   # Clean home + enter (fresh start)
+$ mise run enter            # Enter the container shell
+
+$ mise run clean-home       # Remove the persistent home directory
+
+$ mise run fresh-enter      # Clean home + enter (fresh start)
 ```
 
 ## Persistence and dotfiles management

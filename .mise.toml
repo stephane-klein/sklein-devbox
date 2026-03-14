@@ -1,6 +1,13 @@
-[tasks.build]
+[tools]
+go="1.26.1"
+
+[tasks.build-image]
 run = "podman build -t sklein-devbox ."
 description = "Build the sklein-devbox container image"
+
+[tasks.build-cli]
+run = "go build -o sklein-devbox ./cmd"
+description = "Build the sklein-devbox CLI application"
 
 [tasks.enter]
 quiet = true

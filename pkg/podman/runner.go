@@ -19,6 +19,7 @@ func Run(homeDir, workspaceDir, entrypointPath, chezmoiSourceDir string) error {
 		"--userns=keep-id",
 		"--cap-add=SETUID",
 		"--cap-add=SETGID",
+		"-e", "TERM",
 		"-v", workspaceDir + ":/workspace",
 		"-v", homeDir + ":/home/sklein",
 		"-v", entrypointPath + ":/usr/local/bin/entrypoint.sh",

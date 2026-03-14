@@ -17,6 +17,7 @@ podman run -it --rm \
     --userns=keep-id \
     --cap-add=SETUID \
     --cap-add=SETGID \
+    -e TERM \
     -v $(pwd):/workspace \
     -v $(pwd)/.sklein-devbox-home:/home/sklein \
     -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh \

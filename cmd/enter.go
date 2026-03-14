@@ -55,7 +55,7 @@ func getHomeDir() (string, error) {
 		return "", err
 	}
 
-	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "foobar")
+	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "default")
 
 	if err := os.MkdirAll(homeDir, 0755); err != nil {
 		return "", err

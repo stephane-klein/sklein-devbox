@@ -1,2 +1,7 @@
+.copr/
 .sklein-devbox-home/
 sklein-devbox
+rpmbuild/
+rpm/
+go/
+

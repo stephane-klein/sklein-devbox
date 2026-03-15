@@ -33,3 +33,39 @@ description = "Remove the container home directory to reset the development envi
 [tasks.fresh-enter]
 run = "mise clean-home && mise enter"
 description = "Clean the container home and enter the container (fresh start)"
+
+[tasks.build-rpm]
+run = """
+mkdir -p rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS rpmbuild/RPMS
+cp rpm/sklein-devbox.spec rpmbuild/SPECS/
+git archive --format tar.gz --prefix sklein-devbox-0.1.0/ --output rpmbuild/SOURCES/sklein-devbox-0.1.0.tar.gz HEAD
+rpmbuild -ba --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
+"""
+description = "Build RPM package locally"
+
+[tasks.build-srpm]
+run = """
+mkdir -p rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS rpmbuild/RPMS
+cp rpm/sklein-devbox.spec rpmbuild/SPECS/
+git archive --format tar.gz --prefix sklein-devbox-0.1.0/ --output rpmbuild/SOURCES/sklein-devbox-0.1.0.tar.gz HEAD
+rpmbuild -bs --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
+"""
+description = "Build SRPM package"
+
+[tasks.copr-build]
+run = "copr-cli build sklein-devbox rpmbuild/SRPMS/*.src.rpm"
+description = "Build package on COPR"
+
+[tasks.copr-create]
+run = """
+copr-cli create sklein-devbox \
+  --enable-net on \
+  --chroot fedora-42-x86_64 \
+  --chroot fedora-43-x86_64 \
+  --chroot fedora-44-x86_64
+"""
+description = "Create COPR project for sklein-devbox"
+
+[tasks.clean-rpmbuild]
+run = "rm -rf rpmbuild"
+description = "Clean rpmbuild directory"

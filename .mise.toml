@@ -28,10 +28,10 @@ podman run -it --rm \
     --cap-add=SETUID \
     --cap-add=SETGID \
     -e TERM \
-    -v $(pwd):/workspace \
-    -v $(pwd)/.sklein-devbox-home:/home/sklein \
-    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh \
-    -e CHEZMOI_SOURCE_DIR=/workspace/chezmoi \
+    -v $(pwd):/workspace:U \
+    -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
+    -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
+    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
     sklein-devbox
 """
 description = "Enter the sklein-devbox container shell"

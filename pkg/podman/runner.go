@@ -20,8 +20,8 @@ func Run(homeDir, workspaceDir string) error {
 		"--cap-add=SETUID",
 		"--cap-add=SETGID",
 		"-e", "TERM",
-		"-v", workspaceDir + ":/workspace",
-		"-v", homeDir + ":/home/sklein",
+		"-v", workspaceDir + ":/workspace:U",
+		"-v", homeDir + ":/home/sklein:U",
 		"sklein-devbox",
 	}
 

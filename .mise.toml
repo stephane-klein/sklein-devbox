@@ -1,6 +1,16 @@
 [tools]
 go="1.26.1"
 
+[tasks.git-clone-chezmoi]
+run = """
+if [ -d "chezmoi" ]; then
+    echo "Warning: ./chezmoi/ directory already exists."
+else
+    git clone https://github.com/stephane-klein/sklein-devbox-chezmoi.git chezmoi
+fi
+"""
+description = "Clone the chezmoi configuration repository into ./chezmoi/"
+
 [tasks.build-image]
 run = "podman build -t sklein-devbox ."
 description = "Build the sklein-devbox container image"

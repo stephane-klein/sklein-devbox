@@ -35,6 +35,8 @@ $ sklein-devbox enter
 ```sh
 $ mise install
 
+$ mise run git-clone-chezmoi  # Clone chezmoi configuration
+
 $ mise run build-image      # Build the container image
 
 $ mise run build-cli        # Build the CLI application

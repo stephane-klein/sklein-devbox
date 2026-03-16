@@ -22,10 +22,22 @@ This project uses **Podman**, not Docker.
 - **Base**: Fedora 43
 - **Tools**: Mise, Zsh, Neovim
 
+## Chezmoi Configuration Separation
+
+The chezmoi dotfiles configuration is maintained in a separate repository:
+[stephane-klein/sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
+
+This separation ensures that:
+- Only the actual dotfiles (not project files like `Containerfile`, `go.mod`, etc.) are applied to the home directory
+- The configuration can be reused directly on a Fedora workstation outside the devbox
+- Cleaner separation of concerns between the devbox infrastructure and user configuration
+
 ## Development commands
 
 ```sh
 $ mise install
+
+$ mise run git-clone-chezmoi  # Clone chezmoi configuration
 
 $ mise run build-image      # Build the container image
 

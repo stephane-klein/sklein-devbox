@@ -8,7 +8,8 @@ Designed to keep each project's toolchain and dependencies isolated.
 - [mise](https://mise.jdx.dev) — runtime version manager
 - [Neovim](https://neovim.io) + [LazyVim](https://lazyvim.org) — editor
 - [OpenCode](https://opencode.ai) — AI coding agent
-- [Chezmoi](https://www.chezmoi.io/) — dotfiles manager
+- [Chezmoi](https://www.chezmoi.io/) — dotfiles manager (configuration stored in
+  [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi))
 
 
 ## Getting started

@@ -48,19 +48,26 @@ $ mise run fresh-enter      # Clean home + enter (fresh start)
 
 ## Persistence and dotfiles management
 
-This container uses a bind-mounted directory at `./.sklein-devbox-home/` 
-to persist user preferences across sessions. Your changes—including 
-shell history, OhMyZsh customizations, and configuration files—are 
-saved directly on your host workstation.
+The container persists user data in `~/.local/share/sklein-devbox/<name>`
+(the default name is `default`). This directory is bind-mounted to
+`/home/sklein` inside the container. Your changes—including shell history,
+Zsh customizations, and configuration files—are saved on your host workstation.
 
-[Chezmoi](https://www.chezmoi.io/) manages dotfiles, enabling configuration 
-sharing between this container and your host workstation. On first launch, 
-Chezmoi automatically initializes from `./chezmoi/` (local development) or 
-from the shared remote repository.
+[Chezmoi](https://www.chezmoi.io/) manages dotfiles inside the container,
+synchronized from a remote repository.
 
-**First run:** The `.sklein-devbox-home/` directory is created automatically. 
-To reset your environment, simply run `mise run fresh-enter` (or manually delete 
-the directory and re-enter the container).
+**Multiple instances:** Use `--name` to create isolated environments:
+
+```sh
+$ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/project-a
+$ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/project-b
+```
+
+**Reset environment:** Delete the instance directory:
+
+```sh
+$ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/default
+```
 
 ## Packaging
 

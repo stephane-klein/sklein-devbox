@@ -20,3 +20,9 @@ var rootCmd = &cobra.Command{
 	Long:    `sklein-devbox launches a containerized development environment using Podman.`,
 	Version: version,
 }
+
+var name string
+
+func init() {
+	rootCmd.PersistentFlags().StringVarP(&name, "name", "n", "default", "Instance name")
+}

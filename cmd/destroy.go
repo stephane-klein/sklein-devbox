@@ -14,7 +14,7 @@ func init() {
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Destroy the sklein-devbox data directory",
-	Long:  `Remove the ~/.local/share/sklein-devbox/default directory.`,
+	Long:  `Remove the ~/.local/share/sklein-devbox/<name> directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runDestroy(force)
 	},
@@ -27,7 +27,7 @@ func init() {
 }
 
 func runDestroy(force bool) {
-	homeDir, err := getHomeDir()
+	homeDir, err := getHomeDir(name)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)

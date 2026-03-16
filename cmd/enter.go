@@ -24,7 +24,7 @@ var enterCmd = &cobra.Command{
 }
 
 func runEnter() {
-	homeDir, err := getHomeDir()
+	homeDir, err := getHomeDir(name)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)
@@ -42,13 +42,13 @@ func runEnter() {
 	}
 }
 
-func getHomeDir() (string, error) {
+func getHomeDir(instanceName string) (string, error) {
 	usr, err := user.Current()
 	if err != nil {
 		return "", err
 	}
 
-	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "default")
+	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", instanceName)
 
 	if err := os.MkdirAll(homeDir, 0755); err != nil {
 		return "", err

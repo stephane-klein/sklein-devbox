@@ -63,6 +63,20 @@ $ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/pro
 $ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/project-b
 ```
 
+*Configuration:* You can configure the instance name using a `.sklein-devbox.toml` file in your project directory:
+
+```toml
+name = "myinstancename"
+```
+
+Or use the `SKLEIN_DEVBOX_NAME` environment variable:
+
+```sh
+$ SKLEIN_DEVBOX_NAME=myinstancename sklein-devbox enter
+```
+
+Configuration priority (highest to lowest): command line flag → environment variable → config file → default value ("default").
+
 **Reset environment:** Delete the instance directory:
 
 ```sh

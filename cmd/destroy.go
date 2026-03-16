@@ -27,7 +27,7 @@ func init() {
 }
 
 func runDestroy(force bool) {
-	homeDir, err := getHomeDir(name)
+	homeDir, err := getHomeDir(getName())
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)

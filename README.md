@@ -28,7 +28,9 @@ Then enter your development environment from your project directory:
 ```sh
 $ cd ~/git/github/stephane-klein/myproject/
 $ sklein-devbox enter
-➜  /workspace git:(main) ✗
+➜  /workspace git:(main) ✗ exit
+$ ./sklein-devbox list
+default  /home/stephane/.local/share/sklein-devbox/default
 ```
 
 ## Development commands

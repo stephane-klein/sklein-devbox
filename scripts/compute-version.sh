@@ -37,7 +37,7 @@ if [[ "$DRY_RUN" == true ]]; then
     exit 0
 fi
 
-git tag "$version"
+git tag -a "$version" -m "Release"
 echo "Created tag: $version"
 
 git push --tags

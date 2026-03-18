@@ -48,4 +48,30 @@ $ mise run enter            # Enter the container shell
 $ mise run clean-home       # Remove the persistent home directory
 
 $ mise run fresh-enter      # Clean home + enter (fresh start)
+
+$ mise run console          # Open Alacritty with tmux session
 ```
+
+## CLI Commands (for end users)
+
+| Command   | Purpose                        |
+|-----------|--------------------------------|
+| `enter`   | Interactive shell in container |
+| `console` | Alacritty + tmux session       |
+| `list`    | List instances                 |
+| `destroy` | Delete instance                |
+
+## Key Go Files
+
+- `cmd/*.go` - CLI commands
+- `pkg/podman/runner.go` - Container execution logic
+
+## Architecture Notes
+
+- **Tasks mise** (`mise run enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/`
+- **CLI** (`sklein-devbox enter/console`): End users, uses `~/.local/share/sklein-devbox/<name>/`
+
+## Documentation
+
+- When adding user-facing features (CLI commands, mise tasks), update README.md accordingly.
+- Keep AGENTS.md focused on development guidance for AI assistants.

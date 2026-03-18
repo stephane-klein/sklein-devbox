@@ -1,20 +1,30 @@
 package podman
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
+	"os/user"
+	"path/filepath"
 	"syscall"
 )
 
-func Run(homeDir, workspaceDir string) error {
-	podmanPath, err := exec.LookPath("podman")
+func GetHomeDir(instanceName string) (string, error) {
+	usr, err := user.Current()
 	if err != nil {
-		return fmt.Errorf("podman not found: %w", err)
+		return "", err
 	}
 
+	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", instanceName)
+
+	if err := os.MkdirAll(homeDir, 0755); err != nil {
+		return "", err
+	}
+
+	return homeDir, nil
+}
+
+func BuildRunArgs(homeDir, workspaceDir string, cmd []string) []string {
 	args := []string{
-		"podman", "run", "-it", "--rm",
+		"run", "-it", "--rm",
 		"--label=app=sklein-devbox",
 		"--userns=keep-id",
 		"--cap-add=SETUID",
@@ -24,6 +34,23 @@ func Run(homeDir, workspaceDir string) error {
 		"-v", homeDir + ":/home/sklein:U",
 		"sklein-devbox",
 	}
+
+	args = append(args, cmd...)
+	return args
+}
+
+func Run(homeDir, workspaceDir string) error {
+	return RunWithCmd(homeDir, workspaceDir, []string{"/bin/zsh"})
+}
+
+func RunWithCmd(homeDir, workspaceDir string, cmd []string) error {
+	podmanPath, err := GetPodmanBinPath()
+	if err != nil {
+		return err
+	}
+
+	args := []string{"podman"}
+	args = append(args, BuildRunArgs(homeDir, workspaceDir, cmd)...)
 
 	env := os.Environ()
 

@@ -33,6 +33,20 @@ $ ./sklein-devbox list
 default  /home/stephane/.local/share/sklein-devbox/default
 ```
 
+For a better terminal experience, use the `console` command which opens an
+[Alacritty](https://alacritty.org/) terminal with tmux pre-configured:
+
+```sh
+$ sklein-devbox console
+```
+
+> [!NOTE]
+> Why two commands? `enter` vs `console`
+>
+> If you already run tmux on your host machine, the `enter` command
+> would nest sessions, which is not ideal. The `console` command solves this by
+> running tmux in a new Alacritty instance.
+
 ## Development commands
 
 ```sh

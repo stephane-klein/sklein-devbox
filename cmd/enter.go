@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/user"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/stephane-klein/sklein-devbox/pkg/podman"
@@ -24,7 +22,7 @@ var enterCmd = &cobra.Command{
 }
 
 func runEnter() {
-	homeDir, err := getHomeDir(getName())
+	homeDir, err := podman.GetHomeDir(getName())
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)
@@ -40,21 +38,6 @@ func runEnter() {
 		printError("%v", err)
 		os.Exit(1)
 	}
-}
-
-func getHomeDir(instanceName string) (string, error) {
-	usr, err := user.Current()
-	if err != nil {
-		return "", err
-	}
-
-	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", instanceName)
-
-	if err := os.MkdirAll(homeDir, 0755); err != nil {
-		return "", err
-	}
-
-	return homeDir, nil
 }
 
 func printError(format string, args ...interface{}) {

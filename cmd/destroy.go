@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/stephane-klein/sklein-devbox/pkg/podman"
 )
 
 func init() {
@@ -27,7 +28,7 @@ func init() {
 }
 
 func runDestroy(force bool) {
-	homeDir, err := getHomeDir(getName())
+	homeDir, err := podman.GetHomeDir(getName())
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)

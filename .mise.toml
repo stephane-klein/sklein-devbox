@@ -64,23 +64,40 @@ description = "Remove the container home directory to reset the development envi
 run = "mise clean-home && mise enter"
 description = "Clean the container home and enter the container (fresh start)"
 
+[tasks.create-version-tag]
+description = "Compute next trunkver version, create git tag, and push to remote"
+run = "bash scripts/compute-version.sh"
+
 [tasks.build-rpm]
 run = """
+VERSION=$(git describe --tags --abbrev=0)
+COMMIT_SHA=$(git rev-parse --short HEAD)
+FULL_VERSION="${VERSION}-${COMMIT_SHA}"
 mkdir -p rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS rpmbuild/RPMS
 cp rpm/sklein-devbox.spec rpmbuild/SPECS/
-git archive --format tar.gz --prefix sklein-devbox-0.1.0/ --output rpmbuild/SOURCES/sklein-devbox-0.1.0.tar.gz HEAD
-rpmbuild -ba --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
+git archive --format tar.gz --prefix sklein-devbox-${VERSION}/ --output rpmbuild/SOURCES/sklein-devbox-${VERSION}.tar.gz HEAD
+rpmbuild -ba --define "version ${FULL_VERSION}" --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
 """
 description = "Build RPM package locally"
 
 [tasks.build-srpm]
 run = """
+VERSION=$(git describe --tags --abbrev=0)
+COMMIT_SHA=$(git rev-parse --short HEAD)
+FULL_VERSION="${VERSION}-${COMMIT_SHA}"
 mkdir -p rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS rpmbuild/RPMS
 cp rpm/sklein-devbox.spec rpmbuild/SPECS/
-git archive --format tar.gz --prefix sklein-devbox-0.1.0/ --output rpmbuild/SOURCES/sklein-devbox-0.1.0.tar.gz HEAD
-rpmbuild -bs --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
+git archive --format tar.gz --prefix sklein-devbox-${VERSION}/ --output rpmbuild/SOURCES/sklein-devbox-${VERSION}.tar.gz HEAD
+rpmbuild -bs --define "version ${FULL_VERSION}" --define "_topdir $(pwd)/rpmbuild" rpmbuild/SPECS/sklein-devbox.spec
 """
 description = "Build SRPM package"
+
+[tasks.release]
+run = """
+mise run create-version-tag
+mise run copr-build
+"""
+description = "Create a version tag and trigger a Copr build"
 
 [tasks.copr-build]
 run = "copr-cli build sklein-devbox rpmbuild/SRPMS/*.src.rpm"

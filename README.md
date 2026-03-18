@@ -60,6 +60,8 @@ $ mise run build-cli        # Build the CLI application
 
 $ mise run enter            # Enter the container shell
 
+$ mise run console          # Open Alacritty with tmux session
+
 $ mise run clean-home       # Remove the persistent home directory
 
 $ mise run fresh-enter      # Clean home + enter (fresh start)

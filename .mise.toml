@@ -36,6 +36,23 @@ podman run -it --rm \
 """
 description = "Enter the sklein-devbox container shell"
 
+[tasks.console]
+quiet = true
+run = """
+alacritty -e podman run -it --rm \
+    --label=app=sklein-devbox \
+    --userns=keep-id \
+    --cap-add=SETUID \
+    --cap-add=SETGID \
+    -e TERM \
+    -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
+    -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
+    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
+    sklein-devbox \
+    /bin/zsh -i -c "tmux new-session -A -s devbox"
+"""
+description = "Open Alacritty with a tmux session in the devbox container"
+
 [tasks.clean-home]
 run = "rm -rf $(pwd)/.sklein-devbox-home"
 description = "Remove the container home directory to reset the development environment"

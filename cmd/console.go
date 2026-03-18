@@ -25,6 +25,8 @@ Otherwise, a new session will be created.`,
 }
 
 func runConsole() {
+	instanceName := getName()
+
 	alacrittyPath, err := exec.LookPath("alacritty")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Alacritty is not installed on your system.\n")
@@ -39,7 +41,7 @@ func runConsole() {
 		os.Exit(1)
 	}
 
-	homeDir, err := podman.GetHomeDir(getName())
+	homeDir, err := podman.GetHomeDir(instanceName)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)
@@ -51,7 +53,7 @@ func runConsole() {
 		os.Exit(1)
 	}
 
-	podmanArgs := podman.BuildRunArgs(homeDir, cwd, []string{"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox"})
+	podmanArgs := podman.BuildRunArgs(homeDir, cwd, instanceName, []string{"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox"})
 
 	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e", podmanBinPath}, podmanArgs...)...)
 	alacrittyCmd.Stdin = os.Stdin

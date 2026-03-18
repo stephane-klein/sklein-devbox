@@ -22,7 +22,7 @@ func GetHomeDir(instanceName string) (string, error) {
 	return homeDir, nil
 }
 
-func BuildRunArgs(homeDir, workspaceDir string, cmd []string) []string {
+func BuildRunArgs(homeDir, workspaceDir, instanceName string, cmd []string) []string {
 	args := []string{
 		"run", "-it", "--rm",
 		"--label=app=sklein-devbox",
@@ -30,6 +30,7 @@ func BuildRunArgs(homeDir, workspaceDir string, cmd []string) []string {
 		"--cap-add=SETUID",
 		"--cap-add=SETGID",
 		"-e", "TERM",
+		"-e", "SKLEIN_DEVBOX_NAME=" + instanceName,
 		"-v", workspaceDir + ":/workspace:U",
 		"-v", homeDir + ":/home/sklein:U",
 		"sklein-devbox",
@@ -39,18 +40,18 @@ func BuildRunArgs(homeDir, workspaceDir string, cmd []string) []string {
 	return args
 }
 
-func Run(homeDir, workspaceDir string) error {
-	return RunWithCmd(homeDir, workspaceDir, []string{"/bin/zsh"})
+func Run(homeDir, workspaceDir, instanceName string) error {
+	return RunWithCmd(homeDir, workspaceDir, instanceName, []string{"/bin/zsh"})
 }
 
-func RunWithCmd(homeDir, workspaceDir string, cmd []string) error {
+func RunWithCmd(homeDir, workspaceDir, instanceName string, cmd []string) error {
 	podmanPath, err := GetPodmanBinPath()
 	if err != nil {
 		return err
 	}
 
 	args := []string{"podman"}
-	args = append(args, BuildRunArgs(homeDir, workspaceDir, cmd)...)
+	args = append(args, BuildRunArgs(homeDir, workspaceDir, instanceName, cmd)...)
 
 	env := os.Environ()
 

@@ -22,7 +22,9 @@ var enterCmd = &cobra.Command{
 }
 
 func runEnter() {
-	homeDir, err := podman.GetHomeDir(getName())
+	instanceName := getName()
+
+	homeDir, err := podman.GetHomeDir(instanceName)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)
@@ -34,7 +36,7 @@ func runEnter() {
 		os.Exit(1)
 	}
 
-	if err := podman.Run(homeDir, cwd); err != nil {
+	if err := podman.Run(homeDir, cwd, instanceName); err != nil {
 		printError("%v", err)
 		os.Exit(1)
 	}

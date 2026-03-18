@@ -28,6 +28,7 @@ podman run -it --rm \
     --cap-add=SETUID \
     --cap-add=SETGID \
     -e TERM \
+    -e SKLEIN_DEVBOX_NAME=sklein-devbox \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
@@ -45,6 +46,7 @@ alacritty -e podman run -it --rm \
     --cap-add=SETUID \
     --cap-add=SETGID \
     -e TERM \
+    -e SKLEIN_DEVBOX_NAME=sklein-devbox \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \

@@ -16,9 +16,8 @@ if [ ! -d "/home/sklein/.local/share/chezmoi" ]; then
     gosu sklein chezmoi init https://github.com/stephane-klein/sklein-devbox-chezmoi.git
 fi
 
-if [ ! -d "~/.config/chezmoi/chezmoistate.boltdb" ]; then
+if [ ! -f "/home/sklein/.config/chezmoi/chezmoistate.boltdb" ]; then
     gosu sklein chezmoi apply
 fi
-
 
 exec gosu sklein "$@"

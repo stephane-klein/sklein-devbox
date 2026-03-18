@@ -78,7 +78,7 @@ cp rpm/sklein-devbox.spec rpmbuild/SPECS/
 git archive --format tar.gz --prefix sklein-devbox-${VERSION}/ --output rpmbuild/SOURCES/sklein-devbox-${VERSION}.tar.gz HEAD
 rpmbuild -ba \
     --define "version ${VERSION}" \
-    --define "full_version ${FULL_VERSION}" \
+    --define "fullver ${FULL_VERSION}" \
     --define "_topdir $(pwd)/rpmbuild" \
     rpmbuild/SPECS/sklein-devbox.spec
 """
@@ -94,7 +94,7 @@ cp rpm/sklein-devbox.spec rpmbuild/SPECS/
 git archive --format tar.gz --prefix sklein-devbox-${VERSION}/ --output rpmbuild/SOURCES/sklein-devbox-${VERSION}.tar.gz HEAD
 rpmbuild -bs \
     --define "version ${VERSION}" \
-    --define "full_version ${FULL_VERSION}" \
+    --define "fullver ${FULL_VERSION}" \
     --define "_topdir $(pwd)/rpmbuild" \
     rpmbuild/SPECS/sklein-devbox.spec
 """

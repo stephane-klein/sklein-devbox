@@ -20,7 +20,7 @@ Install sklein-devbox via Fedora COPR:
 $ sudo dnf copr enable stephaneklein/sklein-devbox
 $ sudo dnf install sklein-devbox
 $ sklein-devbox --version
-sklein-devbox version 0.1.0
+sklein-devbox version 20260318.0.0-d6b0178
 ```
 
 Then enter your development environment from your project directory:
@@ -65,6 +65,10 @@ $ mise run console          # Open Alacritty with tmux session
 $ mise run clean-home       # Remove the persistent home directory
 
 $ mise run fresh-enter      # Clean home + enter (fresh start)
+
+$ mise run create-version-tag  # Create version tag and push to remote
+
+$ mise run release         # Create version tag + build on COPR
 ```
 
 ## Persistence and dotfiles management
@@ -108,6 +112,26 @@ $ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox
 
 Build and publish RPM packages via Fedora COPR.
 
+### Versioning
+
+This project uses [trunk-based versioning](https://trunkver.org).
+
+**Version format:** `YYYYMMDD.X.Y-<sha1>` (e.g., `20260318.0.0-d6b0178`)
+
+**Release workflow:**
+
+```sh
+$ mise run release    # Create version tag + build on COPR
+```
+
+This will:
+1. Verify you're on `main` branch with a clean working tree
+2. Compute the next version based on today's date and existing tags
+3. Create and push a git tag
+4. Submit the build to COPR
+
+The binary version (`--version`) includes the full version with commit SHA, while the RPM package version uses only the base version tag.
+
 ### Build RPM locally
 
 ```sh
@@ -140,7 +164,5 @@ mise run clean-rpmbuild
 ### Typical workflow
 
 ```sh
-# After code changes, version bump in spec, etc.
-mise run build-srpm      # Generate SRPM locally
-mise run copr-build      # Submit to COPR for all chroots
+mise run release    # Create version tag + build on COPR
 ```

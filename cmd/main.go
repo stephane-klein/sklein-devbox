@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var version = "0.1.0"
+var version = "dev"
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {

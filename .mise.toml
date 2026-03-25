@@ -101,25 +101,46 @@ rpmbuild -bs \
 description = "Build SRPM package"
 
 [tasks.release]
-run = """
-mise run create-version-tag
-mise run copr-build
-"""
-description = "Create a version tag and trigger a Copr build"
+run = "mise run create-version-tag"
+description = "Create version tag (COPR auto-triggers build via webhook)"
 
 [tasks.copr-build]
-run = "copr-cli build sklein-devbox rpmbuild/SRPMS/*.src.rpm"
-description = "Build package on COPR"
+run = """
+copr-cli build-package stephaneklein/sklein-devbox \
+  --name sklein-devbox \
+  --commit main
+"""
+description = "Build package on COPR (manual trigger)"
 
 [tasks.copr-create]
 run = """
-copr-cli create sklein-devbox \
-  --enable-net on \
-  --chroot fedora-42-x86_64 \
-  --chroot fedora-43-x86_64 \
-  --chroot fedora-44-x86_64
+if ! copr-cli get sklein-devbox > /dev/null 2>&1; then
+  copr-cli create sklein-devbox \
+    --enable-net on \
+    --chroot fedora-42-x86_64 \
+    --chroot fedora-43-x86_64 \
+    --chroot fedora-44-x86_64
+fi
+
+if ! copr-cli get-package sklein-devbox --name sklein-devbox > /dev/null 2>&1; then
+  copr-cli add-package-scm stephaneklein/sklein-devbox \
+    --name sklein-devbox \
+    --clone-url https://github.com/stephane-klein/sklein-devbox.git \
+    --subdir . \
+    --spec rpm/sklein-devbox.spec \
+    --method make_srpm \
+    --webhook-rebuild on
+else
+  copr-cli edit-package-scm stephaneklein/sklein-devbox \
+    --name sklein-devbox \
+    --clone-url https://github.com/stephane-klein/sklein-devbox.git \
+    --subdir . \
+    --spec rpm/sklein-devbox.spec \
+    --method make_srpm \
+    --webhook-rebuild on
+fi
 """
-description = "Create COPR project for sklein-devbox"
+description = "Create COPR project with SCM package configuration (idempotent)"
 
 [tasks.clean-rpmbuild]
 run = "rm -rf rpmbuild"

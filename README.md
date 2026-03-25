@@ -136,10 +136,10 @@ The binary version (`--version`) includes the full version with commit SHA, whil
 
 ```sh
 # Build source RPM (creates rpmbuild/SRPMS/*.src.rpm)
-mise run build-srpm
+$ mise run build-srpm
 
 # Build full RPM (creates rpmbuild/RPMS/x86_64/*.rpm)
-mise run build-rpm
+$ mise run build-rpm
 ```
 
 ### Publish on COPR
@@ -148,21 +148,21 @@ One-time setup for maintainers:
 
 ```sh
 # 1. Create COPR project (only once)
-mise run copr-create
+$ mise run copr-create
 
 # 2. Build on COPR from local SRPM
-mise run copr-build
+$ mise run copr-build
 ```
 
 ### Cleanup
 
 ```sh
 # Remove rpmbuild directory
-mise run clean-rpmbuild
+$ mise run clean-rpmbuild
 ```
 
 ### Typical workflow
 
 ```sh
-mise run release    # Create version tag + build on COPR
+$ mise run release    # Create version tag + build on COPR
 ```

@@ -66,7 +66,7 @@ $ mise run clean-home       # Remove the persistent home directory
 
 $ mise run fresh-enter      # Clean home + enter (fresh start)
 
-$ mise run create-version-tag  # Create version tag and push to remote
+$ mise run create-version-tag  # Create version tag
 
 $ mise run release         # Create version tag + build on COPR
 ```
@@ -120,15 +120,25 @@ This project uses [trunk-based versioning](https://trunkver.org).
 
 **Release workflow:**
 
+The release process is split into two steps for better control:
+
 ```sh
-$ mise run release    # Create version tag + build on COPR
+# Step 1: Create version tag
+$ mise run release
+
+# Step 2: Build SRPM from the tag and upload to COPR
+$ mise run build-srpm-and-upload-to-copr
 ```
 
-This will:
+Step 1 (`release`) will:
 1. Verify you're on `main` branch with a clean working tree
 2. Compute the next version based on today's date and existing tags
-3. Create and push a git tag
-4. Submit the build to COPR
+3. Create a git tag
+
+Step 2 (`build-srpm-and-upload-to-copr`) will:
+1. Verify the working tree is clean and matches the latest tag
+2. Build an SRPM from the tagged source
+3. Upload the SRPM to COPR for building and publishing
 
 The binary version (`--version`) includes the full version with commit SHA, while the RPM package version uses only the base version tag.
 
@@ -147,11 +157,15 @@ $ mise run build-rpm
 One-time setup for maintainers:
 
 ```sh
-# 1. Create COPR project (only once)
+# Create COPR project (only once)
 $ mise run copr-create
+```
 
-# 2. Build on COPR from local SRPM
-$ mise run copr-build
+To publish a new release on COPR:
+
+```sh
+# Build SRPM from latest tag and upload to COPR
+$ mise run build-srpm-and-upload-to-copr
 ```
 
 ### Cleanup
@@ -164,5 +178,9 @@ $ mise run clean-rpmbuild
 ### Typical workflow
 
 ```sh
-$ mise run release    # Create version tag + build on COPR
+# Create version tag (Step 1)
+$ mise run release
+
+# Build and upload to COPR (Step 2)
+$ mise run build-srpm-and-upload-to-copr
 ```

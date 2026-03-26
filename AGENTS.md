@@ -12,6 +12,22 @@ It consists of two main parts:
 
 All content must be in English: source code, comments, and documentation.
 
+# Versioning
+
+This project uses [TrunkVer](https://trunkver.org) for versioning - a scheme for continuously-delivered, trunk-based applications.
+
+Version format: `YYYYMMDD.N.0-<short-hash>`
+
+- **Timestamp**: Build date (UTC)
+- **N**: Sequential number for builds on same day
+- **Short hash**: Git commit reference
+
+Examples from this project:
+- `20260326.0.0-f4a1dd6`
+- `20260318.1.0-d5bdbbb`
+
+TrunkVer is SemVer-compatible and suited for projects that release frequently without manual version management.
+
 # Image Reference
 
 This project uses **Podman**, not Docker.

@@ -154,6 +154,8 @@ $ mise run build-rpm
 
 ### Publish on COPR
 
+View the project at https://copr.fedorainfracloud.org/coprs/stephaneklein/sklein-devbox/
+
 One-time setup for maintainers:
 
 ```sh

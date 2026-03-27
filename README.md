@@ -3,6 +3,10 @@
 A personal, opinionated Podman-based development environment running Fedora 43.  
 Designed to keep each project's toolchain and dependencies isolated.
 
+## Container Image
+
+The container image is published at: `ghcr.io/stephane-klein/sklein-devbox:latest`
+
 ## What's inside
 
 - [mise](https://mise.jdx.dev) — runtime version manager

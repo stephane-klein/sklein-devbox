@@ -14,6 +14,10 @@ $ mise run git-clone-chezmoi
 ```sh
 $ mise run build-image      # Build the container image
 
+$ mise run login-ghcr       # Login to GitHub Container Registry
+
+$ mise run push-image       # Push image to GitHub Container Registry
+
 $ mise run build-cli        # Build the CLI application
 
 $ mise run enter            # Enter the container shell
@@ -109,6 +113,36 @@ $ mise run build-srpm-and-upload-to-copr
 ```sh
 # Remove rpmbuild directory
 $ mise run clean-rpmbuild
+```
+
+## Publishing container images
+
+### Prerequisites
+
+Login to GitHub Container Registry:
+
+```sh
+$ mise run login-ghcr
+```
+
+If you get a permission error, the `gh` token may lack the `write:packages` scope.
+Fix by re-authenticating with the required scopes:
+
+```sh
+$ gh auth login -s repo,write:packages,read:org
+```
+
+Alternatively, create a PAT at https://github.com/settings/tokens with `write:packages` scope:
+
+```sh
+$ podman login ghcr.io -u stephane-klein --password-stdin <<< "YOUR_PAT"
+```
+
+### Publish image
+
+```sh
+$ mise run build-image
+$ mise run push-image
 ```
 
 ## Typical workflow

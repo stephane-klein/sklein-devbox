@@ -33,7 +33,7 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, cmd []string) []st
 		"-e", "SKLEIN_DEVBOX_NAME=" + instanceName,
 		"-v", workspaceDir + ":/workspace:U",
 		"-v", homeDir + ":/home/sklein:U",
-		"sklein-devbox",
+		"ghcr.io/stephane-klein/sklein-devbox:latest",
 	}
 
 	args = append(args, cmd...)

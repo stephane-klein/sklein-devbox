@@ -12,8 +12,24 @@ fi
 description = "Clone the chezmoi configuration repository into ./chezmoi/"
 
 [tasks.build-image]
-run = "podman build -t sklein-devbox ."
+run = "podman build -t ghcr.io/stephane-klein/sklein-devbox:latest ."
 description = "Build the sklein-devbox container image"
+
+[tasks.push-image]
+run = "podman push ghcr.io/stephane-klein/sklein-devbox:latest"
+description = "Push the container image to GitHub Container Registry"
+
+[tasks.login-ghcr]
+run = """
+if ! gh auth token &>/dev/null; then
+    echo "Error: gh not authenticated. Please run:"
+    echo "  gh auth login -s repo,write:packages,read:org"
+    exit 1
+fi
+podman logout ghcr.io 2>/dev/null || true
+podman login ghcr.io -u stephane-klein --password-stdin <<< "$(gh auth token)"
+"""
+description = "Login to GitHub Container Registry using gh CLI"
 
 [tasks.build-cli]
 run = "go build -o sklein-devbox ./cmd"
@@ -33,7 +49,7 @@ podman run -it --rm \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
     -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
-    sklein-devbox
+    ghcr.io/stephane-klein/sklein-devbox:latest
 """
 description = "Enter the sklein-devbox container shell"
 
@@ -51,7 +67,7 @@ alacritty -e podman run -it --rm \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
     -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
-    sklein-devbox \
+    ghcr.io/stephane-klein/sklein-devbox:latest \
     /bin/zsh -i -c "tmux new-session -A -s devbox"
 """
 description = "Open Alacritty with a tmux session in the devbox container"

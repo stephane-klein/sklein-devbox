@@ -12,7 +12,7 @@ fi
 description = "Clone the chezmoi configuration repository into ./chezmoi/"
 
 [tasks.build-image]
-run = "podman build -t ghcr.io/stephane-klein/sklein-devbox:latest ."
+run = "podman build -t ghcr.io/stephane-klein/sklein-devbox:latest chezmoi/"
 description = "Build the sklein-devbox container image"
 
 [tasks.push-image]
@@ -48,7 +48,7 @@ podman run -it --rm \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
-    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
+    -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
     ghcr.io/stephane-klein/sklein-devbox:latest
 """
 description = "Enter the sklein-devbox container shell"
@@ -66,7 +66,7 @@ alacritty -e podman run -it --rm \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
-    -v $(pwd)/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
+    -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
     ghcr.io/stephane-klein/sklein-devbox:latest \
     /bin/zsh -i -c "tmux new-session -A -s devbox"
 """

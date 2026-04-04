@@ -46,6 +46,14 @@ $ mise run release         # Create version tag + build on COPR
 - **Tasks mise** (`mise run enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/`
 - **CLI** (`sklein-devbox enter/console`): End users, uses `~/.local/share/sklein-devbox/<name>/`
 
+## Container image and Chezmoi configuration separation
+
+The `Containerfile` and `entrypoint.sh` files are **not** stored in this repository. They are managed in the separate repository [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
+
+### Rationale
+
+This separation enables **atomic commits** between the container image configuration and the Chezmoi dotfiles. A Chezmoi configuration version may have dependencies on packages installed in the `Containerfile` (and vice versa). Keeping them tightly coupled in the same repository ensures that changes are versioned together and avoids inconsistencies between the container image and the dotfiles configuration.
+
 ## Versioning
 
 This project uses [TrunkVer](https://trunkver.org) for versioning - a scheme for continuously-delivered, trunk-based applications.

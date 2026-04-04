@@ -44,15 +44,21 @@ This project uses **Podman**, not Docker.
 - **Base**: Fedora 43
 - **Tools**: Mise, Zsh, Neovim
 
-## Chezmoi Configuration Separation
+## Container image and Chezmoi configuration
 
-The chezmoi dotfiles configuration is maintained in a separate repository:
-[stephane-klein/sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
+The `Containerfile`, `entrypoint.sh`, and chezmoi dotfiles are **not** stored in this repository. They are all managed in the separate repository [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
 
-This separation ensures that:
-- Only the actual dotfiles (not project files like `Containerfile`, `go.mod`, etc.) are applied to the home directory
-- The configuration can be reused directly on a Fedora workstation outside the devbox
-- Cleaner separation of concerns between the devbox infrastructure and user configuration
+This separation enables **atomic commits** between the container image configuration and the Chezmoi dotfiles. A Chezmoi configuration version may have dependencies on packages installed in the `Containerfile` (and vice versa). Keeping them tightly coupled ensures that changes are versioned together and avoids inconsistencies.
+
+This also allows the dotfiles configuration to be reused directly on a Fedora workstation outside the devbox.
+
+### Workflow
+
+When developing on sklein-devbox:
+
+1. Changes to `Containerfile` or `entrypoint.sh` must be committed in the `sklein-devbox-chezmoi` repository
+2. Changes to dotfiles (Zsh, Neovim, tmux, etc.) are also committed in the `sklein-devbox-chezmoi` repository
+3. The `sklein-devbox` repository only contains the CLI application and the build infrastructure
 
 ## Development commands
 

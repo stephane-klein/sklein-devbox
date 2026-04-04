@@ -12,6 +12,12 @@ It consists of two main parts:
 
 All content must be in English: source code, comments, and documentation.
 
+# Version Control
+
+This repository might be managed by [Jujutsu](https://jj.rs/) (jj), a decentralized version control system.
+
+To verify if jj is used, check for a `.jj/` directory at the repo root. If jj is active, use `jj` commands instead of `git`.
+
 # Versioning
 
 This project uses [TrunkVer](https://trunkver.org) for versioning - a scheme for continuously-delivered, trunk-based applications.

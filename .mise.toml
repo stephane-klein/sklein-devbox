@@ -43,6 +43,7 @@ quiet = true
 run = """
 mkdir -p $(pwd)/.sklein-devbox-home
 mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
+mkdir -p $(pwd)/.sklein-devbox-home/.config/gopass/age/
 mkdir -p ~/.ssh/
 mkdir -p ~/.config/gopass/
 mkdir -p ~/.local/share/gopass/
@@ -70,6 +71,8 @@ description = "Enter the sklein-devbox container shell"
 quiet = true
 run = """
 mkdir -p $(pwd)/.sklein-devbox-home/
+mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
+mkdir -p $(pwd)/.sklein-devbox-home/.config/gopass/age/
 mkdir -p ~/.ssh/
 mkdir -p ~/.config/gopass/
 mkdir -p ~/.local/share/gopass/

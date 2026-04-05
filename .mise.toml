@@ -3,6 +3,7 @@ go="1.26.1"
 
 [env]
 _.file = ".secret"
+
 [tasks.git-clone-chezmoi]
 run = """
 if [ -d "chezmoi" ]; then
@@ -41,17 +42,26 @@ description = "Build the sklein-devbox CLI application"
 quiet = true
 run = """
 mkdir -p $(pwd)/.sklein-devbox-home
+mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
+mkdir -p ~/.ssh/
+mkdir -p ~/.config/gopass/
+mkdir -p ~/.local/share/gopass/
+
 podman run -it --rm \
     --userns=keep-id \
     --cap-add=SETUID \
     --cap-add=SETGID \
     -e TERM \
     -e SKLEIN_DEVBOX_NAME=sklein-devbox \
-    -v $(pwd):/workspace:U \
-    -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
-    -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
+    -e SKLEIN_DEVBOX_GOPASS=1 \
     -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    -v $(pwd):/workspace/:U \
+    -v $(pwd)/.sklein-devbox-home/:/home/sklein/:U \
+    -v $(pwd)/chezmoi/:/home/sklein/.local/share/chezmoi/:U \
     -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
+    -v ~/.ssh/:/home/sklein/.ssh/:U \
+    -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
+    -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
     ghcr.io/stephane-klein/sklein-devbox:latest
 """
 description = "Enter the sklein-devbox container shell"
@@ -59,6 +69,11 @@ description = "Enter the sklein-devbox container shell"
 [tasks.console]
 quiet = true
 run = """
+mkdir -p $(pwd)/.sklein-devbox-home/
+mkdir -p ~/.ssh/
+mkdir -p ~/.config/gopass/
+mkdir -p ~/.local/share/gopass/
+
 alacritty -e podman run -it --rm \
     --label=app=sklein-devbox \
     --userns=keep-id \
@@ -66,11 +81,15 @@ alacritty -e podman run -it --rm \
     --cap-add=SETGID \
     -e TERM \
     -e SKLEIN_DEVBOX_NAME=sklein-devbox \
+    -e SKLEIN_DEVBOX_GOPASS=1 \
     -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
-    -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
+    -v $(pwd)/chezmoi/:/home/sklein/.local/share/chezmoi/:U \
     -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
+    -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
+    -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
+    -v ~/.ssh/:/home/sklein/.ssh/:U \
     ghcr.io/stephane-klein/sklein-devbox:latest \
     /bin/zsh -i -c "tmux new-session -A -s devbox"
 """

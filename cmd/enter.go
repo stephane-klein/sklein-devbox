@@ -10,6 +10,8 @@ import (
 
 func init() {
 	rootCmd.AddCommand(enterCmd)
+
+	enterCmd.Flags().Bool("dry-run", false, "Print the podman command without executing")
 }
 
 var enterCmd = &cobra.Command{
@@ -17,11 +19,11 @@ var enterCmd = &cobra.Command{
 	Short: "Enter the sklein-devbox container",
 	Long:  `Launch an interactive shell inside the sklein-devbox container.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		runEnter()
+		runEnter(cmd)
 	},
 }
 
-func runEnter() {
+func runEnter(cmd *cobra.Command) {
 	instanceName := getName()
 
 	homeDir, err := podman.GetHomeDir(instanceName)
@@ -36,7 +38,15 @@ func runEnter() {
 		os.Exit(1)
 	}
 
-	if err := podman.Run(homeDir, cwd, instanceName); err != nil {
+	secrets := getSecretOptions()
+
+	if cmd.Flag("dry-run").Changed {
+		args := podman.BuildRunArgs(homeDir, cwd, instanceName, secrets, []string{})
+		podman.DryRunCmd("podman", args)
+		return
+	}
+
+	if err := podman.Run(homeDir, cwd, instanceName, secrets); err != nil {
 		printError("%v", err)
 		os.Exit(1)
 	}

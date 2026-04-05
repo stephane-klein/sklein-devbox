@@ -1,0 +1,6 @@
+name="sklein-devbox"
+no-gopass-mount=true
+no-ssh-mount=true
+gopass=true
+ssh-key-file=".secrets/ssh.key"
+age-key-file=".secrets/age.key"

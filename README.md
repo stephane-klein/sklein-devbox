@@ -88,6 +88,40 @@ Configuration priority (highest to lowest): command line flag → environment va
 $ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/default
 ```
 
+## Secret Management
+
+`sklein-devbox` supports **gopass** with **age** backend for managing secrets (passwords, API tokens) used by Chezmoi templates.
+
+### Quick Start
+
+Enable gopass integration with the `--gopass` flag:
+
+```sh
+$ sklein-devbox --gopass enter
+```
+
+When enabled, the Age agent starts automatically.
+
+### How It Works
+
+**Host with existing gopass store:** If gopass configuration is detected on the host (`~/.config/gopass/` and `~/.local/share/gopass`), these directories are automatically mounted into the container.
+
+**Fresh host:** The user is prompted to enter the Age key in ASCII format, then the secrets repository is cloned.
+
+### Configuration Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--gopass` | Enable gopass integration |
+| `--no-gopass-mount` | Disable auto-mount of host gopass directories |
+| `--no-ssh-mount` | Disable auto-mount of host SSH directory |
+| `--ssh-key-file <path>` | Non-interactive SSH key input |
+| `--age-key-file <path>` | Non-interactive Age key input |
+
+### Secrets Repository
+
+Secrets are stored in a private repository: <https://github.com/stephane-klein/sklein-devbox-secrets>
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, versioning, and release workflow.

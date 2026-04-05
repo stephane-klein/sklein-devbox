@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## Unreleased
+
+### Added
+
+- Secret management powered by gopass and age backend
+- `--dry-run` flag for `enter` and `console` commands
+
+### Changed
+
+- `BuildRunArgs` and `Run` functions now accept `SecretOptions` parameter
+
 ## `20260318.1.0-d5bdbbb` - 2026-03-18
 
 First release.

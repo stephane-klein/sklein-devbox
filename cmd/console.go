@@ -11,6 +11,8 @@ import (
 
 func init() {
 	rootCmd.AddCommand(consoleCmd)
+
+	consoleCmd.Flags().Bool("dry-run", false, "Print the podman command without executing")
 }
 
 var consoleCmd = &cobra.Command{
@@ -20,11 +22,11 @@ var consoleCmd = &cobra.Command{
 If a tmux session named "devbox" already exists, it will attach to it.
 Otherwise, a new session will be created.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		runConsole()
+		runConsole(cmd)
 	},
 }
 
-func runConsole() {
+func runConsole(cmd *cobra.Command) {
 	instanceName := getName()
 
 	alacrittyPath, err := exec.LookPath("alacritty")
@@ -53,7 +55,15 @@ func runConsole() {
 		os.Exit(1)
 	}
 
-	podmanArgs := podman.BuildRunArgs(homeDir, cwd, instanceName, []string{"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox"})
+	secrets := getSecretOptions()
+
+	podmanArgs := podman.BuildRunArgs(homeDir, cwd, instanceName, secrets, []string{"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox"})
+
+	if cmd.Flag("dry-run").Changed {
+		fullArgs := append([]string{"-e", podmanBinPath}, podmanArgs...)
+		podman.DryRunCmd("alacritty", fullArgs)
+		return
+	}
 
 	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e", podmanBinPath}, podmanArgs...)...)
 	alacrittyCmd.Stdin = os.Stdin

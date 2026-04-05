@@ -99,6 +99,10 @@ $ mise run console          # Open Alacritty with tmux session
 - **Tasks mise** (`mise run enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/`
 - **CLI** (`sklein-devbox enter/console`): End users, uses `~/.local/share/sklein-devbox/<name>/`
 
+## Code Style Preferences
+
+- **Inline over extraction**: When code can be placed directly where it's used or extracted to a separate function, prefer inline implementation
+
 ## Documentation
 
 - When adding user-facing features (CLI commands, mise tasks), update README.md accordingly.

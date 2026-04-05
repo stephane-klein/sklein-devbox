@@ -162,3 +162,17 @@ $ mise run release
 # Build and upload to COPR (Step 2)
 $ mise run build-srpm-and-upload-to-copr
 ```
+
+## GitHub API Rate Limiting
+
+When using `mise install` intensively (especially with many tools or during CI), you may encounter GitHub API rate limiting errors (`403 Forbidden`).
+
+To avoid this, provide a GitHub personal access token by adding it to your `.secret` file:
+
+```
+GITHUB_TOKEN="ghp_xxxxxxxxxxxx"
+```
+
+The `.secret` file is automatically loaded by mise (configured via `_.file = ".secret"` in `.mise.toml`) and should not be committed to git (it's already in `.gitignore`).
+
+Create a fine-grained personal access token at https://github.com/settings/tokens with minimal permissions (e.g., `repo` scope for public repository access).

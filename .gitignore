@@ -3,4 +3,5 @@ chezmoi/
 sklein-devbox
 rpmbuild/
 go/
+.secret
 

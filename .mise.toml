@@ -1,6 +1,8 @@
 [tools]
 go="1.26.1"
 
+[env]
+_.file = ".secret"
 [tasks.git-clone-chezmoi]
 run = """
 if [ -d "chezmoi" ]; then
@@ -48,6 +50,7 @@ podman run -it --rm \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \
+    -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
     -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
     ghcr.io/stephane-klein/sklein-devbox:latest
 """
@@ -63,6 +66,7 @@ alacritty -e podman run -it --rm \
     --cap-add=SETGID \
     -e TERM \
     -e SKLEIN_DEVBOX_NAME=sklein-devbox \
+    -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
     -v $(pwd):/workspace:U \
     -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
     -v $(pwd)/chezmoi:/home/sklein/.local/share/chezmoi:U \

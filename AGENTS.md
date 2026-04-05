@@ -103,6 +103,36 @@ $ mise run console          # Open Alacritty with tmux session
 
 - **Inline over extraction**: When code can be placed directly where it's used or extracted to a separate function, prefer inline implementation
 
+## Configuration Binding Convention
+
+All CLI flags that can be configured via `.sklein-devbox.toml` **must** be bound to viper to ensure consistent behavior across config file, environment variables, and CLI flags.
+
+### Required Pattern
+
+For every flag that should be configurable via config file:
+
+1. Define the flag as a `PersistentFlag` on `rootCmd` in `cmd/main.go`
+2. Bind it to viper using `viper.BindPFlag()`
+3. Bind it to an environment variable using `viper.BindEnv()`
+4. Add a getter function in `cmd/main.go` that reads from viper (e.g., `getSecretOptions()`)
+
+### Example
+
+```go
+// In cmd/main.go init()
+rootCmd.PersistentFlags().Bool("gopass", false, "Enable gopass integration")
+viper.BindPFlag("gopass", rootCmd.PersistentFlags().Lookup("gopass"))
+viper.BindEnv("gopass", "SKLEIN_DEVBOX_GOPASS")
+```
+
+### Priority Order
+
+When a value is resolved:
+1. CLI flag (explicitly provided on command line)
+2. Environment variable (if set)
+3. Config file value (from `.sklein-devbox.toml`)
+4. Default value (hardcoded in flag definition)
+
 ## Documentation
 
 - When adding user-facing features (CLI commands, mise tasks), update README.md accordingly.

@@ -48,7 +48,7 @@ $ mise run release         # Create version tag + build on COPR
 
 ## Container image and Chezmoi configuration separation
 
-The `Containerfile` and `entrypoint.sh` files are **not** stored in this repository. They are managed in the separate repository [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
+The `Containerfile` and `ssh-forcecommand-entrypoint.sh` files are **not** stored in this repository. They are managed in the separate repository [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
 
 ### Rationale
 

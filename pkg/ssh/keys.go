@@ -8,14 +8,14 @@ import (
 )
 
 // GetSSHDir returns the directory where SSH keys are stored
-// All instances share the same keys: ~/.local/share/sklein-devbox/ssh/
+// All instances share the same keys: ~/.local/share/sklein-devbox/ssh-client-keys/
 func GetSSHDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	sshDir := filepath.Join(home, ".local", "share", "sklein-devbox", "ssh")
+	sshDir := filepath.Join(home, ".local", "share", "sklein-devbox", "ssh-client-keys")
 	return sshDir, nil
 }
 

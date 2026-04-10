@@ -38,72 +38,69 @@ description = "Login to GitHub Container Registry using gh CLI"
 run = "go build -o sklein-devbox ./cmd"
 description = "Build the sklein-devbox CLI application"
 
+[tasks.up]
+run = "bash scripts/up.sh"
+description = "Start the devbox container"
+
+[tasks.down]
+run = "bash scripts/down.sh"
+description = "Stop and remove the devbox container"
+
+[tasks.status]
+run = "bash scripts/status.sh"
+description = "Show devbox container status"
+
 [tasks.enter]
 quiet = true
 run = """
-mkdir -p $(pwd)/.sklein-devbox-home
-mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
-mkdir -p $(pwd)/.sklein-devbox-home/.config/gopass/age/
-mkdir -p ~/.ssh/
-mkdir -p ~/.config/gopass/
-mkdir -p ~/.local/share/gopass/
+CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
+if [ -z "$CONTAINER_ID" ]; then
+    echo "Error: No container running. Run 'mise run up' first." >&2
+    exit 1
+fi
 
-podman run -it --rm \
-    --userns=keep-id \
-    --cap-add=SETUID \
-    --cap-add=SETGID \
-    -e TERM \
-    -e SKLEIN_DEVBOX_NAME=sklein-devbox \
-    -e SKLEIN_DEVBOX_GOPASS=1 \
-    -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-    -v $(pwd):/workspace/:U \
-    -v $(pwd)/.sklein-devbox-home/:/home/sklein/:U \
-    -v $(pwd)/chezmoi/:/home/sklein/.local/share/chezmoi/:U \
-    -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
-    -v ~/.ssh/:/home/sklein/.ssh/:U \
-    -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
-    -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
-    ghcr.io/stephane-klein/sklein-devbox:latest
+SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
+ssh -t \
+    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
+    -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    -p ${SSH_PORT} \
+    sklein@localhost
 """
-description = "Enter the sklein-devbox container shell"
+description = "Enter the devbox container shell"
 
 [tasks.console]
 quiet = true
 run = """
-mkdir -p $(pwd)/.sklein-devbox-home/
-mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
-mkdir -p $(pwd)/.sklein-devbox-home/.config/gopass/age/
-mkdir -p ~/.ssh/
-mkdir -p ~/.config/gopass/
-mkdir -p ~/.local/share/gopass/
+CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
+if [ -z "$CONTAINER_ID" ]; then
+    mise run up
+    CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
+fi
+SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
 
-alacritty -e podman run -it --rm \
-    --label=app=sklein-devbox \
-    --userns=keep-id \
-    --cap-add=SETUID \
-    --cap-add=SETGID \
-    -e TERM \
-    -e SKLEIN_DEVBOX_NAME=sklein-devbox \
-    -e SKLEIN_DEVBOX_GOPASS=1 \
-    -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-    -v $(pwd):/workspace:U \
-    -v $(pwd)/.sklein-devbox-home:/home/sklein:U \
-    -v $(pwd)/chezmoi/:/home/sklein/.local/share/chezmoi/:U \
-    -v $(pwd)/chezmoi/entrypoint.sh:/usr/local/bin/entrypoint.sh:U \
-    -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
-    -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
-    -v ~/.ssh/:/home/sklein/.ssh/:U \
-    ghcr.io/stephane-klein/sklein-devbox:latest \
+alacritty -e ssh -t \
+    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
+    -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    -p ${SSH_PORT} \
+    sklein@localhost \
     /bin/zsh -i -c "tmux new-session -A -s devbox"
 """
-description = "Open Alacritty with a tmux session in the devbox container"
+description = "Open Alacritty with tmux session in devbox"
 
 [tasks.clean-home]
-run = "rm -rf $(pwd)/.sklein-devbox-home"
+run = """
+rm -rf $(pwd)/.sklein-devbox-home
+rm -rf $(pwd)/.sklein-devbox-ssh-client-keys
+rm -rf $(pwd)/.sklein-devbox-ssh-host-keys
+"""
 description = "Remove the container home directory to reset the development environment"
 
 [tasks.fresh-enter]
-run = "mise clean-home && mise enter"
+run = "mise clean-home && mise run up && mise enter"
 description = "Clean the container home and enter the container (fresh start)"
 
 [tasks.create-version-tag]

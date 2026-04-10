@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stephane-klein/sklein-devbox/pkg/podman"
 )
 
@@ -28,7 +29,31 @@ func init() {
 }
 
 func runDestroy(force bool) {
-	homeDir, err := podman.GetHomeDir(getName())
+	if viper.GetBool("dry-run") {
+		fmt.Fprintln(os.Stderr, "Error: --dry-run is not implemented for the 'destroy' command")
+		os.Exit(1)
+	}
+
+	instanceName := getName()
+
+	// First, stop and remove the container if it exists
+	containerID, _, err := podman.FindContainer(instanceName)
+	if err != nil {
+		printError("Failed to check container status: %v", err)
+		os.Exit(1)
+	}
+
+	if containerID != "" {
+		if !force {
+			fmt.Printf("Container %s will be stopped and removed.\n", containerID[:12])
+		}
+		if err := podman.StopContainer(containerID); err != nil {
+			printError("Failed to stop container: %v", err)
+			// Continue anyway to try removing the home directory
+		}
+	}
+
+	homeDir, err := podman.GetHomeDir(instanceName)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
 		os.Exit(1)
@@ -51,5 +76,9 @@ func runDestroy(force bool) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Directory %s has been destroyed.\n", homeDir)
+	fmt.Printf("Instance '%s' has been destroyed.\n", instanceName)
+	if containerID != "" {
+		fmt.Printf("Container %s stopped and removed.\n", containerID[:12])
+	}
+	fmt.Printf("Home directory %s removed.\n", homeDir)
 }

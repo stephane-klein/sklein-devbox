@@ -1,8 +1,9 @@
 chezmoi/
 .sklein-devbox-home/
+.sklein-devbox-ssh-host-keys/
 sklein-devbox
 rpmbuild/
 go/
 .secret
 .secrets/
-
+.sklein-devbox-ssh-client-keys/

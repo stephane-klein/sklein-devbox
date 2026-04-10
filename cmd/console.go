@@ -6,28 +6,49 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stephane-klein/sklein-devbox/pkg/podman"
+	"github.com/stephane-klein/sklein-devbox/pkg/ssh"
 )
 
 func init() {
 	rootCmd.AddCommand(consoleCmd)
-
-	consoleCmd.Flags().Bool("dry-run", false, "Print the podman command without executing")
 }
 
 var consoleCmd = &cobra.Command{
 	Use:   "console",
 	Short: "Open a tmux session in the devbox container with Alacritty",
-	Long: `Launch Alacritty and connect to a tmux session inside the sklein-devbox container.
+	Long: `Launch Alacritty and connect to a tmux session inside the sklein-devbox container via SSH.
 If a tmux session named "devbox" already exists, it will attach to it.
 Otherwise, a new session will be created.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		runConsole(cmd)
+		runConsole()
 	},
 }
 
-func runConsole(cmd *cobra.Command) {
+func runConsole() {
 	instanceName := getName()
+
+	// Handle dry-run - print Alacritty + SSH command only
+	if viper.GetBool("dry-run") {
+		privateKeyPath, _, err := ssh.GetKeyPaths()
+		if err != nil {
+			printError("Failed to get SSH key paths: %v", err)
+			os.Exit(1)
+		}
+
+		// For dry-run, we use a placeholder for the port
+		fmt.Println("alacritty -e \\")
+		fmt.Printf("  ssh -t \\\n")
+		fmt.Printf("    -i %s \\\n", privateKeyPath)
+		fmt.Println("    -o StrictHostKeyChecking=accept-new \\")
+		fmt.Println("    -o UserKnownHostsFile=/dev/null \\")
+		fmt.Println("    -o LogLevel=ERROR \\")
+		fmt.Println("    -p <port> \\")
+		fmt.Println("    sklein@localhost \\")
+		fmt.Println("    /bin/zsh -i -c \"tmux new-session -A -s devbox\"")
+		return
+	}
 
 	alacrittyPath, err := exec.LookPath("alacritty")
 	if err != nil {
@@ -37,35 +58,85 @@ func runConsole(cmd *cobra.Command) {
 		os.Exit(1)
 	}
 
-	podmanBinPath, err := podman.GetPodmanBinPath()
-	if err != nil {
-		printError("%v", err)
+	// Ensure SSH keys exist
+	if err := ssh.EnsureSSHKeys(); err != nil {
+		printError("Failed to ensure SSH keys: %v", err)
 		os.Exit(1)
 	}
 
-	homeDir, err := podman.GetHomeDir(instanceName)
+	privateKeyPath, _, err := ssh.GetKeyPaths()
 	if err != nil {
-		printError("Failed to determine home directory: %v", err)
+		printError("Failed to get SSH key paths: %v", err)
 		os.Exit(1)
 	}
 
-	cwd, err := os.Getwd()
+	// Check if container is running
+	containerID, running, err := podman.FindContainer(instanceName)
 	if err != nil {
-		printError("Failed to get current working directory: %v", err)
+		printError("Failed to check container status: %v", err)
 		os.Exit(1)
 	}
 
-	secrets := getSecretOptions()
+	var sshPort string
 
-	podmanArgs := podman.BuildRunArgs(homeDir, cwd, instanceName, secrets, []string{"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox"})
+	if !running {
+		// Container not running, start it automatically
+		fmt.Printf("Container for instance '%s' is not running. Starting...\n", instanceName)
 
-	if cmd.Flag("dry-run").Changed {
-		fullArgs := append([]string{"-e", podmanBinPath}, podmanArgs...)
-		podman.DryRunCmd("alacritty", fullArgs)
-		return
+		homeDir, err := podman.GetHomeDir(instanceName)
+		if err != nil {
+			printError("Failed to determine home directory: %v", err)
+			os.Exit(1)
+		}
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			printError("Failed to get current working directory: %v", err)
+			os.Exit(1)
+		}
+
+		secrets := getSecretOptions()
+
+		containerID, sshPort, err = podman.StartContainer(homeDir, cwd, instanceName, secrets)
+		if err != nil {
+			printError("Failed to start container: %v", err)
+			os.Exit(1)
+		}
+
+		// Wait for SSH to be ready
+		fmt.Print("Waiting for SSH server...")
+		if err := ssh.WaitForSSH(sshPort, privateKeyPath, 30); err != nil {
+			fmt.Println()
+			printError("SSH server failed to start: %v", err)
+			podman.StopContainer(containerID)
+			os.Exit(1)
+		}
+		fmt.Println(" ready!")
+		fmt.Printf("Container started: %s (SSH port: %s)\n", containerID[:12], sshPort)
+	} else {
+		// Container is running, get its SSH port
+		sshPort, err = podman.GetContainerSSHPort(containerID)
+		if err != nil {
+			printError("Failed to get SSH port: %v", err)
+			os.Exit(1)
+		}
 	}
 
-	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e", podmanBinPath}, podmanArgs...)...)
+	// Build SSH command for Alacritty
+	sshCmd := []string{
+		"ssh",
+		"-t",
+		"-i", privateKeyPath,
+		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		"-p", sshPort,
+		"sklein@localhost",
+		"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox",
+	}
+
+	// Launch Alacritty with SSH command
+	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e"}, sshCmd...)...)
 	alacrittyCmd.Stdin = os.Stdin
 	alacrittyCmd.Stdout = os.Stdout
 	alacrittyCmd.Stderr = os.Stderr

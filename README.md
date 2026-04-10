@@ -14,6 +14,8 @@ The container image is published at: `ghcr.io/stephane-klein/sklein-devbox:lates
 - [OpenCode](https://opencode.ai) — AI coding agent
 - [Chezmoi](https://www.chezmoi.io/) — dotfiles manager (configuration stored in
   [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi))
+- [s6-overlay](https://github.com/just-containers/s6-overlay) — process supervisor
+- openssh-server — SSH access
 
 
 ## Getting started
@@ -31,10 +33,12 @@ Then enter your development environment from your project directory:
 
 ```sh
 $ cd ~/git/github/stephane-klein/myproject/
-$ sklein-devbox enter
+$ sklein-devbox enter        # Auto-starts container if needed, connects via SSH
 ➜  /workspace git:(main) ✗ exit
-$ ./sklein-devbox list
-default  /home/stephane/.local/share/sklein-devbox/instances/default
+$ sklein-devbox status       # Shows container status and SSH port
+$ sklein-devbox list
+NAME    STATUS   SSH PORT  HOME PATH
+default running  49234     /home/stephane/.local/share/sklein-devbox/instances/default
 ```
 
 For a better terminal experience, use the `console` command which opens an
@@ -50,6 +54,18 @@ $ sklein-devbox console
 > If you already run tmux on your host machine, the `enter` command
 > would nest sessions, which is not ideal. The `console` command solves this by
 > running tmux in a new Alacritty instance.
+
+## Container lifecycle
+
+The container runs in the background and persists until explicitly stopped:
+
+```sh
+$ sklein-devbox up           # Start container in background
+$ sklein-devbox status       # Check status and SSH port
+$ sklein-devbox down         # Stop and remove container
+```
+
+The `enter` and `console` commands automatically start the container if it's not running.
 
 ## Persistence and dotfiles management
 
@@ -82,7 +98,7 @@ $ SKLEIN_DEVBOX_NAME=myinstancename sklein-devbox enter
 
 Configuration priority (highest to lowest): command line flag → environment variable → config file → default value ("default").
 
-**Reset environment:** Delete the instance directory:
+**Reset environment:** Stop the container and delete the instance directory:
 
 ```sh
 $ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/instances/default
@@ -121,6 +137,15 @@ When enabled, the Age agent starts automatically.
 ### Secrets Repository
 
 Secrets are stored in a private repository: <https://github.com/stephane-klein/sklein-devbox-secrets>
+
+> [!NOTE]
+> SSH Architecture
+>
+> The container runs `sshd` on port 2222 (mapped to a random host port).
+> The CLI connects via SSH using automatically generated Ed25519 keys stored
+> in `~/.local/share/sklein-devbox/ssh-client-keys/`. This provides better terminal
+> compatibility than `podman run -it`, fixing issues like Ctrl-P double keystrokes
+> and enabling OSC 52 clipboard integration.
 
 ## Contributing
 

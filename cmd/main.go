@@ -47,6 +47,9 @@ func init() {
 	viper.BindEnv("no-ssh-mount", "SKLEIN_DEVBOX_NO_SSH_MOUNT")
 	viper.BindEnv("ssh-key-file", "SKLEIN_DEVBOX_SSH_KEY_FILE")
 	viper.BindEnv("age-key-file", "SKLEIN_DEVBOX_AGE_KEY_FILE")
+
+	rootCmd.PersistentFlags().Bool("dry-run", false, "Print commands without executing")
+	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))
 }
 
 func initConfig() {

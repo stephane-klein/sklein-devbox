@@ -89,11 +89,6 @@ $ mise run console          # Open Alacritty with tmux session
 | `list`    | List instances                 |
 | `destroy` | Delete instance                |
 
-## Key Go Files
-
-- `cmd/*.go` - CLI commands
-- `pkg/podman/runner.go` - Container execution logic
-
 ## Architecture Notes
 
 - **Tasks mise** (`mise run enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/`

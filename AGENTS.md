@@ -1,4 +1,6 @@
-# Project Goal
+# AGENTS.md
+
+## Project Goal
 
 This project provides a portable and reproducible development environment, named here sklein-devbox.  
 It consists of two main parts:
@@ -8,17 +10,17 @@ It consists of two main parts:
 - A Go CLI (`sklein-devbox`) that allows instantiating containers based on this image. The home directory of these 
   environments is persistent, allowing data and configurations to be preserved between sessions.
 
-# Language
+## Language
 
 All content must be in English: source code, comments, and documentation.
 
-# Version Control
+## Version Control
 
 This repository might be managed by [Jujutsu](https://jj.rs/) (jj), a decentralized version control system.
 
 To verify if jj is used, check for a `.jj/` directory at the repo root. If jj is active, use `jj` commands instead of `git`.
 
-# Versioning
+## Versioning
 
 This project uses [TrunkVer](https://trunkver.org) for versioning - a scheme for continuously-delivered, trunk-based applications.
 
@@ -34,17 +36,15 @@ Examples from this project:
 
 TrunkVer is SemVer-compatible and suited for projects that release frequently without manual version management.
 
-# Image Reference
+## Image Reference
 
-This project uses **Podman**, not Docker.
-
-## Container Image
+### Container Image
 
 - **Name**: `sklein-devbox`
 - **Base**: Fedora 43
 - **Tools**: Mise, Zsh, Neovim
 
-## Container image and Chezmoi configuration
+### Container image and Chezmoi configuration
 
 The `Containerfile`, `entrypoint.sh`, and chezmoi dotfiles are **not** stored in this repository. They are all managed in the separate repository [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi).
 
@@ -52,7 +52,7 @@ This separation enables **atomic commits** between the container image configura
 
 This also allows the dotfiles configuration to be reused directly on a Fedora workstation outside the devbox.
 
-### Workflow
+## Workflow
 
 When developing on sklein-devbox:
 
@@ -116,7 +116,7 @@ For every flag that should be configurable via config file:
 3. Bind it to an environment variable using `viper.BindEnv()`
 4. Add a getter function in `cmd/main.go` that reads from viper (e.g., `getSecretOptions()`)
 
-### Example
+#### Example
 
 ```go
 // In cmd/main.go init()
@@ -125,7 +125,7 @@ viper.BindPFlag("gopass", rootCmd.PersistentFlags().Lookup("gopass"))
 viper.BindEnv("gopass", "SKLEIN_DEVBOX_GOPASS")
 ```
 
-### Priority Order
+## Priority Order
 
 When a value is resolved:
 1. CLI flag (explicitly provided on command line)

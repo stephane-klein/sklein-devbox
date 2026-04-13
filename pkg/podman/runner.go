@@ -22,7 +22,7 @@ func GetHomeDir(instanceName string) (string, error) {
 		return "", err
 	}
 
-	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", instanceName)
+	homeDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "instances", instanceName)
 
 	if err := os.MkdirAll(homeDir, 0755); err != nil {
 		return "", err
@@ -93,7 +93,7 @@ func RunWithCmd(homeDir, workspaceDir, instanceName string, secrets *SecretOptio
 
 	if secrets.Gopass && !secrets.NoGopassMount {
 		gopassDirs := []string{
-			filepath.Join(homeDir, ".config", "gopass", "age",),
+			filepath.Join(homeDir, ".config", "gopass", "age"),
 			filepath.Join(homeDir, ".local", "share", "gopass"),
 		}
 		for _, dir := range gopassDirs {

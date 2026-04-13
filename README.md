@@ -34,7 +34,7 @@ $ cd ~/git/github/stephane-klein/myproject/
 $ sklein-devbox enter
 ➜  /workspace git:(main) ✗ exit
 $ ./sklein-devbox list
-default  /home/stephane/.local/share/sklein-devbox/default
+default  /home/stephane/.local/share/sklein-devbox/instances/default
 ```
 
 For a better terminal experience, use the `console` command which opens an
@@ -53,7 +53,7 @@ $ sklein-devbox console
 
 ## Persistence and dotfiles management
 
-The container persists user data in `~/.local/share/sklein-devbox/<name>`
+The container persists user data in `~/.local/share/sklein-devbox/instances/<name>`
 (the default name is `default`). This directory is bind-mounted to
 `/home/sklein` inside the container. Your changes—including shell history,
 Zsh customizations, and configuration files—are saved on your host workstation.
@@ -64,8 +64,8 @@ synchronized from a remote repository.
 **Multiple instances:** Use `--name` to create isolated environments:
 
 ```sh
-$ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/project-a
-$ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/project-b
+$ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/instances/project-a
+$ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/instances/project-b
 ```
 
 *Configuration:* You can configure the instance name using a `.sklein-devbox.toml` file in your project directory:
@@ -85,7 +85,7 @@ Configuration priority (highest to lowest): command line flag → environment va
 **Reset environment:** Delete the instance directory:
 
 ```sh
-$ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/default
+$ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/instances/default
 ```
 
 ## Secret Management

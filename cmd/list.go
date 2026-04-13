@@ -30,7 +30,7 @@ func runList() {
 		os.Exit(1)
 	}
 
-	baseDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox")
+	baseDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "instances")
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {

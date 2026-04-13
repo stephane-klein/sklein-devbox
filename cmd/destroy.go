@@ -15,7 +15,7 @@ func init() {
 var destroyCmd = &cobra.Command{
 	Use:   "destroy",
 	Short: "Destroy the sklein-devbox data directory",
-	Long:  `Remove the ~/.local/share/sklein-devbox/<name> directory.`,
+	Long:  `Remove the ~/.local/share/sklein-devbox/instances/<name> directory.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runDestroy(force)
 	},

@@ -92,7 +92,7 @@ $ mise run console          # Open Alacritty with tmux session
 ## Architecture Notes
 
 - **Tasks mise** (`mise run enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/`
-- **CLI** (`sklein-devbox enter/console`): End users, uses `~/.local/share/sklein-devbox/<name>/`
+- **CLI** (`sklein-devbox enter/console`): End users, uses `~/.local/share/sklein-devbox/instances/<name>/`
 
 ## Code Style Preferences
 

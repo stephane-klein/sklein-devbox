@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -41,11 +42,18 @@ func runList() {
 		os.Exit(1)
 	}
 
+	// Create tabwriter for aligned output
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
+	defer w.Flush()
+
+	fmt.Fprintln(w, "NAME\tPATH")
+	fmt.Fprintln(w, "----\t----")
+
 	found := false
 	for _, entry := range entries {
 		if entry.IsDir() {
 			instancePath := filepath.Join(baseDir, entry.Name())
-			fmt.Printf("%s  %s\n", entry.Name(), instancePath)
+			fmt.Fprintf(w, "%s\t%s\n", entry.Name(), instancePath)
 			found = true
 		}
 	}

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260414.0.0-oolzlrnv - 2026-04-14
+
+### Added
+
+- New CLI commands for container lifecycle management:
+  - `up` - Start container in detached mode with SSH access
+  - `down` - Stop and remove container
+  - `status` - Show container status, SSH port, and uptime
+- SSH-based container access with automatic Ed25519 key generation
+- `pkg/ssh` package for SSH key management and client connections
+- `pkg/podman/container.go` for container lifecycle management
+
+### Changed
+
+- **BREAKING**: `enter` command now connects via SSH instead of `podman run -it`
+- **BREAKING**: `console` command now uses SSH for Alacritty integration
+- Container runs in detached mode (`-d`) with supervised sshd via s6-overlay
+- SSH keys stored in `~/.local/share/sklein-devbox/ssh-client-keys/`
+- `destroy` command now stops container before removing home directory
+- `list` command shows container status and SSH port
+
+### Fixed
+
+- Ctrl-P double keystroke issue in OpenCode (caused by conmon PTY bridge)
+- OSC 52 clipboard integration in tmux (no longer requires `TMUX=` workaround)
+
 ## 20260406.5.0-zkwxtuvo - 2026-03-06
 
 ### Added

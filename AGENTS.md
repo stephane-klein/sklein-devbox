@@ -189,8 +189,9 @@ viper.BindEnv("gopass", "SKLEIN_DEVBOX_GOPASS")
 When a value is resolved:
 1. CLI flag (explicitly provided on command line)
 2. Environment variable (if set)
-3. Config file value (from `.sklein-devbox.toml`)
-4. Default value (hardcoded in flag definition)
+3. Local config file value (from `.sklein-devbox.toml`)
+4. Global config file value (from `~/.config/sklein-devbox/config.toml`)
+5. Default value (hardcoded in flag definition)
 
 ## Documentation
 

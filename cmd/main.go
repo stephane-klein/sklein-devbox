@@ -55,16 +55,32 @@ func init() {
 }
 
 func initConfig() {
-	viper.SetConfigName(".sklein-devbox")
-	viper.AddConfigPath(".")
 	viper.SetDefault("name", "default")
 
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			printError("Failed to read config file: %v", err)
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		globalConfigDir := filepath.Join(homeDir, ".config", "sklein-devbox")
+		viper.AddConfigPath(globalConfigDir)
+		viper.SetConfigName("config")
+		viper.SetConfigType("toml")
+		if err := viper.ReadInConfig(); err != nil && !isConfigNotFoundError(err) {
+			printError("Failed to read global config file: %v", err)
 			os.Exit(1)
 		}
 	}
+
+	viper.AddConfigPath(".")
+	viper.SetConfigName(".sklein-devbox")
+	viper.SetConfigType("toml")
+	if err := viper.MergeInConfig(); err != nil && !isConfigNotFoundError(err) {
+		printError("Failed to read local config file: %v", err)
+		os.Exit(1)
+	}
+}
+
+func isConfigNotFoundError(err error) bool {
+	_, ok := err.(viper.ConfigFileNotFoundError)
+	return ok
 }
 
 func getName() string {

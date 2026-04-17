@@ -84,19 +84,39 @@ $ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/ins
 $ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/instances/project-b
 ```
 
-*Configuration:* You can configure the instance name using a `.sklein-devbox.toml` file in your project directory:
+### Configuration Files
+
+You can configure the CLI using configuration files and environment variables:
+
+**Global config:** `~/.config/sklein-devbox/config.toml`
+
+```toml
+no-gopass-mount = true
+no-ssh-mount = true
+gopass = true
+ssh-key-file = "~/.ssh/id_rsa_github"
+age-key-file = "~/.secrets/age.key"
+```
+
+**Local config:** `.sklein-devbox.toml` in your project directory:
 
 ```toml
 name = "myinstancename"
 ```
 
-Or use the `SKLEIN_DEVBOX_NAME` environment variable:
+Or use environment variables:
 
 ```sh
 $ SKLEIN_DEVBOX_NAME=myinstancename sklein-devbox enter
 ```
 
-Configuration priority (highest to lowest): command line flag → environment variable → config file → default value ("default").
+**Configuration priority (highest to lowest):**
+
+1. CLI flag (e.g., `--gopass`)
+2. Environment variable (e.g., `SKLEIN_DEVBOX_GOPASS`)
+3. Local config (`.sklein-devbox.toml`)
+4. Global config (`~/.config/sklein-devbox/config.toml`)
+5. Default value
 
 **Reset environment:** Stop the container and delete the instance directory:
 

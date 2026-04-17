@@ -10,6 +10,7 @@ and this project adheres to [TrunkVer](https://trunkver.org/).
 ### Added
 
 - Support for `~` expansion in `--ssh-key-file` and `--age-key-file` flags
+- Global configuration file support: `~/.config/sklein-devbox/config.toml`
 
 ## 20260414.0.0-oolzlrnv - 2026-04-14
 

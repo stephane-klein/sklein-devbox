@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260417.0.0-XXXXXXX - 2026-04-17
+
+### Added
+
+- Support for `~` expansion in `--ssh-key-file` and `--age-key-file` flags
+
 ## 20260414.0.0-oolzlrnv - 2026-04-14
 
 ### Added

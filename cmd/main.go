@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -69,12 +71,21 @@ func getName() string {
 	return viper.GetString("name")
 }
 
+func expandPath(path string) string {
+	if path != "" && strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
+
 func getSecretOptions() *podman.SecretOptions {
 	return &podman.SecretOptions{
 		Gopass:        viper.GetBool("gopass"),
 		NoGopassMount: viper.GetBool("no-gopass-mount"),
 		NoSshMount:    viper.GetBool("no-ssh-mount"),
-		SshKeyFile:    viper.GetString("ssh-key-file"),
-		AgeKeyFile:    viper.GetString("age-key-file"),
+		SshKeyFile:    expandPath(viper.GetString("ssh-key-file")),
+		AgeKeyFile:    expandPath(viper.GetString("age-key-file")),
 	}
 }

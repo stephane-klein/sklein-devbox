@@ -84,6 +84,22 @@ $ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/ins
 $ sklein-devbox --name=project-b enter   # Uses ~/.local/share/sklein-devbox/instances/project-b
 ```
 
+### Creating an instance from an existing one
+
+To save time and avoid redundant internet downloads when setting up a new environment,
+you can create an instance based on the home directory of an existing one:
+
+```sh
+$ sklein-devbox up --name=project-b --from=project-a
+Warning: copying from running instance "project-a"
+Copying from project-a   45% |█████████████         | (515 MB/1.1 GB, 129 MB/s)
+Starting container for instance 'project-b'...
+Waiting for SSH server... ready!
+Container started: abc123 (SSH port: 49235)
+```
+
+This copies the entire home directory including configurations, tools, and data.
+
 ### Configuration Files
 
 You can configure the CLI using configuration files and environment variables:

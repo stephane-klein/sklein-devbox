@@ -52,6 +52,10 @@ func init() {
 
 	rootCmd.PersistentFlags().Bool("dry-run", false, "Print commands without executing")
 	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))
+
+	rootCmd.PersistentFlags().String("from", "", "Create new instance from an existing instance's home directory")
+	viper.BindPFlag("from", rootCmd.PersistentFlags().Lookup("from"))
+	viper.BindEnv("from", "SKLEIN_DEVBOX_FROM")
 }
 
 func initConfig() {

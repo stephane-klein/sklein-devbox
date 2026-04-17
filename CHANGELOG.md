@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `--from` flag on `up` command to create instances from existing ones
+
 ## 20260417.0.0-d7194fe - 2026-04-17
 
 ### Added

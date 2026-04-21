@@ -262,7 +262,7 @@ func StartContainer(homeDir, workspaceDir, instanceName string, secrets *SecretO
 // DryRunStopContainer returns the stop and rm commands formatted for dry-run output
 func DryRunStopContainer(instanceName string) string {
 	containerName := fmt.Sprintf("sklein-devbox-%s", instanceName)
-	return fmt.Sprintf("podman stop -t 10 %s && \\\npodman rm %s", containerName, containerName)
+	return fmt.Sprintf("podman stop -t 30 %s && \\\npodman rm %s", containerName, containerName)
 }
 
 // StopContainer stops and removes a container
@@ -273,7 +273,7 @@ func StopContainer(containerID string) error {
 	}
 
 	// Stop the container
-	stopCmd := exec.Command(podmanPath, "stop", "-t", "10", containerID)
+	stopCmd := exec.Command(podmanPath, "stop", "-t", "30", containerID)
 	stopCmd.Run() // Ignore error, container might already be stopped
 
 	// Remove the container

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/user"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -28,6 +30,17 @@ func init() {
 	destroyCmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
 }
 
+func shortenPath(path string) string {
+	usr, err := user.Current()
+	if err != nil {
+		return path
+	}
+	if strings.HasPrefix(path, usr.HomeDir) {
+		return "~" + strings.TrimPrefix(path, usr.HomeDir)
+	}
+	return path
+}
+
 func runDestroy(force bool) {
 	if viper.GetBool("dry-run") {
 		fmt.Fprintln(os.Stderr, "Error: --dry-run is not implemented for the 'destroy' command")
@@ -36,21 +49,26 @@ func runDestroy(force bool) {
 
 	instanceName := getName()
 
-	// First, stop and remove the container if it exists
-	containerID, _, err := podman.FindContainer(instanceName)
+	// Check if any containers are still using this home directory
+	containers, err := podman.FindAllContainersForHomeName(instanceName)
 	if err != nil {
 		printError("Failed to check container status: %v", err)
 		os.Exit(1)
 	}
 
-	if containerID != "" {
-		if !force {
-			fmt.Printf("Container %s will be stopped and removed.\n", containerID[:12])
+	if len(containers) > 0 {
+		fmt.Fprintf(os.Stderr, "Error: Cannot destroy home directory '%s' because it is still in use by the following containers:\n", instanceName)
+		for _, container := range containers {
+			workspace := container.Workspace
+			if workspace == "" {
+				workspace = "(unknown)"
+			} else {
+				workspace = shortenPath(workspace)
+			}
+			fmt.Fprintf(os.Stderr, "  - %s  (workspace: %s)\n", container.Name, workspace)
 		}
-		if err := podman.StopContainer(containerID); err != nil {
-			printError("Failed to stop container: %v", err)
-			// Continue anyway to try removing the home directory
-		}
+		fmt.Fprintln(os.Stderr, "Please stop these containers first with 'sklein-devbox down' in each workspace.")
+		os.Exit(1)
 	}
 
 	homeDir, err := podman.GetHomeDir(instanceName)
@@ -77,8 +95,5 @@ func runDestroy(force bool) {
 	}
 
 	fmt.Printf("Instance '%s' has been destroyed.\n", instanceName)
-	if containerID != "" {
-		fmt.Printf("Container %s stopped and removed.\n", containerID[:12])
-	}
 	fmt.Printf("Home directory %s removed.\n", homeDir)
 }

@@ -32,7 +32,13 @@ func runUp() {
 	instanceName := getName()
 	fromInstance := viper.GetString("from")
 
-	_, exists, _ := podman.FindContainer(instanceName)
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError("Failed to get current working directory: %v", err)
+		os.Exit(1)
+	}
+
+	_, exists, _ := podman.FindContainer(instanceName, cwd)
 	if exists {
 		if fromInstance != "" {
 			fmt.Fprintf(os.Stderr, "Instance %q already exists, ignoring --from flag (only used at creation)\n", instanceName)
@@ -48,12 +54,6 @@ func runUp() {
 	homeDir, err := podman.GetHomeDir(instanceName)
 	if err != nil {
 		printError("Failed to determine home directory: %v", err)
-		os.Exit(1)
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		printError("Failed to get current working directory: %v", err)
 		os.Exit(1)
 	}
 
@@ -77,7 +77,7 @@ func runUp() {
 	}
 
 	// Check if container already exists and is running
-	containerID, running, err := podman.FindContainer(instanceName)
+	containerID, running, err := podman.FindContainer(instanceName, cwd)
 	if err != nil {
 		printError("Failed to check container status: %v", err)
 		os.Exit(1)
@@ -138,8 +138,13 @@ func copyInstanceHome(sourceName, targetName string) error {
 		fmt.Fprintf(os.Stderr, "Warning: source instance %q has empty home directory\n", sourceName)
 	}
 
-	if _, running, _ := podman.FindContainer(sourceName); running {
-		fmt.Fprintf(os.Stderr, "Warning: copying from running instance %q\n", sourceName)
+	if containers, _ := podman.FindAllContainersForHomeName(sourceName); len(containers) > 0 {
+		for _, c := range containers {
+			if c.Running {
+				fmt.Fprintf(os.Stderr, "Warning: copying from running instance %q\n", sourceName)
+				break
+			}
+		}
 	}
 
 	totalSize, _, err := calculateTotalSize(sourceHome)

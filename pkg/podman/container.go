@@ -3,6 +3,7 @@ package podman
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,18 +17,48 @@ import (
 type ContainerStatus struct {
 	ID        string
 	Name      string
+	HomeName  string
+	Workspace string
 	Running   bool
 	SSHPort   string
 	StartedAt time.Time
 	ExitCode  int
 }
 
-// FindContainer searches for a container by instance name
-// Returns container ID, running status, and error
-func FindContainer(instanceName string) (string, bool, error) {
-	// List containers with the label
+// podmanPsEntry represents the JSON output of `podman ps --format json`
+type podmanPsEntry struct {
+	Id     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	State  string            `json:"State"`
+	Labels map[string]string `json:"Labels"`
+	Ports  []struct {
+		HostPort int `json:"host_port"`
+	} `json:"Ports"`
+}
+
+// GenerateContainerName generates a unique container name based on home name and workspace path.
+// It uses a 32-bit FNV-1a hash of the absolute workspace path, truncated to 8 hexadecimal characters.
+func GenerateContainerName(homeName, workspacePath string) string {
+	absPath, err := filepath.Abs(workspacePath)
+	if err != nil {
+		absPath = workspacePath
+	}
+
+	h := fnv.New32a()
+	h.Write([]byte(absPath))
+	hash := h.Sum32()
+
+	return fmt.Sprintf("sklein-devbox-%s-%08x", homeName, hash)
+}
+
+// FindContainer searches for a container by instance name and workspace path.
+// It targets the exact container via its generated name.
+// Returns container ID, running status, and error.
+func FindContainer(instanceName, workspacePath string) (string, bool, error) {
+	containerName := GenerateContainerName(instanceName, workspacePath)
+
 	cmd := exec.Command("podman", "ps", "-a",
-		"--filter", fmt.Sprintf("label=sklein-devbox-name=%s", instanceName),
+		"--filter", fmt.Sprintf("name=%s", containerName),
 		"--format", "{{.ID}}|{{.State}}",
 	)
 
@@ -51,6 +82,47 @@ func FindContainer(instanceName string) (string, bool, error) {
 	running := state == "running"
 
 	return containerID, running, nil
+}
+
+// FindAllContainersForHomeName finds all containers associated with a given home name,
+// regardless of workspace.
+func FindAllContainersForHomeName(instanceName string) ([]ContainerStatus, error) {
+	cmd := exec.Command("podman", "ps", "-a",
+		"--filter", fmt.Sprintf("label=sklein-devbox-name=%s", instanceName),
+		"--format", "json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, nil
+	}
+
+	var entries []podmanPsEntry
+	if err := json.Unmarshal(output, &entries); err != nil {
+		return nil, nil
+	}
+
+	var containers []ContainerStatus
+	for _, e := range entries {
+		container := ContainerStatus{
+			ID:        e.Id,
+			HomeName:  e.Labels["sklein-devbox-name"],
+			Workspace: e.Labels["sklein-devbox-workspace"],
+			Running:   e.State == "running",
+		}
+
+		if len(e.Names) > 0 {
+			container.Name = e.Names[0]
+		}
+
+		if container.Running && len(e.Ports) > 0 {
+			container.SSHPort = fmt.Sprintf("%d", e.Ports[0].HostPort)
+		}
+
+		containers = append(containers, container)
+	}
+
+	return containers, nil
 }
 
 // GetContainerSSHPort retrieves the mapped SSH port (2222) for a container
@@ -90,8 +162,14 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *Sec
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
+	// Ensure workspace path is absolute for consistent naming and labeling
+	absWorkspace, err := filepath.Abs(workspaceDir)
+	if err != nil {
+		absWorkspace = workspaceDir
+	}
+
 	// Build container name
-	containerName := fmt.Sprintf("sklein-devbox-%s", instanceName)
+	containerName := GenerateContainerName(instanceName, absWorkspace)
 
 	// Get SSH host keys directory
 	sshHostKeysDir, _ := ssh.GetSSHHostKeysDir()
@@ -101,6 +179,7 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *Sec
 		"--name", containerName,
 		"--label=app=sklein-devbox",
 		"--label", fmt.Sprintf("sklein-devbox-name=%s", instanceName),
+		"--label", fmt.Sprintf("sklein-devbox-workspace=%s", absWorkspace),
 		"--userns=keep-id",
 		"--cap-add=SETUID",
 		"--cap-add=SETGID",
@@ -260,9 +339,9 @@ func StartContainer(homeDir, workspaceDir, instanceName string, secrets *SecretO
 }
 
 // DryRunStopContainer returns the stop and rm commands formatted for dry-run output
-func DryRunStopContainer(instanceName string) string {
-	containerName := fmt.Sprintf("sklein-devbox-%s", instanceName)
-	return fmt.Sprintf("podman stop -t 30 %s && \\\npodman rm %s", containerName, containerName)
+func DryRunStopContainer(instanceName, workspacePath string) string {
+	containerName := GenerateContainerName(instanceName, workspacePath)
+	return fmt.Sprintf("podman stop -t 30 %s && \\npodman rm %s", containerName, containerName)
 }
 
 // StopContainer stops and removes a container
@@ -282,8 +361,8 @@ func StopContainer(containerID string) error {
 }
 
 // GetContainerStatus retrieves detailed status information about a container
-func GetContainerStatus(instanceName string) (*ContainerStatus, error) {
-	containerID, running, err := FindContainer(instanceName)
+func GetContainerStatus(instanceName, workspacePath string) (*ContainerStatus, error) {
+	containerID, running, err := FindContainer(instanceName, workspacePath)
 	if err != nil {
 		return nil, err
 	}
@@ -293,9 +372,11 @@ func GetContainerStatus(instanceName string) (*ContainerStatus, error) {
 	}
 
 	status := &ContainerStatus{
-		ID:      containerID,
-		Name:    fmt.Sprintf("sklein-devbox-%s", instanceName),
-		Running: running,
+		ID:        containerID,
+		Name:      GenerateContainerName(instanceName, workspacePath),
+		HomeName:  instanceName,
+		Workspace: workspacePath,
+		Running:   running,
 	}
 
 	if running {
@@ -331,7 +412,7 @@ func GetContainerStatus(instanceName string) (*ContainerStatus, error) {
 func GetAllContainers() ([]ContainerStatus, error) {
 	cmd := exec.Command("podman", "ps", "-a",
 		"--filter", "label=app=sklein-devbox",
-		"--format", "{{.ID}}|{{.Names}}|{{.State}}|{{.Labels}}",
+		"--format", "json",
 	)
 
 	output, err := cmd.Output()
@@ -339,43 +420,26 @@ func GetAllContainers() ([]ContainerStatus, error) {
 		return nil, nil
 	}
 
+	var entries []podmanPsEntry
+	if err := json.Unmarshal(output, &entries); err != nil {
+		return nil, nil
+	}
+
 	var containers []ContainerStatus
-	lines := strings.Split(string(output), "\n")
-
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		parts := strings.Split(line, "|")
-		if len(parts) < 3 {
-			continue
-		}
-
+	for _, e := range entries {
 		container := ContainerStatus{
-			ID:      parts[0],
-			Name:    parts[1],
-			Running: parts[2] == "running",
+			ID:        e.Id,
+			HomeName:  e.Labels["sklein-devbox-name"],
+			Workspace: e.Labels["sklein-devbox-workspace"],
+			Running:   e.State == "running",
 		}
 
-		// Parse labels to get instance name
-		if len(parts) > 3 {
-			labels := parts[3]
-			if strings.Contains(labels, "sklein-devbox-name=") {
-				// Extract instance name from labels
-				for _, label := range strings.Split(labels, ",") {
-					if strings.HasPrefix(label, "sklein-devbox-name=") {
-						instanceName := strings.TrimPrefix(label, "sklein-devbox-name=")
-						// Get SSH port if running
-						if container.Running {
-							port, _ := GetContainerSSHPort(container.ID)
-							container.SSHPort = port
-						}
-						_ = instanceName
-						break
-					}
-				}
-			}
+		if len(e.Names) > 0 {
+			container.Name = e.Names[0]
+		}
+
+		if container.Running && len(e.Ports) > 0 {
+			container.SSHPort = fmt.Sprintf("%d", e.Ports[0].HostPort)
 		}
 
 		containers = append(containers, container)

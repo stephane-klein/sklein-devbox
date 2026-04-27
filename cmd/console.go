@@ -70,8 +70,14 @@ func runConsole() {
 		os.Exit(1)
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError("Failed to get current working directory: %v", err)
+		os.Exit(1)
+	}
+
 	// Check if container is running
-	containerID, running, err := podman.FindContainer(instanceName)
+	containerID, running, err := podman.FindContainer(instanceName, cwd)
 	if err != nil {
 		printError("Failed to check container status: %v", err)
 		os.Exit(1)
@@ -86,12 +92,6 @@ func runConsole() {
 		homeDir, err := podman.GetHomeDir(instanceName)
 		if err != nil {
 			printError("Failed to determine home directory: %v", err)
-			os.Exit(1)
-		}
-
-		cwd, err := os.Getwd()
-		if err != nil {
-			printError("Failed to get current working directory: %v", err)
 			os.Exit(1)
 		}
 

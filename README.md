@@ -37,8 +37,9 @@ $ sklein-devbox enter        # Auto-starts container if needed, connects via SSH
 ➜  /workspace git:(main) ✗ exit
 $ sklein-devbox status       # Shows container status and SSH port
 $ sklein-devbox list
-NAME    STATUS   SSH PORT  HOME PATH
-default running  49234     /home/stephane/.local/share/sklein-devbox/instances/default
+HOME NAME   WORKSPACE               CONTAINER ID   STATUS    SSH PORT   HOME PATH
+---------   ---------               ------------   ------    --------   ---------
+default     ~/git/myproject         abc123def456   running   49234      /home/stephane/.local/share/sklein-devbox/instances/default
 ```
 
 For a better terminal experience, use the `console` command which opens an
@@ -77,7 +78,31 @@ Zsh customizations, and configuration files—are saved on your host workstation
 [Chezmoi](https://www.chezmoi.io/) manages dotfiles inside the container,
 synchronized from a remote repository.
 
-**Multiple instances:** Use `--name` to create isolated environments:
+### Multiple workspaces with the same home directory
+
+Each container is scoped by **both** the instance name (home directory) and the
+workspace path (current directory). This allows multiple containers to share the
+same home directory while serving different workspaces.
+
+```sh
+$ cd ~/git/project-a
+$ sklein-devbox up                         # Creates sklein-devbox-default-<hash-a>
+
+$ cd ~/git/project-b
+$ sklein-devbox up                         # Creates sklein-devbox-default-<hash-b> (same home)
+
+$ sklein-devbox list
+HOME NAME   WORKSPACE          CONTAINER ID   STATUS    SSH PORT   HOME PATH
+---------   ---------          ------------   ------    --------   ---------
+default     ~/git/project-a    abc123def456   running   49234      /home/stephane/.local/share/sklein-devbox/instances/default
+default     ~/git/project-b    def789abc012   running   49235      /home/stephane/.local/share/sklein-devbox/instances/default
+```
+
+Commands like `up`, `down`, `enter`, `console`, and `status` operate on the
+container for the **current workspace**.
+
+**Multiple isolated home directories:** Use `--name` to create completely
+separated environments:
 
 ```sh
 $ sklein-devbox --name=project-a enter   # Uses ~/.local/share/sklein-devbox/instances/project-a
@@ -134,11 +159,14 @@ $ SKLEIN_DEVBOX_NAME=myinstancename sklein-devbox enter
 4. Global config (`~/.config/sklein-devbox/config.toml`)
 5. Default value
 
-**Reset environment:** Stop the container and delete the instance directory:
+## Destroy home directory instance
 
 ```sh
 $ sklein-devbox --name=default destroy    # Removes ~/.local/share/sklein-devbox/instances/default
 ```
+
+`destroy` will **block** if any containers (across any workspace) still use
+the home directory. Stop them first with `sklein-devbox down` in each workspace.
 
 ## Secret Management
 

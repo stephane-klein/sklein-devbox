@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
+	"sort"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -26,6 +26,15 @@ var listCmd = &cobra.Command{
 	},
 }
 
+type listRow struct {
+	HomeName    string
+	Workspace   string
+	ContainerID string
+	Status      string
+	SSHPort     string
+	HomePath    string
+}
+
 func runList() {
 	if viper.GetBool("dry-run") {
 		fmt.Fprintln(os.Stderr, "Error: --dry-run is not implemented for the 'list' command")
@@ -40,87 +49,104 @@ func runList() {
 
 	baseDir := filepath.Join(usr.HomeDir, ".local", "share", "sklein-devbox", "instances")
 
-	// Get all containers to check their status
+	// Get all containers
 	containers, err := podman.GetAllContainers()
 	if err != nil {
 		containers = []podman.ContainerStatus{}
 	}
 
-	// Build a map of instance name to container status
-	containerMap := make(map[string]*podman.ContainerStatus)
-	for i := range containers {
-		// Extract instance name from container name (sklein-devbox-<instance>)
-		name := containers[i].Name
-		if strings.HasPrefix(name, "sklein-devbox-") {
-			instanceName := strings.TrimPrefix(name, "sklein-devbox-")
-			containerMap[instanceName] = &containers[i]
+	// Get all home directories
+	homeDirs := make(map[string]string) // homeName -> path
+	entries, err := os.ReadDir(baseDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				name := entry.Name()
+				homeDirs[name] = filepath.Join(baseDir, name)
+			}
 		}
 	}
+
+	// Build rows
+	var rows []listRow
+	homeHasContainers := make(map[string]bool)
+
+	for _, c := range containers {
+		homeName := c.HomeName
+		if homeName == "" {
+			homeName = "(orphan)"
+		}
+		homeHasContainers[homeName] = true
+
+		status := "stopped"
+		port := "-"
+		if c.Running {
+			status = "running"
+			port = c.SSHPort
+		}
+
+		containerID := "-"
+		if c.ID != "" {
+			containerID = c.ID[:12]
+		}
+
+		workspace := c.Workspace
+		if workspace == "" {
+			workspace = "-"
+		} else {
+			workspace = shortenPath(workspace)
+		}
+
+		homePath := homeDirs[homeName]
+		if homePath == "" {
+			homePath = "(no home directory)"
+		}
+
+		rows = append(rows, listRow{
+			HomeName:    homeName,
+			Workspace:   workspace,
+			ContainerID: containerID,
+			Status:      status,
+			SSHPort:     port,
+			HomePath:    homePath,
+		})
+	}
+
+	// Add home directories without containers
+	for homeName, homePath := range homeDirs {
+		if !homeHasContainers[homeName] {
+			rows = append(rows, listRow{
+				HomeName:    homeName,
+				Workspace:   "-",
+				ContainerID: "-",
+				Status:      "not created",
+				SSHPort:     "-",
+				HomePath:    homePath,
+			})
+		}
+	}
+
+	// Sort by HomeName then Workspace
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].HomeName != rows[j].HomeName {
+			return rows[i].HomeName < rows[j].HomeName
+		}
+		return rows[i].Workspace < rows[j].Workspace
+	})
 
 	// Create tabwriter for aligned output
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 4, ' ', 0)
 	defer w.Flush()
 
-	entries, err := os.ReadDir(baseDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Check if there are containers without home directories
-			if len(containers) > 0 {
-				fmt.Fprintln(w, "NAME\tCONTAINER ID\tSTATUS\tSSH PORT\tPATH")
-				fmt.Fprintln(w, "----\t------\t------\t--------\t----")
-				for name, container := range containerMap {
-					status := "stopped"
-					port := "-"
-					if container.Running {
-						status = "running"
-						port = container.SSHPort
-					}
-					containerID := "-"
-					if container.ID != "" {
-						containerID = container.ID[:6]
-					}
-					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", name, containerID, status, port, "(no home directory)")
-				}
-				return
-			}
-			fmt.Println("No instances found.")
-			return
-		}
-		printError("Failed to read directory: %v", err)
-		os.Exit(1)
+	fmt.Fprintln(w, "HOME NAME\tWORKSPACE\tCONTAINER ID\tSTATUS\tSSH PORT\tHOME PATH")
+	fmt.Fprintln(w, "---------\t---------\t------------\t------\t--------\t---------")
+
+	for _, row := range rows {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			row.HomeName, row.Workspace, row.ContainerID, row.Status, row.SSHPort, row.HomePath)
 	}
 
-	fmt.Fprintln(w, "NAME\tCONTAINER ID\tSTATUS\tSSH PORT\tPATH")
-	fmt.Fprintln(w, "----\t------\t------\t--------\t----")
-
-	found := false
-	for _, entry := range entries {
-		if entry.IsDir() {
-			instanceName := entry.Name()
-			instancePath := filepath.Join(baseDir, instanceName)
-
-			// Check container status
-			status := "not created"
-			port := "-"
-			containerID := "-"
-			if container, exists := containerMap[instanceName]; exists {
-				if container.ID != "" {
-					containerID = container.ID
-				}
-				if container.Running {
-					status = "running"
-					port = container.SSHPort
-				} else {
-					status = "stopped"
-				}
-			}
-
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", instanceName, containerID, status, port, instancePath)
-			found = true
-		}
-	}
-
-	if !found {
+	if len(rows) == 0 {
 		fmt.Println("No instances found.")
 	}
 }

@@ -32,7 +32,13 @@ func runStatus() {
 
 	instanceName := getName()
 
-	status, err := podman.GetContainerStatus(instanceName)
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError("Failed to get current working directory: %v", err)
+		os.Exit(1)
+	}
+
+	status, err := podman.GetContainerStatus(instanceName, cwd)
 	if err != nil {
 		printError("Failed to get container status: %v", err)
 		os.Exit(1)

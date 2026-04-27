@@ -25,15 +25,21 @@ var downCmd = &cobra.Command{
 func runDown() {
 	instanceName := getName()
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		printError("Failed to get current working directory: %v", err)
+		os.Exit(1)
+	}
+
 	// Handle dry-run
 	if viper.GetBool("dry-run") {
-		dryRunCmd := podman.DryRunStopContainer(instanceName)
+		dryRunCmd := podman.DryRunStopContainer(instanceName, cwd)
 		fmt.Println(dryRunCmd)
 		return
 	}
 
 	// Find container
-	containerID, running, err := podman.FindContainer(instanceName)
+	containerID, running, err := podman.FindContainer(instanceName, cwd)
 	if err != nil {
 		printError("Failed to check container status: %v", err)
 		os.Exit(1)

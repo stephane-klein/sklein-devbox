@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260428.0.0-xoyvwqzk - 2026-04-28
+
+### Fixed
+
+- Allow running multiple containers with the same home directory from different workspaces. This was the intended behavior from the very beginning of sklein-devbox, but the implementation incorrectly prevented multiple containers from sharing a home directory when launched from different workspaces.
+
 ## 20260417.1.0-nqzluoxn - 2026-04-17
 
 ### Added

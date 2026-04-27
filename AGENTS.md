@@ -88,20 +88,29 @@ $ mise run console          # Open Alacritty with SSH + tmux session
 
 ## CLI Commands (for end users)
 
-| Command   | Purpose                        |
-|-----------|--------------------------------|
-| `up`      | Start container in background  |
-| `down`    | Stop and remove container      |
-| `status`  | Show container status and SSH port |
-| `enter`   | Connect via SSH (auto-starts if needed) |
-| `console` | Alacritty + SSH + tmux session |
-| `list`    | List instances                 |
-| `destroy` | Stop container and delete home |
+| Command   | Scope                              | Purpose                        |
+|-----------|------------------------------------|--------------------------------|
+| `up`      | `(homeName, workspace)`            | Start container in background  |
+| `down`    | `(homeName, workspace)`            | Stop and remove container      |
+| `status`  | `(homeName, workspace)`            | Show container status and SSH port |
+| `enter`   | `(homeName, workspace)`            | Connect via SSH (auto-starts if needed) |
+| `console` | `(homeName, workspace)`            | Alacritty + SSH + tmux session |
+| `list`    | all                                | List all containers and homes  |
+| `destroy` | `homeName` (blocks if in use)      | Delete home directory          |
 
 ## Architecture Notes
 
 - **Tasks mise** (`mise run up/enter/console`): Development of sklein-devbox itself, uses `./.sklein-devbox-home/` and SSH keys in `./.sklein-devbox-ssh-client-keys/`
 - **CLI** (`sklein-devbox up/enter/console`): End users, uses `~/.local/share/sklein-devbox/instances/<name>/` and SSH keys in `~/.local/share/sklein-devbox/ssh-client-keys/`
+
+### Container Identity
+
+Each container is uniquely identified by the pair **(homeName, workspacePath)**:
+
+- **Container name**: `sklein-devbox-<homeName>-<8-char-hash>` where the hash is derived from the absolute workspace path (FNV-1a)
+- **Labels**: `sklein-devbox-name=<homeName>` and `sklein-devbox-workspace=<absolute_path>`
+
+This enables multiple containers to share the same home directory while serving different workspaces.
 
 ### Container Startup (s6-overlay)
 

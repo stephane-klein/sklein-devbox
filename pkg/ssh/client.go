@@ -27,6 +27,7 @@ func Connect(opts ConnectOptions) error {
 		"ssh",
 		"-t",
 		"-i", opts.PrivateKeyPath,
+		"-o", "IdentitiesOnly=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
@@ -58,6 +59,7 @@ func ConnectCommand(opts ConnectOptions) (*exec.Cmd, error) {
 	sshArgs := []string{
 		"-t",
 		"-i", opts.PrivateKeyPath,
+		"-o", "IdentitiesOnly=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
@@ -81,6 +83,7 @@ func DryRunSSH(opts ConnectOptions) string {
 	var cmd strings.Builder
 	cmd.WriteString("ssh -t \\\n")
 	cmd.WriteString(fmt.Sprintf("  -i %s \\\n", opts.PrivateKeyPath))
+	cmd.WriteString("  -o IdentitiesOnly=yes \\\n")
 	cmd.WriteString("  -o StrictHostKeyChecking=accept-new \\\n")
 	cmd.WriteString("  -o UserKnownHostsFile=/dev/null \\\n")
 	cmd.WriteString("  -o LogLevel=ERROR \\\n")
@@ -106,6 +109,7 @@ func WaitForSSH(port, privateKeyPath string, maxAttempts int) error {
 	for i := 0; i < maxAttempts; i++ {
 		cmd := exec.Command("ssh",
 			"-i", privateKeyPath,
+			"-o", "IdentitiesOnly=yes",
 			"-o", "StrictHostKeyChecking=accept-new",
 			"-o", "UserKnownHostsFile=/dev/null",
 			"-o", "LogLevel=ERROR",

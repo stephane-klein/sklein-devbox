@@ -48,7 +48,7 @@ CONTAINER_ID=$(podman run -d \
 SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
 
 printf "Starting container... "
-until ssh -i ./.sklein-devbox-ssh-client-keys/id_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=1 -p ${SSH_PORT} sklein@localhost healthcheck 2>/dev/null; do
+until ssh -i ./.sklein-devbox-ssh-client-keys/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=1 -p ${SSH_PORT} sklein@localhost healthcheck 2>/dev/null; do
     printf "."
     sleep 0.5
 done

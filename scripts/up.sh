@@ -37,6 +37,7 @@ CONTAINER_ID=$(podman run -d \
     -v $(pwd)/.sklein-devbox-home/:/home/sklein/:U \
     -v $(pwd)/.sklein-devbox-ssh-host-keys:/var/lib/sklein-devbox/ssh-host-keys:U \
     -v $(pwd)/chezmoi/:/home/sklein/.local/share/chezmoi/:U \
+    -v $(pwd)/chezmoi/sklein-devbox-init.sh:/usr/local/bin/sklein-devbox-init.sh:U \
     -v $(pwd)/chezmoi/ssh-forcecommand-entrypoint.sh:/usr/local/bin/ssh-forcecommand-entrypoint.sh:U \
     -v ~/.ssh/:/tmp/host-ssh/:ro \
     -v $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519.pub:/tmp/devbox-ssh-key.pub:ro \

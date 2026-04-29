@@ -50,6 +50,10 @@ func init() {
 	viper.BindEnv("ssh-key-file", "SKLEIN_DEVBOX_SSH_KEY_FILE")
 	viper.BindEnv("age-key-file", "SKLEIN_DEVBOX_AGE_KEY_FILE")
 
+	rootCmd.PersistentFlags().Bool("disable-init", false, "Disable initialization on entry")
+	viper.BindPFlag("disable-init", rootCmd.PersistentFlags().Lookup("disable-init"))
+	viper.BindEnv("disable-init", "SKLEIN_DEVBOX_DISABLE_INIT")
+
 	rootCmd.PersistentFlags().Bool("dry-run", false, "Print commands without executing")
 	viper.BindPFlag("dry-run", rootCmd.PersistentFlags().Lookup("dry-run"))
 
@@ -89,6 +93,10 @@ func isConfigNotFoundError(err error) bool {
 
 func getName() string {
 	return viper.GetString("name")
+}
+
+func getDisableInit() bool {
+	return viper.GetBool("disable-init")
 }
 
 func expandPath(path string) string {

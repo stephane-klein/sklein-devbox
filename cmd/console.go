@@ -44,6 +44,9 @@ func runConsole() {
 		fmt.Println("    -o StrictHostKeyChecking=accept-new \\")
 		fmt.Println("    -o UserKnownHostsFile=/dev/null \\")
 		fmt.Println("    -o LogLevel=ERROR \\")
+		if getDisableInit() {
+			fmt.Println("    -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \\")
+		}
 		fmt.Println("    -p <port> \\")
 		fmt.Println("    sklein@localhost \\")
 		fmt.Println("    /bin/zsh -i -c \"tmux new-session -A -s devbox\"")
@@ -130,10 +133,17 @@ func runConsole() {
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
+	}
+
+	if getDisableInit() {
+		sshCmd = append(sshCmd, "-o", "SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1")
+	}
+
+	sshCmd = append(sshCmd,
 		"-p", sshPort,
 		"sklein@localhost",
 		"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox",
-	}
+	)
 
 	// Launch Alacritty with SSH command
 	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e"}, sshCmd...)...)

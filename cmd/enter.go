@@ -41,6 +41,12 @@ func runEnter() {
 			User:           "sklein",
 		}
 
+		if getDisableInit() {
+			connectOpts.EnvVars = map[string]string{
+				"SKLEIN_DEVBOX_DISABLE_INIT": "1",
+			}
+		}
+
 		dryRunCmd := ssh.DryRunSSH(connectOpts)
 		fmt.Println(dryRunCmd)
 		return
@@ -115,6 +121,12 @@ func runEnter() {
 		Port:           sshPort,
 		PrivateKeyPath: privateKeyPath,
 		User:           "sklein",
+	}
+
+	if getDisableInit() {
+		connectOpts.EnvVars = map[string]string{
+			"SKLEIN_DEVBOX_DISABLE_INIT": "1",
+		}
 	}
 
 	if err := ssh.Connect(connectOpts); err != nil {

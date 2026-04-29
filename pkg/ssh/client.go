@@ -14,6 +14,7 @@ type ConnectOptions struct {
 	PrivateKeyPath string
 	User           string
 	Command        []string
+	EnvVars        map[string]string
 }
 
 // Connect establishes an SSH connection using syscall.Exec
@@ -33,6 +34,10 @@ func Connect(opts ConnectOptions) error {
 		"-o", "LogLevel=ERROR",
 		"-p", opts.Port,
 		fmt.Sprintf("%s@localhost", opts.User),
+	}
+
+	for key, value := range opts.EnvVars {
+		sshArgs = append(sshArgs, "-o", fmt.Sprintf("SetEnv=%s=%s", key, value))
 	}
 
 	if len(opts.Command) > 0 {
@@ -67,6 +72,10 @@ func ConnectCommand(opts ConnectOptions) (*exec.Cmd, error) {
 		fmt.Sprintf("%s@localhost", opts.User),
 	}
 
+	for key, value := range opts.EnvVars {
+		sshArgs = append(sshArgs, "-o", fmt.Sprintf("SetEnv=%s=%s", key, value))
+	}
+
 	if len(opts.Command) > 0 {
 		sshArgs = append(sshArgs, opts.Command...)
 	}
@@ -87,6 +96,9 @@ func DryRunSSH(opts ConnectOptions) string {
 	cmd.WriteString("  -o StrictHostKeyChecking=accept-new \\\n")
 	cmd.WriteString("  -o UserKnownHostsFile=/dev/null \\\n")
 	cmd.WriteString("  -o LogLevel=ERROR \\\n")
+	for key, value := range opts.EnvVars {
+		cmd.WriteString(fmt.Sprintf("  -o SetEnv=%s=%s \\\n", key, value))
+	}
 	cmd.WriteString(fmt.Sprintf("  -p %s \\\n", opts.Port))
 	cmd.WriteString(fmt.Sprintf("  %s@localhost", opts.User))
 

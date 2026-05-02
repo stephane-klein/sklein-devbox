@@ -43,6 +43,7 @@ CONTAINER_ID=$(podman run -d \
     -v $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519.pub:/tmp/devbox-ssh-key.pub:ro \
     -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
     -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
+    -v ~/.local/share/mise/installs/:/home/sklein/.local/share/mise/installs/:U \
     -p 2222 \
     ghcr.io/stephane-klein/sklein-devbox:latest)
 

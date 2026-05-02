@@ -117,7 +117,18 @@ func runUp() {
 	}
 	fmt.Println(" ready!")
 
-	fmt.Printf("Container started: %s (SSH port: %s)\n", containerID[:12], sshPort)
+	fmt.Printf("Container started: %s\n", containerID[:12])
+
+	if !opts.NoMiseCacheMount {
+		miseCacheDir := opts.MiseCacheDir
+		if miseCacheDir == "" {
+			hostHome, _ := os.UserHomeDir()
+			miseCacheDir = filepath.Join(hostHome, ".local", "share", "mise", "installs")
+		}
+		fmt.Printf("mise cache: %s\n", miseCacheDir)
+	} else {
+		fmt.Printf("mise cache: disabled\n")
+	}
 }
 
 func copyInstanceHome(sourceName, targetName string) error {

@@ -60,6 +60,15 @@ func init() {
 	rootCmd.PersistentFlags().String("from", "", "Create new instance from an existing instance's home directory")
 	viper.BindPFlag("from", rootCmd.PersistentFlags().Lookup("from"))
 	viper.BindEnv("from", "SKLEIN_DEVBOX_FROM")
+
+	rootCmd.PersistentFlags().String("mise-cache-dir", "", "Path to mise installs cache directory (default: ~/.local/share/mise/installs/)")
+	rootCmd.PersistentFlags().Bool("no-mise-cache-mount", false, "Disable mounting of host mise installs cache directory")
+
+	viper.BindPFlag("mise-cache-dir", rootCmd.PersistentFlags().Lookup("mise-cache-dir"))
+	viper.BindPFlag("no-mise-cache-mount", rootCmd.PersistentFlags().Lookup("no-mise-cache-mount"))
+
+	viper.BindEnv("mise-cache-dir", "SKLEIN_DEVBOX_MISE_CACHE_DIR")
+	viper.BindEnv("no-mise-cache-mount", "SKLEIN_DEVBOX_NO_MISE_CACHE_MOUNT")
 }
 
 func initConfig() {
@@ -110,10 +119,12 @@ func expandPath(path string) string {
 
 func getContainerOptions() *podman.ContainerOptions {
 	return &podman.ContainerOptions{
-		Gopass:        viper.GetBool("gopass"),
-		NoGopassMount: viper.GetBool("no-gopass-mount"),
-		NoSshMount:    viper.GetBool("no-ssh-mount"),
-		SshKeyFile:    expandPath(viper.GetString("ssh-key-file")),
-		AgeKeyFile:    expandPath(viper.GetString("age-key-file")),
+		Gopass:           viper.GetBool("gopass"),
+		NoGopassMount:    viper.GetBool("no-gopass-mount"),
+		NoSshMount:       viper.GetBool("no-ssh-mount"),
+		NoMiseCacheMount: viper.GetBool("no-mise-cache-mount"),
+		SshKeyFile:       expandPath(viper.GetString("ssh-key-file")),
+		AgeKeyFile:       expandPath(viper.GetString("age-key-file")),
+		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),
 	}
 }

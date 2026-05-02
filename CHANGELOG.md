@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260502.0.0-xkxunqsx - 2026-05-02
+
+### Added
+
+- Mise installs cache: mount host `~/.local/share/mise/installs/` into the container via Podman volume to avoid re-downloading tools on each rebuild. Controlled by `--mise-cache-dir` and `--no-mise-cache-mount` flags.
+
 ## 20260428.0.0-xoyvwqzk - 2026-04-28
 
 ### Fixed

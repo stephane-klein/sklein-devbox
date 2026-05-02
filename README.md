@@ -195,6 +195,8 @@ When enabled, the Age agent starts automatically.
 | `--gopass` | Enable gopass integration |
 | `--no-gopass-mount` | Disable auto-mount of host gopass directories |
 | `--no-ssh-mount` | Disable auto-mount of host SSH directory |
+| `--no-mise-cache-mount` | Disable auto-mount of host mise installs cache directory |
+| `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
 | `--age-key-file <path>` | Non-interactive Age key input |
 

@@ -9,11 +9,13 @@ import (
 )
 
 type ContainerOptions struct {
-	Gopass        bool
-	NoGopassMount bool
-	NoSshMount    bool
-	SshKeyFile    string
-	AgeKeyFile    string
+	Gopass           bool
+	NoGopassMount    bool
+	NoSshMount       bool
+	NoMiseCacheMount bool
+	SshKeyFile       string
+	AgeKeyFile       string
+	MiseCacheDir     string
 }
 
 func GetHomeDir(instanceName string) (string, error) {
@@ -74,6 +76,15 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOpt
 	if hasGopass && !opts.NoGopassMount {
 		args = append(args, "-v", filepath.Join(home, ".config", "gopass", "age", "identities")+":/home/sklein/.config/gopass/age/identities:U")
 		args = append(args, "-v", filepath.Join(home, ".local", "share", "gopass")+":/home/sklein/.local/share/gopass:U")
+	}
+
+	if !opts.NoMiseCacheMount {
+		miseCacheDir := opts.MiseCacheDir
+		if miseCacheDir == "" {
+			miseCacheDir = filepath.Join(home, ".local", "share", "mise", "installs")
+		}
+		os.MkdirAll(miseCacheDir, 0755)
+		args = append(args, "-v", miseCacheDir+":/home/sklein/.local/share/mise/installs/:U")
 	}
 
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")

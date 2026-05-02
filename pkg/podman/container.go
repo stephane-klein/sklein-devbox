@@ -249,6 +249,16 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		}
 	}
 
+	// Mount mise cache directory if not disabled
+	if !opts.NoMiseCacheMount {
+		miseCacheDir := opts.MiseCacheDir
+		if miseCacheDir == "" {
+			miseCacheDir = filepath.Join(hostHome, ".local", "share", "mise", "installs")
+		}
+		os.MkdirAll(miseCacheDir, 0755)
+		args = append(args, "-v", miseCacheDir+":/home/sklein/.local/share/mise/installs/:U")
+	}
+
 	// Add image at the end (ENTRYPOINT ["/init"] is already defined in the image)
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 

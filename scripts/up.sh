@@ -9,6 +9,7 @@ if [ ! -f ./.sklein-devbox-ssh-client-keys/id_ed25519 ]; then
 fi
 
 mkdir -p $(pwd)/.sklein-devbox-home
+mkdir -p $(pwd)/.sklein-devbox-home/.local/share/mise
 mkdir -p $(pwd)/.sklein-devbox-home/.local/share/chezmoi/
 mkdir -p $(pwd)/.sklein-devbox-home/.config/gopass/age/
 mkdir -p ~/.ssh/

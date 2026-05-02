@@ -114,6 +114,13 @@ func RunWithCmd(homeDir, workspaceDir, instanceName string, opts *ContainerOptio
 		}
 	}
 
+	// Ensure mise parent directory exists in instance home so Podman
+	// chowns it correctly via the :U flag on the home mount
+	miseParentDir := filepath.Join(homeDir, ".local", "share", "mise")
+	if err := os.MkdirAll(miseParentDir, 0755); err != nil {
+		return err
+	}
+
 	podmanPath, err := GetPodmanBinPath()
 	if err != nil {
 		return err

@@ -318,6 +318,13 @@ func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerO
 		return "", "", fmt.Errorf("failed to create SSH host keys directory: %w", err)
 	}
 
+	// Ensure mise parent directory exists in instance home so Podman
+	// chowns it correctly via the :U flag on the home mount
+	miseParentDir := filepath.Join(homeDir, ".local", "share", "mise")
+	if err := os.MkdirAll(miseParentDir, 0755); err != nil {
+		return "", "", fmt.Errorf("failed to create mise parent directory: %w", err)
+	}
+
 	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
 	if err != nil {
 		return "", "", err

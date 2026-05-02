@@ -182,7 +182,7 @@ For every flag that should be configurable via config file:
 1. Define the flag as a `PersistentFlag` on `rootCmd` in `cmd/main.go`
 2. Bind it to viper using `viper.BindPFlag()`
 3. Bind it to an environment variable using `viper.BindEnv()`
-4. Add a getter function in `cmd/main.go` that reads from viper (e.g., `getSecretOptions()`)
+4. Add a getter function in `cmd/main.go` that reads from viper (e.g., `getContainerOptions()`)
 
 #### Example
 

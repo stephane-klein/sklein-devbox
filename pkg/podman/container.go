@@ -149,7 +149,7 @@ func GetContainerSSHPort(containerID string) (string, error) {
 }
 
 // buildContainerArgs builds the podman run arguments
-func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *SecretOptions) ([]string, error) {
+func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) ([]string, error) {
 	// Ensure SSH keys exist and get public key path
 	_, publicKeyPath, err := ssh.GetKeyPaths()
 	if err != nil {
@@ -193,27 +193,27 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *Sec
 	}
 
 	// Add gopass environment variable if enabled
-	if secrets.Gopass {
+	if opts.Gopass {
 		args = append(args, "-e", "SKLEIN_DEVBOX_GOPASS=1")
 	}
 
 	// Add secret-related mounts with validation
-	if secrets.SshKeyFile != "" {
-		if _, err := os.Stat(secrets.SshKeyFile); err != nil {
-			return nil, fmt.Errorf("SSH key file not found: %s", secrets.SshKeyFile)
+	if opts.SshKeyFile != "" {
+		if _, err := os.Stat(opts.SshKeyFile); err != nil {
+			return nil, fmt.Errorf("SSH key file not found: %s", opts.SshKeyFile)
 		}
-		args = append(args, "-v", secrets.SshKeyFile+":/tmp/sklein-devbox-ssh-key:ro")
+		args = append(args, "-v", opts.SshKeyFile+":/tmp/sklein-devbox-ssh-key:ro")
 	}
 
-	if secrets.AgeKeyFile != "" {
-		if _, err := os.Stat(secrets.AgeKeyFile); err != nil {
-			return nil, fmt.Errorf("Age key file not found: %s", secrets.AgeKeyFile)
+	if opts.AgeKeyFile != "" {
+		if _, err := os.Stat(opts.AgeKeyFile); err != nil {
+			return nil, fmt.Errorf("Age key file not found: %s", opts.AgeKeyFile)
 		}
-		args = append(args, "-v", secrets.AgeKeyFile+":/tmp/sklein-devbox-age-key:ro")
+		args = append(args, "-v", opts.AgeKeyFile+":/tmp/sklein-devbox-age-key:ro")
 	}
 
 	// Mount host SSH directory if it exists and not disabled
-	if !secrets.NoSshMount {
+	if !opts.NoSshMount {
 		sshDir := filepath.Join(hostHome, ".ssh")
 		if _, err := os.Stat(sshDir); err == nil {
 			args = append(args, "-v", sshDir+":/home/sklein/.host-ssh:ro")
@@ -221,7 +221,7 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *Sec
 	}
 
 	// Mount gopass directories if they exist and not disabled
-	if !secrets.NoGopassMount {
+	if !opts.NoGopassMount {
 		gopassConfigDir := filepath.Join(hostHome, ".config", "gopass")
 		gopassDataDir := filepath.Join(hostHome, ".local", "share", "gopass")
 
@@ -256,8 +256,8 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, secrets *Sec
 }
 
 // DryRunStartContainer returns the podman run command formatted for dry-run output
-func DryRunStartContainer(homeDir, workspaceDir, instanceName string, secrets *SecretOptions) (string, error) {
-	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, secrets)
+func DryRunStartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) (string, error) {
+	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
 	if err != nil {
 		return "", err
 	}
@@ -298,7 +298,7 @@ func DryRunStartContainer(homeDir, workspaceDir, instanceName string, secrets *S
 
 // StartContainer starts a new container in detached mode
 // Returns container ID, SSH port, and error
-func StartContainer(homeDir, workspaceDir, instanceName string, secrets *SecretOptions) (string, string, error) {
+func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) (string, string, error) {
 	// Ensure SSH host keys directory exists
 	sshHostKeysDir, err := ssh.GetSSHHostKeysDir()
 	if err != nil {
@@ -308,7 +308,7 @@ func StartContainer(homeDir, workspaceDir, instanceName string, secrets *SecretO
 		return "", "", fmt.Errorf("failed to create SSH host keys directory: %w", err)
 	}
 
-	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, secrets)
+	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
 	if err != nil {
 		return "", "", err
 	}

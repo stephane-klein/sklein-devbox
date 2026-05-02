@@ -57,11 +57,11 @@ func runUp() {
 		os.Exit(1)
 	}
 
-	secrets := getSecretOptions()
+	opts := getContainerOptions()
 
 	// Handle dry-run
 	if viper.GetBool("dry-run") {
-		dryRunCmd, err := podman.DryRunStartContainer(homeDir, cwd, instanceName, secrets)
+		dryRunCmd, err := podman.DryRunStartContainer(homeDir, cwd, instanceName, opts)
 		if err != nil {
 			printError("%v", err)
 			os.Exit(1)
@@ -93,7 +93,7 @@ func runUp() {
 
 	// Start container
 	fmt.Printf("Starting container for instance '%s'...\n", instanceName)
-	containerID, sshPort, err := podman.StartContainer(homeDir, cwd, instanceName, secrets)
+	containerID, sshPort, err := podman.StartContainer(homeDir, cwd, instanceName, opts)
 	if err != nil {
 		printError("Failed to start container: %v", err)
 		os.Exit(1)

@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-type SecretOptions struct {
+type ContainerOptions struct {
 	Gopass        bool
 	NoGopassMount bool
 	NoSshMount    bool
@@ -31,7 +31,7 @@ func GetHomeDir(instanceName string) (string, error) {
 	return homeDir, nil
 }
 
-func BuildRunArgs(homeDir, workspaceDir, instanceName string, secrets *SecretOptions, cmd []string) []string {
+func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOptions, cmd []string) []string {
 	args := []string{
 		"run", "-it", "--rm",
 		"--label=app=sklein-devbox",
@@ -47,19 +47,19 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, secrets *SecretOpt
 	usr, _ := user.Current()
 	home := usr.HomeDir
 
-	if secrets.Gopass {
+	if opts.Gopass {
 		args = append(args, "-e", "SKLEIN_DEVBOX_GOPASS=1")
 	}
 
-	if secrets.SshKeyFile != "" {
-		args = append(args, "-v", secrets.SshKeyFile+":/tmp/sklein-devbox-ssh-key:ro")
+	if opts.SshKeyFile != "" {
+		args = append(args, "-v", opts.SshKeyFile+":/tmp/sklein-devbox-ssh-key:ro")
 	}
 
-	if secrets.AgeKeyFile != "" {
-		args = append(args, "-v", secrets.AgeKeyFile+":/tmp/sklein-devbox-age-key:ro")
+	if opts.AgeKeyFile != "" {
+		args = append(args, "-v", opts.AgeKeyFile+":/tmp/sklein-devbox-age-key:ro")
 	}
 
-	if _, err := os.Stat(filepath.Join(home, ".ssh")); err == nil && !secrets.NoSshMount {
+	if _, err := os.Stat(filepath.Join(home, ".ssh")); err == nil && !opts.NoSshMount {
 		args = append(args, "-v", filepath.Join(home, ".ssh")+":/home/sklein/.ssh:U")
 	}
 
@@ -71,7 +71,7 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, secrets *SecretOpt
 		hasGopass = true
 	}
 
-	if hasGopass && !secrets.NoGopassMount {
+	if hasGopass && !opts.NoGopassMount {
 		args = append(args, "-v", filepath.Join(home, ".config", "gopass", "age", "identities")+":/home/sklein/.config/gopass/age/identities:U")
 		args = append(args, "-v", filepath.Join(home, ".local", "share", "gopass")+":/home/sklein/.local/share/gopass:U")
 	}
@@ -82,16 +82,16 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, secrets *SecretOpt
 	return args
 }
 
-func Run(homeDir, workspaceDir, instanceName string, secrets *SecretOptions) error {
-	return RunWithCmd(homeDir, workspaceDir, instanceName, secrets, []string{})
+func Run(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) error {
+	return RunWithCmd(homeDir, workspaceDir, instanceName, opts, []string{})
 }
 
-func RunWithCmd(homeDir, workspaceDir, instanceName string, secrets *SecretOptions, cmd []string) error {
+func RunWithCmd(homeDir, workspaceDir, instanceName string, opts *ContainerOptions, cmd []string) error {
 	if err := os.MkdirAll(homeDir, 0755); err != nil {
 		return err
 	}
 
-	if secrets.Gopass && !secrets.NoGopassMount {
+	if opts.Gopass && !opts.NoGopassMount {
 		gopassDirs := []string{
 			filepath.Join(homeDir, ".config", "gopass", "age"),
 			filepath.Join(homeDir, ".local", "share", "gopass"),
@@ -109,7 +109,7 @@ func RunWithCmd(homeDir, workspaceDir, instanceName string, secrets *SecretOptio
 	}
 
 	args := []string{"podman"}
-	args = append(args, BuildRunArgs(homeDir, workspaceDir, instanceName, secrets, cmd)...)
+	args = append(args, BuildRunArgs(homeDir, workspaceDir, instanceName, opts, cmd)...)
 
 	env := os.Environ()
 

@@ -108,8 +108,8 @@ func expandPath(path string) string {
 	return path
 }
 
-func getSecretOptions() *podman.SecretOptions {
-	return &podman.SecretOptions{
+func getContainerOptions() *podman.ContainerOptions {
+	return &podman.ContainerOptions{
 		Gopass:        viper.GetBool("gopass"),
 		NoGopassMount: viper.GetBool("no-gopass-mount"),
 		NoSshMount:    viper.GetBool("no-ssh-mount"),

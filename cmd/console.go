@@ -98,9 +98,9 @@ func runConsole() {
 			os.Exit(1)
 		}
 
-		secrets := getSecretOptions()
+		opts := getContainerOptions()
 
-		containerID, sshPort, err = podman.StartContainer(homeDir, cwd, instanceName, secrets)
+		containerID, sshPort, err = podman.StartContainer(homeDir, cwd, instanceName, opts)
 		if err != nil {
 			printError("Failed to start container: %v", err)
 			os.Exit(1)

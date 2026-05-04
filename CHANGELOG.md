@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260505.0.0-uvzkuyrs - 2026-05-05
+
+### Added
+
+- D-Bus socket mount: automatically mount host `${XDG_RUNTIME_DIR}/bus` socket into the container at `/tmp/dbus-remote.sock` when available. This enables `notify-send` and other D-Bus-based desktop notifications from within the container.
+
 ## 20260502.0.0-xkxunqsx - 2026-05-02
 
 ### Added

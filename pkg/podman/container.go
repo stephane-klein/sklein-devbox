@@ -259,6 +259,16 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		args = append(args, "-v", miseCacheDir+":/home/sklein/.local/share/mise/installs/:U")
 	}
 
+	// Mount DBus socket if available on host (for D-Bus communication with host)
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = filepath.Join("/run", "user", fmt.Sprintf("%d", os.Getuid()))
+	}
+	dbusSocketPath := filepath.Join(runtimeDir, "bus")
+	if _, err := os.Stat(dbusSocketPath); err == nil {
+		args = append(args, "-v", dbusSocketPath+":/tmp/dbus-remote.sock")
+	}
+
 	// Add image at the end (ENTRYPOINT ["/init"] is already defined in the image)
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 

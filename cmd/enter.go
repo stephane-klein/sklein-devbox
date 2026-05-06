@@ -39,6 +39,7 @@ func runEnter() {
 			Port:           "<port>",
 			PrivateKeyPath: privateKeyPath,
 			User:           "sklein",
+			Command:        []string{"cd", "/workspace", "&&", "exec", "/bin/zsh", "-i"},
 		}
 
 		if getDisableInit() {
@@ -121,6 +122,7 @@ func runEnter() {
 		Port:           sshPort,
 		PrivateKeyPath: privateKeyPath,
 		User:           "sklein",
+		Command:        []string{"cd", "/workspace", "&&", "exec", "/bin/zsh", "-i"},
 	}
 
 	if getDisableInit() {

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260506.1.0-krmmlwqk - 2026-05-06
+
+### Fixed
+
+- `enter` and `console` commands now open the shell in `/workspace/` instead of `/home/sklein/`.
+
 ## 20260506.0.0-yywnwkzr - 2026-05-06
 
 ### Added

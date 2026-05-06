@@ -49,7 +49,7 @@ func runConsole() {
 		}
 		fmt.Println("    -p <port> \\")
 		fmt.Println("    sklein@localhost \\")
-		fmt.Println("    /bin/zsh -i -c \"tmux new-session -A -s devbox\"")
+		fmt.Println("    /bin/zsh -i -c \"cd /workspace && tmux new-session -A -s devbox\"")
 		return
 	}
 
@@ -142,7 +142,7 @@ func runConsole() {
 	sshCmd = append(sshCmd,
 		"-p", sshPort,
 		"sklein@localhost",
-		"/bin/zsh", "-i", "-c", "tmux new-session -A -s devbox",
+		"/bin/zsh", "-i", "-c", "cd /workspace && tmux new-session -A -s devbox",
 	)
 
 	// Launch Alacritty with SSH command

@@ -66,7 +66,8 @@ ssh -t \
     -o UserKnownHostsFile=/dev/null \
     -o LogLevel=ERROR \
     -p ${SSH_PORT} \
-    sklein@localhost
+    sklein@localhost \
+    "cd /workspace && exec /bin/zsh -i"
 """
 description = "Enter the devbox container shell"
 
@@ -87,7 +88,8 @@ ssh -t \
     -o LogLevel=ERROR \
     -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \
     -p ${SSH_PORT} \
-    sklein@localhost
+    sklein@localhost \
+    "cd /workspace && exec /bin/zsh -i"
 """
 description = "Enter the devbox container shell without running initialization"
 
@@ -108,7 +110,7 @@ alacritty -e ssh -t \
     -o LogLevel=ERROR \
     -p ${SSH_PORT} \
     sklein@localhost \
-    /bin/zsh -i -c "tmux new-session -A -s devbox"
+    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
 """
 description = "Open Alacritty with tmux session in devbox"
 
@@ -130,7 +132,7 @@ alacritty -e ssh -t \
     -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \
     -p ${SSH_PORT} \
     sklein@localhost \
-    /bin/zsh -i -c "tmux new-session -A -s devbox"
+    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
 """
 description = "Open Alacritty with tmux session in devbox without running initialization"
 

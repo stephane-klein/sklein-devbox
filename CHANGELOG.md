@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260506.0.0-yywnwkzr - 2026-05-06
+
+### Added
+
+- PulseAudio socket mount: automatically mount host `${XDG_RUNTIME_DIR}/pulse/native` socket into the container at `/tmp/pulse-remote.sock` when available. Use `--no-pulse-audio` to disable. This enables sound playback for OpenCode notifications at the end of tasks.
+
 ## 20260505.0.0-uvzkuyrs - 2026-05-05
 
 ### Added

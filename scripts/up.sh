@@ -35,6 +35,7 @@ CONTAINER_ID=$(podman run -d \
     -e SKLEIN_DEVBOX_GOPASS=1 \
     -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
     -v "${XDG_RUNTIME_DIR}/bus:/tmp/dbus-remote.sock" \
+    -v "${XDG_RUNTIME_DIR}/pulse/native:/tmp/pulse-remote.sock" \
     -v $(pwd):/workspace/:U \
     -v $(pwd)/.sklein-devbox-home/:/home/sklein/:U \
     -v $(pwd)/.sklein-devbox-ssh-host-keys:/var/lib/sklein-devbox/ssh-host-keys:U \

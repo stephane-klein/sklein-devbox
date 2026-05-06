@@ -69,6 +69,10 @@ func init() {
 
 	viper.BindEnv("mise-cache-dir", "SKLEIN_DEVBOX_MISE_CACHE_DIR")
 	viper.BindEnv("no-mise-cache-mount", "SKLEIN_DEVBOX_NO_MISE_CACHE_MOUNT")
+
+	rootCmd.PersistentFlags().Bool("no-pulse-audio", false, "Disable PulseAudio socket mount")
+	viper.BindPFlag("no-pulse-audio", rootCmd.PersistentFlags().Lookup("no-pulse-audio"))
+	viper.BindEnv("no-pulse-audio", "SKLEIN_DEVBOX_NO_PULSE_AUDIO")
 }
 
 func initConfig() {
@@ -123,6 +127,7 @@ func getContainerOptions() *podman.ContainerOptions {
 		NoGopassMount:    viper.GetBool("no-gopass-mount"),
 		NoSshMount:       viper.GetBool("no-ssh-mount"),
 		NoMiseCacheMount: viper.GetBool("no-mise-cache-mount"),
+		NoPulseAudio:     viper.GetBool("no-pulse-audio"),
 		SshKeyFile:       expandPath(viper.GetString("ssh-key-file")),
 		AgeKeyFile:       expandPath(viper.GetString("age-key-file")),
 		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),

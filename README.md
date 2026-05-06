@@ -196,6 +196,7 @@ When enabled, the Age agent starts automatically.
 | `--no-gopass-mount` | Disable auto-mount of host gopass directories |
 | `--no-ssh-mount` | Disable auto-mount of host SSH directory |
 | `--no-mise-cache-mount` | Disable auto-mount of host mise installs cache directory |
+| `--no-pulse-audio` | Disable PulseAudio socket mount |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
 | `--age-key-file <path>` | Non-interactive Age key input |
@@ -212,6 +213,16 @@ Secrets are stored in a private repository: <https://github.com/stephane-klein/s
 > in `~/.local/share/sklein-devbox/ssh-client-keys/`. This provides better terminal
 > compatibility than `podman run -it`, fixing issues like Ctrl-P double keystrokes
 > and enabling OSC 52 clipboard integration.
+
+### Desktop Notifications and Sound
+
+The container automatically mounts host sockets for **D-Bus** and **PulseAudio** when available:
+
+- **D-Bus** (`${XDG_RUNTIME_DIR}/bus` → `/tmp/dbus-remote.sock`): Enables desktop notifications via `notify-send` and other D-Bus-based tools.
+- **PulseAudio** (`${XDG_RUNTIME_DIR}/pulse/native` → `/tmp/pulse-remote.sock`): Enables sound playback from within the container, used by OpenCode to play notification sounds at the end of tasks.
+
+To disable either mount, use `--no-pulse-audio` or ensure D-Bus is not available on the host.
+
 
 ## Contributing
 

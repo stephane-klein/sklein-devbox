@@ -269,6 +269,14 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		args = append(args, "-v", dbusSocketPath+":/tmp/dbus-remote.sock")
 	}
 
+	// Mount PulseAudio socket if available on host and not disabled
+	if !opts.NoPulseAudio {
+		pulseSocketPath := filepath.Join(runtimeDir, "pulse", "native")
+		if _, err := os.Stat(pulseSocketPath); err == nil {
+			args = append(args, "-v", pulseSocketPath+":/tmp/pulse-remote.sock")
+		}
+	}
+
 	// Add image at the end (ENTRYPOINT ["/init"] is already defined in the image)
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 

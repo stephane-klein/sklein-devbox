@@ -13,6 +13,7 @@ type ContainerOptions struct {
 	NoGopassMount    bool
 	NoSshMount       bool
 	NoMiseCacheMount bool
+	NoPulseAudio     bool
 	SshKeyFile       string
 	AgeKeyFile       string
 	MiseCacheDir     string
@@ -85,6 +86,18 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOpt
 		}
 		os.MkdirAll(miseCacheDir, 0755)
 		args = append(args, "-v", miseCacheDir+":/home/sklein/.local/share/mise/installs/:U")
+	}
+
+	// Mount PulseAudio socket if available and not disabled
+	if !opts.NoPulseAudio {
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			runtimeDir = filepath.Join("/run", "user", fmt.Sprintf("%d", os.Getuid()))
+		}
+		pulseSocketPath := filepath.Join(runtimeDir, "pulse", "native")
+		if _, err := os.Stat(pulseSocketPath); err == nil {
+			args = append(args, "-v", pulseSocketPath+":/tmp/pulse-remote.sock")
+		}
 	}
 
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")

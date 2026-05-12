@@ -9,7 +9,7 @@ if [ -z "$CONTAINER_ID" ]; then
     exit 0
 fi
 
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 2>/dev/null | cut -d: -f2)
+SSH_PORT=$(podman inspect --format '{{index .Config.Labels "sklein-devbox-ssh-port"}}' ${CONTAINER_ID} 2>/dev/null)
 UPTIME=$(podman inspect --format '{{.State.StartedAt}}' ${CONTAINER_ID})
 echo "container is up"
 echo "  Container: $CONTAINER_ID"

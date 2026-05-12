@@ -197,6 +197,7 @@ When enabled, the Age agent starts automatically.
 | `--no-ssh-mount` | Disable auto-mount of host SSH directory |
 | `--no-mise-cache-mount` | Disable auto-mount of host mise installs cache directory |
 | `--no-pulse-audio` | Disable PulseAudio socket mount |
+| `--no-network-host` | Disable host network mode (default: enabled) |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
 | `--age-key-file <path>` | Non-interactive Age key input |
@@ -222,6 +223,25 @@ The container automatically mounts host sockets for **D-Bus** and **PulseAudio**
 - **PulseAudio** (`${XDG_RUNTIME_DIR}/pulse/native` → `/tmp/pulse-remote.sock`): Enables sound playback from within the container, used by OpenCode to play notification sounds at the end of tasks.
 
 To disable either mount, use `--no-pulse-audio` or ensure D-Bus is not available on the host.
+
+### Network Configuration
+
+By default, sklein-devbox uses Podman's host network mode (`--network=host`), which allows the host workstation to access all services running inside the container on all ports without port mapping.
+
+To disable host network mode:
+
+```sh
+$ sklein-devbox up --no-network-host
+```
+
+Or via environment variable:
+
+```sh
+$ SKLEIN_DEVBOX_NO_NETWORK_HOST=true sklein-devbox up
+```
+
+> [!NOTE]
+> When host network mode is disabled, the container uses Podman's default bridge network. Only the SSH port (2222) is forwarded to the host.
 
 
 ## Contributing

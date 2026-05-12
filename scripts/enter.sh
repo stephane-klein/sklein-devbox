@@ -9,7 +9,7 @@ if [ -z "$CONTAINER_ID" ]; then
     exit 1
 fi
 
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
+SSH_PORT=$(podman inspect --format '{{index .Config.Labels "sklein-devbox-ssh-port"}}' ${CONTAINER_ID})
 ssh -t \
     -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
     -o StrictHostKeyChecking=accept-new \

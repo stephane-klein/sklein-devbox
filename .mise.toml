@@ -39,101 +39,35 @@ run = "go build -o sklein-devbox ./cmd"
 description = "Build the sklein-devbox CLI application"
 
 [tasks.up]
-run = "bash scripts/up.sh"
+run = "scripts/up.sh"
 description = "Start the devbox container"
 
 [tasks.down]
-run = "bash scripts/down.sh"
+run = "scripts/down.sh"
 description = "Stop and remove the devbox container"
 
 [tasks.status]
-run = "bash scripts/status.sh"
+run = "scripts/status.sh"
 description = "Show devbox container status"
 
 [tasks.enter]
 quiet = true
-run = """
-CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-if [ -z "$CONTAINER_ID" ]; then
-    echo "Error: No container running. Run 'mise run up' first." >&2
-    exit 1
-fi
-
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
-ssh -t \
-    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    -p ${SSH_PORT} \
-    sklein@localhost \
-    "cd /workspace && exec /bin/zsh -i"
-"""
+run = "scripts/enter.sh"
 description = "Enter the devbox container shell"
 
 [tasks.enter-no-init]
 quiet = true
-run = """
-CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-if [ -z "$CONTAINER_ID" ]; then
-    echo "Error: No container running. Run 'mise run up' first." >&2
-    exit 1
-fi
-
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
-ssh -t \
-    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \
-    -p ${SSH_PORT} \
-    sklein@localhost \
-    "cd /workspace && exec /bin/zsh -i"
-"""
+run = "scripts/enter-no-init.sh"
 description = "Enter the devbox container shell without running initialization"
 
 [tasks.console]
 quiet = true
-run = """
-CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-if [ -z "$CONTAINER_ID" ]; then
-    mise run up
-    CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-fi
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
-
-alacritty -e ssh -t \
-    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    -p ${SSH_PORT} \
-    sklein@localhost \
-    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
-"""
+run = "scripts/console.sh"
 description = "Open Alacritty with tmux session in devbox"
 
 [tasks.console-no-init]
 quiet = true
-run = """
-CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-if [ -z "$CONTAINER_ID" ]; then
-    mise run up
-    CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
-fi
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
-
-alacritty -e ssh -t \
-    -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
-    -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR \
-    -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \
-    -p ${SSH_PORT} \
-    sklein@localhost \
-    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
-"""
+run = "scripts/console-no-init.sh"
 description = "Open Alacritty with tmux session in devbox without running initialization"
 
 [tasks.clean-home]

@@ -202,6 +202,23 @@ When a value is resolved:
 4. Global config file value (from `~/.config/sklein-devbox/config.toml`)
 5. Default value (hardcoded in flag definition)
 
+## Boolean Flag Convention
+
+For boolean flags that default to `true`, prefer adding only the negation form (`--no-*`) rather than both `--flag` and `--no-flag`. This keeps the CLI simpler and follows the existing pattern in the project:
+
+**Preferred:**
+```go
+rootCmd.PersistentFlags().Bool("no-network-host", false, "Disable host network mode")
+```
+
+**Avoid:**
+```go
+rootCmd.PersistentFlags().Bool("network-host", true, "Enable host network mode")
+rootCmd.PersistentFlags().Bool("no-network-host", false, "Disable host network mode")
+```
+
+This convention applies to flags like: `--no-gopass-mount`, `--no-ssh-mount`, `--no-mise-cache-mount`, `--no-pulse-audio`, etc.
+
 ## Documentation
 
 - When adding user-facing features (CLI commands, mise tasks), update README.md accordingly.

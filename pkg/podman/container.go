@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,8 +116,8 @@ func FindAllContainersForHomeName(instanceName string) ([]ContainerStatus, error
 			container.Name = e.Names[0]
 		}
 
-		if container.Running && len(e.Ports) > 0 {
-			container.SSHPort = fmt.Sprintf("%d", e.Ports[0].HostPort)
+		if port, ok := e.Labels["sklein-devbox-ssh-port"]; ok && port != "" {
+			container.SSHPort = port
 		}
 
 		containers = append(containers, container)
@@ -125,41 +126,56 @@ func FindAllContainersForHomeName(instanceName string) ([]ContainerStatus, error
 	return containers, nil
 }
 
-// GetContainerSSHPort retrieves the mapped SSH port (2222) for a container
+// GetContainerSSHPort retrieves the SSH port for a container from its label.
 func GetContainerSSHPort(containerID string) (string, error) {
-	cmd := exec.Command("podman", "port", containerID, "2222")
+	cmd := exec.Command("podman", "inspect", "--format", "{{index .Config.Labels \"sklein-devbox-ssh-port\"}}", containerID)
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get SSH port: %w", err)
+		return "", fmt.Errorf("failed to get SSH port label: %w", err)
 	}
 
-	// Output format: "0.0.0.0:49234" or just port number
-	portMapping := strings.TrimSpace(string(output))
-	if portMapping == "" {
-		return "", fmt.Errorf("no port mapping found for port 2222")
+	port := strings.TrimSpace(string(output))
+	if port == "" {
+		return "", fmt.Errorf("container uses an obsolete configuration without an SSH port label, please stop and restart it")
 	}
 
-	// Extract port from "0.0.0.0:49234"
-	parts := strings.Split(portMapping, ":")
-	if len(parts) == 2 {
-		return parts[1], nil
-	}
-
-	return portMapping, nil
+	return port, nil
 }
 
-// buildContainerArgs builds the podman run arguments
-func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) ([]string, error) {
+// FindNextFreePort finds the next available TCP port starting from start.
+// It tries up to maxAttempts ports.
+func FindNextFreePort(start, maxAttempts int) (int, error) {
+	for port := start; port < start+maxAttempts; port++ {
+		addr := fmt.Sprintf(":%d", port)
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			ln.Close()
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no free port found in range %d-%d", start, start+maxAttempts-1)
+}
+
+// buildContainerArgs builds the podman run arguments.
+// It returns the allocated SSH port, the arguments slice, and any error.
+func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) (string, []string, error) {
+	// Find next free SSH port starting at 2222
+	sshPortNum, err := FindNextFreePort(2222, 1000)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to find free SSH port: %w", err)
+	}
+	sshPort := fmt.Sprintf("%d", sshPortNum)
+
 	// Ensure SSH keys exist and get public key path
 	_, publicKeyPath, err := ssh.GetKeyPaths()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get SSH key paths: %w", err)
+		return "", nil, fmt.Errorf("failed to get SSH key paths: %w", err)
 	}
 
 	// Get host home directory for other mounts
 	hostHome, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return "", nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
 	// Ensure workspace path is absolute for consistent naming and labeling
@@ -180,16 +196,23 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		"--label=app=sklein-devbox",
 		"--label", fmt.Sprintf("sklein-devbox-name=%s", instanceName),
 		"--label", fmt.Sprintf("sklein-devbox-workspace=%s", absWorkspace),
+		"--label", fmt.Sprintf("sklein-devbox-ssh-port=%s", sshPort),
 		"--userns=keep-id",
 		"--cap-add=SETUID",
 		"--cap-add=SETGID",
 		"-e", "TERM",
 		"-e", fmt.Sprintf("SKLEIN_DEVBOX_NAME=%s", instanceName),
+		"-e", fmt.Sprintf("SKLEIN_DEVBOX_SSH_PORT=%s", sshPort),
 		"-v", workspaceDir + ":/workspace:U",
 		"-v", homeDir + ":/home/sklein:U",
 		"-v", publicKeyPath + ":/tmp/devbox-ssh-key.pub:ro",
 		"-v", sshHostKeysDir + ":/var/lib/sklein-devbox/ssh-host-keys:U",
-		"-p", "2222",
+	}
+
+	if opts.NetworkHost {
+		args = append(args, "--network=host")
+	} else {
+		args = append(args, "-p", fmt.Sprintf("%s:%s", sshPort, sshPort))
 	}
 
 	// Add gopass environment variable if enabled
@@ -200,14 +223,14 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 	// Add secret-related mounts with validation
 	if opts.SshKeyFile != "" {
 		if _, err := os.Stat(opts.SshKeyFile); err != nil {
-			return nil, fmt.Errorf("SSH key file not found: %s", opts.SshKeyFile)
+			return "", nil, fmt.Errorf("SSH key file not found: %s", opts.SshKeyFile)
 		}
 		args = append(args, "-v", opts.SshKeyFile+":/tmp/sklein-devbox-ssh-key:ro")
 	}
 
 	if opts.AgeKeyFile != "" {
 		if _, err := os.Stat(opts.AgeKeyFile); err != nil {
-			return nil, fmt.Errorf("Age key file not found: %s", opts.AgeKeyFile)
+			return "", nil, fmt.Errorf("Age key file not found: %s", opts.AgeKeyFile)
 		}
 		args = append(args, "-v", opts.AgeKeyFile+":/tmp/sklein-devbox-age-key:ro")
 	}
@@ -280,12 +303,12 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 	// Add image at the end (ENTRYPOINT ["/init"] is already defined in the image)
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 
-	return args, nil
+	return sshPort, args, nil
 }
 
 // DryRunStartContainer returns the podman run command formatted for dry-run output
 func DryRunStartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) (string, error) {
-	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
+	_, args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
 	if err != nil {
 		return "", err
 	}
@@ -343,7 +366,7 @@ func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerO
 		return "", "", fmt.Errorf("failed to create mise parent directory: %w", err)
 	}
 
-	args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
+	sshPort, args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)
 	if err != nil {
 		return "", "", err
 	}
@@ -361,14 +384,6 @@ func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerO
 	}
 
 	containerID := strings.TrimSpace(string(output))
-
-	// Get the mapped SSH port
-	sshPort, err := GetContainerSSHPort(containerID)
-	if err != nil {
-		// Clean up container if we can't get the port
-		StopContainer(containerID)
-		return "", "", err
-	}
 
 	return containerID, sshPort, nil
 }
@@ -473,8 +488,8 @@ func GetAllContainers() ([]ContainerStatus, error) {
 			container.Name = e.Names[0]
 		}
 
-		if container.Running && len(e.Ports) > 0 {
-			container.SSHPort = fmt.Sprintf("%d", e.Ports[0].HostPort)
+		if port, ok := e.Labels["sklein-devbox-ssh-port"]; ok && port != "" {
+			container.SSHPort = port
 		}
 
 		containers = append(containers, container)

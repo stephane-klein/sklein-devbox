@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260513.0.0-xxxxx - 2026-05-13
+
+### Added
+
+- Host network mode: containers now use `--network=host` by default, allowing the host workstation to access all container network services on all ports. Use `--no-network-host` or `SKLEIN_DEVBOX_NO_NETWORK_HOST=true` to disable.
+
 ## 20260506.1.0-krmmlwqk - 2026-05-06
 
 ### Fixed

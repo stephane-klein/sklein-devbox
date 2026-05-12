@@ -17,6 +17,7 @@ type ContainerOptions struct {
 	SshKeyFile       string
 	AgeKeyFile       string
 	MiseCacheDir     string
+	NetworkHost      bool
 }
 
 func GetHomeDir(instanceName string) (string, error) {
@@ -98,6 +99,10 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOpt
 		if _, err := os.Stat(pulseSocketPath); err == nil {
 			args = append(args, "-v", pulseSocketPath+":/tmp/pulse-remote.sock")
 		}
+	}
+
+	if opts.NetworkHost {
+		args = append(args, "--network=host")
 	}
 
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")

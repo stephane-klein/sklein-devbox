@@ -73,6 +73,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-pulse-audio", false, "Disable PulseAudio socket mount")
 	viper.BindPFlag("no-pulse-audio", rootCmd.PersistentFlags().Lookup("no-pulse-audio"))
 	viper.BindEnv("no-pulse-audio", "SKLEIN_DEVBOX_NO_PULSE_AUDIO")
+
+	rootCmd.PersistentFlags().Bool("no-network-host", false, "Disable host network mode (default: enabled)")
+	viper.BindPFlag("no-network-host", rootCmd.PersistentFlags().Lookup("no-network-host"))
+	viper.BindEnv("no-network-host", "SKLEIN_DEVBOX_NO_NETWORK_HOST")
 }
 
 func initConfig() {
@@ -131,5 +135,6 @@ func getContainerOptions() *podman.ContainerOptions {
 		SshKeyFile:       expandPath(viper.GetString("ssh-key-file")),
 		AgeKeyFile:       expandPath(viper.GetString("age-key-file")),
 		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),
+		NetworkHost:      !viper.GetBool("no-network-host"),
 	}
 }

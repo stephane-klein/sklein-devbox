@@ -8,7 +8,8 @@ if [ -z "$CONTAINER_ID" ]; then
     mise run up
     CONTAINER_ID=$(podman ps --filter "label=app=sklein-devbox" --filter "label=sklein-devbox-pwd=$(pwd)" -q)
 fi
-SSH_PORT=$(podman port ${CONTAINER_ID} 2222 | cut -d: -f2)
+
+SSH_PORT=$(podman inspect --format '{{index .Config.Labels "sklein-devbox-ssh-port"}}' ${CONTAINER_ID})
 
 alacritty -e ssh -t \
     -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \

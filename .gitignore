@@ -1,5 +1,4 @@
 chezmoi/
-!chezmoi/
 .sklein-devbox-home/
 .sklein-devbox-ssh-host-keys/
 sklein-devbox

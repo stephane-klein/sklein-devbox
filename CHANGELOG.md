@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260513.1.0-xxxx - 2026-05-13
+
+### Added
+
+- `restart` command: stops and removes the container, then starts it again.
+
 ## 20260513.0.0-4620d2f - 2026-05-13
 
 ### Added

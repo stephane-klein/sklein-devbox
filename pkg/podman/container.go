@@ -394,6 +394,30 @@ func DryRunStopContainer(instanceName, workspacePath string) string {
 	return fmt.Sprintf("podman stop -t 30 %s && \\npodman rm %s", containerName, containerName)
 }
 
+// WaitContainerStopped polls until the container is no longer running.
+// It checks via podman inspect every 2 seconds, up to maxAttempts times.
+func WaitContainerStopped(containerID string, maxAttempts int) error {
+	podmanPath, err := GetPodmanBinPath()
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < maxAttempts; i++ {
+		cmd := exec.Command(podmanPath, "inspect", "--format", "{{.State.Status}}", containerID)
+		output, err := cmd.Output()
+		if err != nil {
+			return nil
+		}
+		status := strings.TrimSpace(string(output))
+		if status != "running" {
+			return nil
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("container %s is still running after %d attempts", containerID[:12], maxAttempts)
+}
+
 // StopContainer stops and removes a container
 func StopContainer(containerID string) error {
 	podmanPath, err := GetPodmanBinPath()

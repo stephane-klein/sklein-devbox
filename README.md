@@ -63,6 +63,7 @@ The container runs in the background and persists until explicitly stopped:
 ```sh
 $ sklein-devbox up           # Start container in background
 $ sklein-devbox status       # Check status and SSH port
+$ sklein-devbox restart      # Stop and remove container, then start again
 $ sklein-devbox down         # Stop and remove container
 ```
 
@@ -98,7 +99,7 @@ default     ~/git/project-a    abc123def456   running   49234      /home/stephan
 default     ~/git/project-b    def789abc012   running   49235      /home/stephane/.local/share/sklein-devbox/instances/default
 ```
 
-Commands like `up`, `down`, `enter`, `console`, and `status` operate on the
+Commands like `up`, `down`, `restart`, `enter`, `console`, and `status` operate on the
 container for the **current workspace**.
 
 **Multiple isolated home directories:** Use `--name` to create completely

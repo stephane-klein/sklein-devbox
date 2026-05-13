@@ -14,6 +14,7 @@ type ContainerOptions struct {
 	NoSshMount       bool
 	NoMiseCacheMount bool
 	NoPulseAudio     bool
+	NoPullImage      bool
 	SshKeyFile       string
 	AgeKeyFile       string
 	MiseCacheDir     string

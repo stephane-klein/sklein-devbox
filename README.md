@@ -61,7 +61,7 @@ $ sklein-devbox console
 The container runs in the background and persists until explicitly stopped:
 
 ```sh
-$ sklein-devbox up           # Start container in background
+$ sklein-devbox up           # Pull latest image and start container in background
 $ sklein-devbox status       # Check status and SSH port
 $ sklein-devbox restart      # Stop and remove container, then start again
 $ sklein-devbox down         # Stop and remove container
@@ -197,6 +197,7 @@ When enabled, the Age agent starts automatically.
 | `--no-gopass-mount` | Disable auto-mount of host gopass directories |
 | `--no-ssh-mount` | Disable auto-mount of host SSH directory |
 | `--no-mise-cache-mount` | Disable auto-mount of host mise installs cache directory |
+| `--no-pull-image` | Disable automatic podman pull of the container image before starting |
 | `--no-pulse-audio` | Disable PulseAudio socket mount |
 | `--no-network-host` | Disable host network mode (default: enabled) |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |

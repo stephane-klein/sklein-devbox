@@ -77,6 +77,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-network-host", false, "Disable host network mode (default: enabled)")
 	viper.BindPFlag("no-network-host", rootCmd.PersistentFlags().Lookup("no-network-host"))
 	viper.BindEnv("no-network-host", "SKLEIN_DEVBOX_NO_NETWORK_HOST")
+
+	rootCmd.PersistentFlags().Bool("no-pull-image", false, "Disable automatic podman pull of the container image before starting")
+	viper.BindPFlag("no-pull-image", rootCmd.PersistentFlags().Lookup("no-pull-image"))
+	viper.BindEnv("no-pull-image", "SKLEIN_DEVBOX_NO_PULL_IMAGE")
 }
 
 func initConfig() {
@@ -132,6 +136,7 @@ func getContainerOptions() *podman.ContainerOptions {
 		NoSshMount:       viper.GetBool("no-ssh-mount"),
 		NoMiseCacheMount: viper.GetBool("no-mise-cache-mount"),
 		NoPulseAudio:     viper.GetBool("no-pulse-audio"),
+		NoPullImage:      viper.GetBool("no-pull-image"),
 		SshKeyFile:       expandPath(viper.GetString("ssh-key-file")),
 		AgeKeyFile:       expandPath(viper.GetString("age-key-file")),
 		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),

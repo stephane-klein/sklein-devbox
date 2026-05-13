@@ -91,6 +91,15 @@ func runUp() {
 		}
 	}
 
+	// Pull the latest image
+	if !opts.NoPullImage {
+		fmt.Println("Pulling latest image...")
+		if err := podman.PullImage(); err != nil {
+			printError("Failed to pull image: %v", err)
+			os.Exit(1)
+		}
+	}
+
 	// Start container
 	fmt.Printf("Starting container for instance '%s'...\n", instanceName)
 	containerID, sshPort, err := podman.StartContainer(homeDir, cwd, instanceName, opts)

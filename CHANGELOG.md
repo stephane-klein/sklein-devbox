@@ -5,11 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
-## 20260513.1.0-xxxx - 2026-05-13
+## 20260513.1.0-xmzwsnmp - 2026-05-13
 
 ### Added
 
 - `restart` command: stops and removes the container, then starts it again.
+- Automatic `podman pull` of the container image before starting the container (applies to `up`, `enter`, and `console` commands). Use `--no-pull-image`, `SKLEIN_DEVBOX_NO_PULL_IMAGE=true`, or `no-pull-image = true` in config to disable.
 
 ## 20260513.0.0-4620d2f - 2026-05-13
 

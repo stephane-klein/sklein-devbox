@@ -92,6 +92,15 @@ func runEnter() {
 
 		opts := getContainerOptions()
 
+		// Pull the latest image
+		if !opts.NoPullImage {
+			fmt.Println("Pulling latest image...")
+			if err := podman.PullImage(); err != nil {
+				printError("Failed to pull image: %v", err)
+				os.Exit(1)
+			}
+		}
+
 		containerID, sshPort, err = podman.StartContainer(homeDir, cwd, instanceName, opts)
 		if err != nil {
 			printError("Failed to start container: %v", err)

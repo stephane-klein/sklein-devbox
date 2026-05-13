@@ -347,6 +347,22 @@ func DryRunStartContainer(homeDir, workspaceDir, instanceName string, opts *Cont
 	return cmd.String(), nil
 }
 
+// PullImage pulls the latest sklein-devbox container image
+func PullImage() error {
+	podmanPath, err := GetPodmanBinPath()
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.Command(podmanPath, "pull", "--quiet", "ghcr.io/stephane-klein/sklein-devbox:latest")
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman pull failed: %w", err)
+	}
+
+	return nil
+}
+
 // StartContainer starts a new container in detached mode
 // Returns container ID, SSH port, and error
 func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerOptions) (string, string, error) {

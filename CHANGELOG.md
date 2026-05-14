@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## 20260514.0.0-xxxxxxxx - 2026-05-14
+
+### Fixed
+
+- `console` command now passes `--option general.live_config_reload=false` to Alacritty, disabling useless live config reload for that instance.
+
 ## 20260513.1.0-xmzwsnmp - 2026-05-13
 
 ### Added

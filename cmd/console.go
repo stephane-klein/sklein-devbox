@@ -38,17 +38,17 @@ func runConsole() {
 		}
 
 		// For dry-run, we use a placeholder for the port
-		fmt.Println("alacritty -e \\")
+		fmt.Println(`alacritty --option general.live_config_reload=false -e \`)
 		fmt.Printf("  ssh -t \\\n")
 		fmt.Printf("    -i %s \\\n", privateKeyPath)
-		fmt.Println("    -o StrictHostKeyChecking=accept-new \\")
-		fmt.Println("    -o UserKnownHostsFile=/dev/null \\")
-		fmt.Println("    -o LogLevel=ERROR \\")
+		fmt.Println(`    -o StrictHostKeyChecking=accept-new \`)
+		fmt.Println(`    -o UserKnownHostsFile=/dev/null \`)
+		fmt.Println(`    -o LogLevel=ERROR \`)
 		if getDisableInit() {
-			fmt.Println("    -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \\")
+			fmt.Println(`    -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \`)
 		}
-		fmt.Println("    -p <port> \\")
-		fmt.Println("    sklein@localhost \\")
+		fmt.Println(`    -p <port> \`)
+		fmt.Println(`    sklein@localhost \`)
 		fmt.Println("    /bin/zsh -i -c \"cd /workspace && tmux new-session -A -s devbox\"")
 		return
 	}
@@ -155,7 +155,7 @@ func runConsole() {
 	)
 
 	// Launch Alacritty with SSH command
-	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"-e"}, sshCmd...)...)
+	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"--option", "general.live_config_reload=false", "-e"}, sshCmd...)...)
 	alacrittyCmd.Stdin = os.Stdin
 	alacrittyCmd.Stdout = os.Stdout
 	alacrittyCmd.Stderr = os.Stderr

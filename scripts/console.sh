@@ -18,4 +18,4 @@ alacritty -e ssh -t \
     -o LogLevel=ERROR \
     -p ${SSH_PORT} \
     sklein@localhost \
-    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
+    "sh -c 'cd /workspace && exec tmux new-session -A -s devbox'"

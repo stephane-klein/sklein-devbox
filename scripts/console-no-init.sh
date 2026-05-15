@@ -19,4 +19,4 @@ alacritty -e ssh -t \
     -o SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1 \
     -p ${SSH_PORT} \
     sklein@localhost \
-    "cd /workspace && /bin/zsh -i -c 'tmux new-session -A -s devbox'"
+    "sh -c 'cd /workspace && exec tmux new-session -A -s devbox'"

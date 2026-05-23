@@ -223,3 +223,19 @@ This convention applies to flags like: `--no-gopass-mount`, `--no-ssh-mount`, `-
 
 - When adding user-facing features (CLI commands, mise tasks), update README.md accordingly.
 - Keep AGENTS.md focused on development guidance for AI assistants.
+
+### Documentation Updates
+
+When implementing a feature or fixing a bug:
+
+1. **Update documentation in the same commit** as the code change. The diff of a commit must be self-contained: it should include both the implementation and the corresponding documentation updates.
+2. **README.md**: Update when adding or modifying user-facing features, CLI commands, or mise tasks.
+3. **CHANGELOG.md**: Add an entry for every change (features, bug fixes, improvements). Use the following format:
+
+   ```markdown
+   ## YYYYMMDD.0.0-<short-hash> - YYYY-MM-DD
+
+   - description of the change
+   ```
+
+   Replace `YYYYMMDD.0.0-<short-hash>` with the actual version that will be assigned (you can use a placeholder during development).

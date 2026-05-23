@@ -19,6 +19,7 @@ type ContainerOptions struct {
 	AgeKeyFile       string
 	MiseCacheDir     string
 	NetworkHost      bool
+	PodmanSocket     bool
 }
 
 func GetHomeDir(instanceName string) (string, error) {
@@ -106,6 +107,14 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOpt
 		args = append(args, "--network=host")
 	}
 
+	if opts.PodmanSocket {
+		uid := os.Getuid()
+		hostSocketPath := filepath.Join("/run", "user", fmt.Sprintf("%d", uid), "podman", "podman.sock")
+		args = append(args, "-v", hostSocketPath+":/run/user/1000/podman/podman.sock")
+		args = append(args, "-e", "XDG_RUNTIME_DIR=/run/user/1000")
+		args = append(args, "-e", "CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock")
+	}
+
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 
 	args = append(args, cmd...)
@@ -138,6 +147,12 @@ func RunWithCmd(homeDir, workspaceDir, instanceName string, opts *ContainerOptio
 	miseParentDir := filepath.Join(homeDir, ".local", "share", "mise")
 	if err := os.MkdirAll(miseParentDir, 0755); err != nil {
 		return err
+	}
+
+	if opts.PodmanSocket {
+		if err := EnsurePodmanSocket(); err != nil {
+			return err
+		}
 	}
 
 	podmanPath, err := GetPodmanBinPath()

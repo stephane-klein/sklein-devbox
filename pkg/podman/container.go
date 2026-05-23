@@ -300,6 +300,13 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		}
 	}
 
+	if opts.PodmanSocket {
+		hostSocketPath := filepath.Join(runtimeDir, "podman", "podman.sock")
+		args = append(args, "-v", hostSocketPath+":/run/user/1000/podman/podman.sock")
+		args = append(args, "-e", "XDG_RUNTIME_DIR=/run/user/1000")
+		args = append(args, "-e", "CONTAINER_HOST=unix:///run/user/1000/podman/podman.sock")
+	}
+
 	// Add image at the end (ENTRYPOINT ["/init"] is already defined in the image)
 	args = append(args, "ghcr.io/stephane-klein/sklein-devbox:latest")
 
@@ -380,6 +387,12 @@ func StartContainer(homeDir, workspaceDir, instanceName string, opts *ContainerO
 	miseParentDir := filepath.Join(homeDir, ".local", "share", "mise")
 	if err := os.MkdirAll(miseParentDir, 0755); err != nil {
 		return "", "", fmt.Errorf("failed to create mise parent directory: %w", err)
+	}
+
+	if opts.PodmanSocket {
+		if err := EnsurePodmanSocket(); err != nil {
+			return "", "", err
+		}
 	}
 
 	sshPort, args, err := buildContainerArgs(homeDir, workspaceDir, instanceName, opts)

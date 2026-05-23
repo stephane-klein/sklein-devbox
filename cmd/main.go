@@ -81,6 +81,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-pull-image", false, "Disable automatic podman pull of the container image before starting")
 	viper.BindPFlag("no-pull-image", rootCmd.PersistentFlags().Lookup("no-pull-image"))
 	viper.BindEnv("no-pull-image", "SKLEIN_DEVBOX_NO_PULL_IMAGE")
+
+	rootCmd.PersistentFlags().Bool("no-podman-socket", false, "Disable podman socket delegation (allows running containers from inside the devbox)")
+	viper.BindPFlag("no-podman-socket", rootCmd.PersistentFlags().Lookup("no-podman-socket"))
+	viper.BindEnv("no-podman-socket", "SKLEIN_DEVBOX_NO_PODMAN_SOCKET")
 }
 
 func initConfig() {
@@ -141,5 +145,6 @@ func getContainerOptions() *podman.ContainerOptions {
 		AgeKeyFile:       expandPath(viper.GetString("age-key-file")),
 		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),
 		NetworkHost:      !viper.GetBool("no-network-host"),
+		PodmanSocket:     !viper.GetBool("no-podman-socket"),
 	}
 }

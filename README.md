@@ -200,6 +200,7 @@ When enabled, the Age agent starts automatically.
 | `--no-pull-image` | Disable automatic podman pull of the container image before starting |
 | `--no-pulse-audio` | Disable PulseAudio socket mount |
 | `--no-network-host` | Disable host network mode (default: enabled) |
+| `--no-podman-socket` | Disable podman socket delegation (default: enabled) |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
 | `--age-key-file <path>` | Non-interactive Age key input |

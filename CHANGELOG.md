@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## YYYYMMDD.N.0-<short-hash> - 2026-05-23
+
+### Added
+
+- Add support for running Podman containers from inside the devbox via host socket delegation.
+
 ## 20260515.0.0-uypqyrtl - 2026-05-15
 
 ### Fixed

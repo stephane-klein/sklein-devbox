@@ -191,7 +191,7 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 	sshHostKeysDir, _ := ssh.GetSSHHostKeysDir()
 
 	args := []string{
-		"run", "-d",
+		"run", "-d", "--replace",
 		"--name", containerName,
 		"--label=app=sklein-devbox",
 		"--label", fmt.Sprintf("sklein-devbox-name=%s", instanceName),

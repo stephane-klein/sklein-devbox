@@ -63,6 +63,11 @@ quiet = true
 run = "scripts/enter-no-init.sh"
 description = "Enter the devbox container shell without running initialization"
 
+[tasks.enter-no-entrypoint]
+quiet = true
+run = "scripts/enter-no-entrypoint.sh"
+description = "Start the devbox container with an interactive bash shell (no s6-overlay / sshd)"
+
 [tasks.console]
 quiet = true
 run = "scripts/console.sh"

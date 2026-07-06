@@ -22,6 +22,10 @@ $ mise run build-cli        # Build the CLI application
 
 $ mise run enter            # Enter the container shell
 
+$ mise run enter-no-init    # Enter container shell without init scripts
+
+$ mise run enter-no-entrypoint  # Interactive bash shell without s6-overlay/sshd
+
 $ mise run console          # Open Alacritty with tmux session
 
 $ mise run clean-home       # Remove the persistent home directory

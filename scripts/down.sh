@@ -9,5 +9,5 @@ if [ -z "$EXISTING" ]; then
     exit 0
 fi
 
-podman stop -t 30 ${EXISTING} && podman rm ${EXISTING}
+podman stop -t 10 ${EXISTING} && podman rm ${EXISTING}
 echo "Container stopped"

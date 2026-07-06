@@ -15,7 +15,10 @@ fi
 description = "Clone the chezmoi configuration repository into ./chezmoi/"
 
 [tasks.build-image]
-run = "podman build -t ghcr.io/stephane-klein/sklein-devbox:latest chezmoi/"
+usage = '''
+flag "--no-cache" help="Build the image without using cache"
+'''
+run = "podman build ${usage_no_cache:+--no-cache} -t ghcr.io/stephane-klein/sklein-devbox:latest chezmoi/"
 description = "Build the sklein-devbox container image"
 
 [tasks.push-image]

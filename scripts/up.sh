@@ -23,7 +23,7 @@ if [ -n "$EXISTING" ]; then
     exit 0
 fi
 
-CONTAINER_ID=$(podman run -d \
+if ! CONTAINER_ID=$(podman run -d \
     --network=host \
     --userns=keep-id \
     --label=app=sklein-devbox \
@@ -50,7 +50,19 @@ CONTAINER_ID=$(podman run -d \
     -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
     -v ~/.local/share/mise/installs/:/home/sklein/.local/share/mise/installs/:U \
     --label=sklein-devbox-ssh-port=2222 \
-    ghcr.io/stephane-klein/sklein-devbox:latest)
+    ghcr.io/stephane-klein/sklein-devbox:latest 2>&1); then
+    echo "Container start error: $CONTAINER_ID" >&2
+    exit 1
+fi
+
+sleep 2
+
+if [ -z "$(podman ps -q --filter "id=$CONTAINER_ID")" ]; then
+    echo "Container $CONTAINER_ID does not appear to be running." >&2
+    podman logs "$CONTAINER_ID" 2>&1 || true
+    podman rm "$CONTAINER_ID" 2>&1 || true
+    exit 1
+fi
 
 SSH_PORT=2222
 

@@ -23,6 +23,8 @@ if [ -n "$EXISTING" ]; then
     exit 0
 fi
 
+SSH_PORT=2225
+
 if ! CONTAINER_ID=$(podman run -d \
     --network=host \
     --userns=keep-id \
@@ -33,7 +35,7 @@ if ! CONTAINER_ID=$(podman run -d \
     -e SKLEIN_DEVBOX_PWD=$(pwd) \
     -e TERM \
     -e SKLEIN_DEVBOX_NAME=sklein-devbox \
-    -e SKLEIN_DEVBOX_SSH_PORT=2222 \
+    -e SKLEIN_DEVBOX_SSH_PORT="${SSH_PORT}" \
     -e SKLEIN_DEVBOX_GOPASS=1 \
     -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
     -v "${XDG_RUNTIME_DIR}/bus:/tmp/dbus-remote.sock" \
@@ -49,13 +51,13 @@ if ! CONTAINER_ID=$(podman run -d \
     -v ~/.config/gopass/age/identities/:/home/sklein/.config/gopass/age/identities:U \
     -v ~/.local/share/gopass/:/home/sklein/.local/share/gopass/:U \
     -v ~/.local/share/mise/installs/:/home/sklein/.local/share/mise/installs/:U \
-    --label=sklein-devbox-ssh-port=2222 \
+    --label=sklein-devbox-ssh-port="${SSH_PORT}" \
     ghcr.io/stephane-klein/sklein-devbox:latest 2>&1); then
     echo "Container start error: $CONTAINER_ID" >&2
     exit 1
 fi
 
-sleep 2
+sleep 5
 
 if [ -z "$(podman ps -q --filter "id=$CONTAINER_ID")" ]; then
     echo "Container $CONTAINER_ID does not appear to be running." >&2
@@ -63,8 +65,6 @@ if [ -z "$(podman ps -q --filter "id=$CONTAINER_ID")" ]; then
     podman rm "$CONTAINER_ID" 2>&1 || true
     exit 1
 fi
-
-SSH_PORT=2222
 
 printf "Starting container... "
 until ssh -i ./.sklein-devbox-ssh-client-keys/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=1 -p ${SSH_PORT} sklein@localhost healthcheck 2>/dev/null; do

@@ -42,7 +42,7 @@ TrunkVer is SemVer-compatible and suited for projects that release frequently wi
 
 - **Name**: `sklein-devbox`
 - **Base**: Fedora 43
-- **Tools**: Mise, Zsh, Neovim, s6-overlay, openssh-server
+- **Tools**: Mise, Zsh, Neovim, Pitchfork, openssh-server
 
 ### Container image and Chezmoi configuration
 
@@ -112,16 +112,19 @@ Each container is uniquely identified by the pair **(homeName, workspacePath)**:
 
 This enables multiple containers to share the same home directory while serving different workspaces.
 
-### Container Startup (s6-overlay)
+### Container Startup (Pitchfork)
 
 When `up` starts the container:
 
-1. **Podman run** - Container starts in detached mode (`-d`) with s6-overlay as PID 1 (`/init`)
-2. **Init phase** (`/etc/cont-init.d/`) - One-time setup:
+1. **Podman run** - Container starts in detached mode (`-d`) with `container-entrypoint.sh` as PID 1
+2. **Init phase** (`/etc/entrypoint-init.d/`) - One-time setup:
    - Generate SSH host keys (if missing)
+   - Install SSH client public key
    - Save environment variables to `/home/sklein/.config/sklein-devbox/env`
-3. **Service startup** (`/etc/services.d/`) - Supervised services start:
-   - `sshd` - Main foreground service (port 2222), configured with `ForceCommand`
+   - Generate Pitchfork configuration (`/etc/pitchfork/config.toml`)
+3. **Supervised services** - [Pitchfork](https://pitchfork.jdx.dev/) manages:
+   - `sshd` - SSH daemon (port from `SKLEIN_DEVBOX_SSH_PORT`, default 2222), configured with `ForceCommand`
+   - `ssh-agent` - SSH agent daemon (socket at `/tmp/ssh-agent.sock`)
 
 #### First SSH Connection (Interactive Setup)
 

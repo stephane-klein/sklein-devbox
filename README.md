@@ -14,7 +14,7 @@ The container image is published at: `ghcr.io/stephane-klein/sklein-devbox:lates
 - [OpenCode](https://opencode.ai) — AI coding agent
 - [Chezmoi](https://www.chezmoi.io/) — dotfiles manager (configuration stored in
   [sklein-devbox-chezmoi](https://github.com/stephane-klein/sklein-devbox-chezmoi))
-- [s6-overlay](https://github.com/just-containers/s6-overlay) — process supervisor
+- [Pitchfork](https://pitchfork.jdx.dev/) — process supervisor
 - openssh-server — SSH access
 
 

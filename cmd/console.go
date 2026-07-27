@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/stephane-klein/sklein-devbox/config"
 	"github.com/stephane-klein/sklein-devbox/pkg/podman"
 	"github.com/stephane-klein/sklein-devbox/pkg/ssh"
 )
@@ -17,8 +18,9 @@ func init() {
 
 var consoleCmd = &cobra.Command{
 	Use:   "console",
-	Short: "Open a tmux session in the devbox container with Alacritty",
-	Long: `Launch Alacritty and connect to a tmux session inside the sklein-devbox container via SSH.
+	Short: "Open a tmux session in the devbox container with a terminal emulator",
+	Long: `Launch a terminal emulator (foot by default, or Alacritty) and connect to a
+tmux session inside the sklein-devbox container via SSH.
 If a tmux session named "devbox" already exists, it will attach to it.
 Otherwise, a new session will be created.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -28,8 +30,14 @@ Otherwise, a new session will be created.`,
 
 func runConsole() {
 	instanceName := getName()
+	terminal := getTerminal()
 
-	// Handle dry-run - print Alacritty + SSH command only
+	if terminal != "foot" && terminal != "alacritty" {
+		fmt.Fprintf(os.Stderr, "Error: invalid terminal %q. Use \"foot\" (default) or \"alacritty\".\n", terminal)
+		os.Exit(1)
+	}
+
+	// Handle dry-run - print terminal + SSH command only
 	if viper.GetBool("dry-run") {
 		privateKeyPath, _, err := ssh.GetKeyPaths()
 		if err != nil {
@@ -37,8 +45,12 @@ func runConsole() {
 			os.Exit(1)
 		}
 
-		// For dry-run, we use a placeholder for the port
-		fmt.Println(`alacritty --option general.live_config_reload=false -e \`)
+		if terminal == "foot" {
+			fmt.Println(`foot --config <temp-foot.ini> -e \`)
+		} else {
+			fmt.Println(`alacritty --option general.live_config_reload=false -e \`)
+		}
+
 		fmt.Printf("  ssh -t \\\n")
 		fmt.Printf("    -i %s \\\n", privateKeyPath)
 		fmt.Println(`    -o StrictHostKeyChecking=accept-new \`)
@@ -53,12 +65,26 @@ func runConsole() {
 		return
 	}
 
-	alacrittyPath, err := exec.LookPath("alacritty")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Alacritty is not installed on your system.\n")
-		fmt.Fprintf(os.Stderr, "Please install Alacritty to use the 'console' command.\n")
-		fmt.Fprintf(os.Stderr, "On Fedora: sudo dnf install alacritty\n")
-		os.Exit(1)
+	// Locate terminal binary
+	var termPath string
+	var err error
+
+	if terminal == "foot" {
+		termPath, err = exec.LookPath("foot")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: foot is not installed on your system.\n")
+			fmt.Fprintf(os.Stderr, "Please install foot to use the 'console' command.\n")
+			fmt.Fprintf(os.Stderr, "On Fedora: sudo dnf install foot\n")
+			os.Exit(1)
+		}
+	} else {
+		termPath, err = exec.LookPath("alacritty")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Alacritty is not installed on your system.\n")
+			fmt.Fprintf(os.Stderr, "Please install Alacritty or switch to foot (default) to use the 'console' command.\n")
+			fmt.Fprintf(os.Stderr, "On Fedora: sudo dnf install alacritty\n")
+			os.Exit(1)
+		}
 	}
 
 	// Ensure SSH keys exist
@@ -134,7 +160,7 @@ func runConsole() {
 		}
 	}
 
-	// Build SSH command for Alacritty
+	// Build SSH command
 	sshCmd := []string{
 		"ssh",
 		"-t",
@@ -154,14 +180,42 @@ func runConsole() {
 		"sh -c 'cd /workspace && exec tmux new-session -A -s devbox'",
 	)
 
-	// Launch Alacritty with SSH command
-	alacrittyCmd := exec.Command(alacrittyPath, append([]string{"--option", "general.live_config_reload=false", "-e"}, sshCmd...)...)
-	alacrittyCmd.Stdin = os.Stdin
-	alacrittyCmd.Stdout = os.Stdout
-	alacrittyCmd.Stderr = os.Stderr
+	if terminal == "foot" {
+		// Write embedded foot config to a temporary file
+		tmpFile, err := os.CreateTemp("", "foot-*.ini")
+		if err != nil {
+			printError("Failed to create temporary foot config: %v", err)
+			os.Exit(1)
+		}
+		defer os.Remove(tmpFile.Name())
 
-	if err := alacrittyCmd.Run(); err != nil {
-		printError("Failed to launch Alacritty: %v", err)
-		os.Exit(1)
+		if _, err := tmpFile.WriteString(config.FootConfig); err != nil {
+			printError("Failed to write foot config: %v", err)
+			os.Exit(1)
+		}
+		if err := tmpFile.Close(); err != nil {
+			printError("Failed to close foot config: %v", err)
+			os.Exit(1)
+		}
+
+		termCmd := exec.Command(termPath, append([]string{"--config", tmpFile.Name(), "-d", "error", "-e"}, sshCmd...)...)
+		termCmd.Stdin = os.Stdin
+		termCmd.Stdout = os.Stdout
+		termCmd.Stderr = os.Stderr
+
+		if err := termCmd.Run(); err != nil {
+			printError("Failed to launch foot: %v", err)
+			os.Exit(1)
+		}
+	} else {
+		termCmd := exec.Command(termPath, append([]string{"--option", "general.live_config_reload=false", "-e"}, sshCmd...)...)
+		termCmd.Stdin = os.Stdin
+		termCmd.Stdout = os.Stdout
+		termCmd.Stderr = os.Stderr
+
+		if err := termCmd.Run(); err != nil {
+			printError("Failed to launch Alacritty: %v", err)
+			os.Exit(1)
+		}
 	}
 }

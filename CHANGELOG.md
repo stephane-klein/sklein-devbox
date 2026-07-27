@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
+## YYYYMMDD.0.0-<short-hash> - YYYY-MM-DD
+
+### Added
+
+- `console` command now supports foot terminal emulator as the default, with embedded `config/foot.ini` configuration. Alacritty remains available via `--terminal=alacritty` or the `SKLEIN_DEVBOX_TERMINAL` environment variable.
+
 ## 20260615.0.0-e9526f5 - 2026-06-15
 
 ### Fixed

@@ -42,11 +42,13 @@ HOME NAME   WORKSPACE               CONTAINER ID   STATUS    SSH PORT   HOME PAT
 default     ~/git/myproject         abc123def456   running   49234      /home/stephane/.local/share/sklein-devbox/instances/default
 ```
 
-For a better terminal experience, use the `console` command which opens an
-[Alacritty](https://alacritty.org/) terminal with tmux pre-configured:
+For a better terminal experience, use the `console` command which opens a
+[foot](https://codeberg.org/dnkl/foot) terminal (default) or
+[Alacritty](https://alacritty.org/) with tmux pre-configured:
 
 ```sh
-$ sklein-devbox console
+$ sklein-devbox console                          # Uses foot by default
+$ sklein-devbox --terminal=alacritty console     # Use Alacritty instead
 ```
 
 > [!NOTE]
@@ -54,7 +56,7 @@ $ sklein-devbox console
 >
 > If you already run tmux on your host machine, the `enter` command
 > would nest sessions, which is not ideal. The `console` command solves this by
-> running tmux in a new Alacritty instance.
+> running tmux in a new terminal instance (foot by default).
 
 ## Container lifecycle
 
@@ -201,6 +203,7 @@ When enabled, the Age agent starts automatically.
 | `--no-pulse-audio` | Disable PulseAudio socket mount |
 | `--no-network-host` | Disable host network mode (default: enabled) |
 | `--no-podman-socket` | Disable podman socket delegation (default: enabled) |
+| `--terminal` | Terminal emulator to use: `foot` (default) or `alacritty` |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
 | `--age-key-file <path>` | Non-interactive Age key input |

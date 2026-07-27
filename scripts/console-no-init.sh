@@ -11,7 +11,7 @@ fi
 
 SSH_PORT=$(podman inspect --format '{{index .Config.Labels "sklein-devbox-ssh-port"}}' ${CONTAINER_ID})
 
-alacritty -e ssh -t \
+foot -e ssh -t \
     -i $(pwd)/.sklein-devbox-ssh-client-keys/id_ed25519 \
     -o StrictHostKeyChecking=accept-new \
     -o UserKnownHostsFile=/dev/null \

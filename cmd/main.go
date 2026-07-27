@@ -85,6 +85,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-podman-socket", false, "Disable podman socket delegation (allows running containers from inside the devbox)")
 	viper.BindPFlag("no-podman-socket", rootCmd.PersistentFlags().Lookup("no-podman-socket"))
 	viper.BindEnv("no-podman-socket", "SKLEIN_DEVBOX_NO_PODMAN_SOCKET")
+
+	rootCmd.PersistentFlags().String("terminal", "foot", "Terminal emulator to use (foot or alacritty)")
+	viper.BindPFlag("terminal", rootCmd.PersistentFlags().Lookup("terminal"))
+	viper.BindEnv("terminal", "SKLEIN_DEVBOX_TERMINAL")
 }
 
 func initConfig() {
@@ -122,6 +126,10 @@ func getName() string {
 
 func getDisableInit() bool {
 	return viper.GetBool("disable-init")
+}
+
+func getTerminal() string {
+	return viper.GetString("terminal")
 }
 
 func expandPath(path string) string {

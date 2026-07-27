@@ -9,6 +9,7 @@ and this project adheres to [TrunkVer](https://trunkver.org/).
 
 ### Added
 
+- Wayland socket mount: automatically mount host `${XDG_RUNTIME_DIR}/wayland-0` into the container at `/tmp/user/1000/wayland-0` when available. Use `--no-wayland-socket` to disable. This enables clipboard access via `wl-paste` — useful for pasting images (e.g. screenshots).
 - `console` command now supports foot terminal emulator as the default, with embedded `config/foot.ini` configuration. Alacritty remains available via `--terminal=alacritty` or the `SKLEIN_DEVBOX_TERMINAL` environment variable.
 
 ## 20260615.0.0-e9526f5 - 2026-06-15

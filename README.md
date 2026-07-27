@@ -203,6 +203,7 @@ When enabled, the Age agent starts automatically.
 | `--no-pulse-audio` | Disable PulseAudio socket mount |
 | `--no-network-host` | Disable host network mode (default: enabled) |
 | `--no-podman-socket` | Disable podman socket delegation (default: enabled) |
+| `--no-wayland-socket` | Disable Wayland socket mount |
 | `--terminal` | Terminal emulator to use: `foot` (default) or `alacritty` |
 | `--mise-cache-dir <path>` | Path to mise installs cache directory (default: `~/.local/share/mise/installs/`) |
 | `--ssh-key-file <path>` | Non-interactive SSH key input |
@@ -221,14 +222,15 @@ Secrets are stored in a private repository: <https://github.com/stephane-klein/s
 > compatibility than `podman run -it`, fixing issues like Ctrl-P double keystrokes
 > and enabling OSC 52 clipboard integration.
 
-### Desktop Notifications and Sound
+### Desktop Notifications, Sound and Wayland
 
 The container automatically mounts host sockets for **D-Bus** and **PulseAudio** when available:
 
 - **D-Bus** (`${XDG_RUNTIME_DIR}/bus` → `/tmp/dbus-remote.sock`): Enables desktop notifications via `notify-send` and other D-Bus-based tools.
 - **PulseAudio** (`${XDG_RUNTIME_DIR}/pulse/native` → `/tmp/pulse-remote.sock`): Enables sound playback from within the container, used by OpenCode to play notification sounds at the end of tasks.
+- **Wayland** (`${XDG_RUNTIME_DIR}/wayland-0` → `/tmp/user/1000/wayland-0`): Enables clipboard access from within the container via `wl-paste` — useful for pasting images (e.g. screenshots).
 
-To disable either mount, use `--no-pulse-audio` or ensure D-Bus is not available on the host.
+To disable either mount, use `--no-pulse-audio` or `--no-wayland-socket`, or ensure the corresponding sockets are not available on the host.
 
 ### Network Configuration
 

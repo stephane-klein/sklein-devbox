@@ -300,6 +300,18 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		}
 	}
 
+	// Mount Wayland socket if available on host and not disabled
+	if !opts.NoWaylandSocket {
+		waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+		if waylandDisplay == "" {
+			waylandDisplay = "wayland-0"
+		}
+		waylandSocketPath := filepath.Join(runtimeDir, waylandDisplay)
+		if _, err := os.Stat(waylandSocketPath); err == nil {
+			args = append(args, "-v", waylandSocketPath+":/tmp/user/1000/wayland-0")
+		}
+	}
+
 	if opts.PodmanSocket {
 		hostSocketPath := filepath.Join(runtimeDir, "podman", "podman.sock")
 		args = append(args, "-v", hostSocketPath+":/run/user/1000/podman/podman.sock")

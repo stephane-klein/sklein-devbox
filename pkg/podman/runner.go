@@ -20,6 +20,7 @@ type ContainerOptions struct {
 	MiseCacheDir     string
 	NetworkHost      bool
 	PodmanSocket     bool
+	NoWaylandSocket bool
 }
 
 func GetHomeDir(instanceName string) (string, error) {
@@ -100,6 +101,22 @@ func BuildRunArgs(homeDir, workspaceDir, instanceName string, opts *ContainerOpt
 		pulseSocketPath := filepath.Join(runtimeDir, "pulse", "native")
 		if _, err := os.Stat(pulseSocketPath); err == nil {
 			args = append(args, "-v", pulseSocketPath+":/tmp/pulse-remote.sock")
+		}
+	}
+
+	// Mount Wayland socket if available on host and not disabled
+	if !opts.NoWaylandSocket {
+		runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+		if runtimeDir == "" {
+			runtimeDir = filepath.Join("/run", "user", fmt.Sprintf("%d", os.Getuid()))
+		}
+		waylandDisplay := os.Getenv("WAYLAND_DISPLAY")
+		if waylandDisplay == "" {
+			waylandDisplay = "wayland-0"
+		}
+		waylandSocketPath := filepath.Join(runtimeDir, waylandDisplay)
+		if _, err := os.Stat(waylandSocketPath); err == nil {
+			args = append(args, "-v", waylandSocketPath+":/tmp/user/1000/wayland-0")
 		}
 	}
 

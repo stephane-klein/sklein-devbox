@@ -89,6 +89,10 @@ func init() {
 	rootCmd.PersistentFlags().String("terminal", "foot", "Terminal emulator to use (foot or alacritty)")
 	viper.BindPFlag("terminal", rootCmd.PersistentFlags().Lookup("terminal"))
 	viper.BindEnv("terminal", "SKLEIN_DEVBOX_TERMINAL")
+
+	rootCmd.PersistentFlags().Bool("no-wayland-socket", false, "Disable Wayland socket mount")
+	viper.BindPFlag("no-wayland-socket", rootCmd.PersistentFlags().Lookup("no-wayland-socket"))
+	viper.BindEnv("no-wayland-socket", "SKLEIN_DEVBOX_NO_WAYLAND_SOCKET")
 }
 
 func initConfig() {
@@ -154,5 +158,6 @@ func getContainerOptions() *podman.ContainerOptions {
 		MiseCacheDir:     expandPath(viper.GetString("mise-cache-dir")),
 		NetworkHost:      !viper.GetBool("no-network-host"),
 		PodmanSocket:     !viper.GetBool("no-podman-socket"),
+		NoWaylandSocket:  viper.GetBool("no-wayland-socket"),
 	}
 }

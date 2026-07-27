@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [TrunkVer](https://trunkver.org/).
 
-## YYYYMMDD.0.0-<short-hash> - YYYY-MM-DD
+## 20260727.0.0-da96f94 - 2026-07-27
 
 ### Added
 

@@ -308,7 +308,7 @@ func buildContainerArgs(homeDir, workspaceDir, instanceName string, opts *Contai
 		}
 		waylandSocketPath := filepath.Join(runtimeDir, waylandDisplay)
 		if _, err := os.Stat(waylandSocketPath); err == nil {
-			args = append(args, "-v", waylandSocketPath+":/tmp/user/1000/wayland-0")
+			args = append(args, "-v", waylandSocketPath+":/tmp/wayland-0")
 		}
 	}
 

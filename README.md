@@ -228,7 +228,7 @@ The container automatically mounts host sockets for **D-Bus** and **PulseAudio**
 
 - **D-Bus** (`${XDG_RUNTIME_DIR}/bus` → `/tmp/dbus-remote.sock`): Enables desktop notifications via `notify-send` and other D-Bus-based tools.
 - **PulseAudio** (`${XDG_RUNTIME_DIR}/pulse/native` → `/tmp/pulse-remote.sock`): Enables sound playback from within the container, used by OpenCode to play notification sounds at the end of tasks.
-- **Wayland** (`${XDG_RUNTIME_DIR}/wayland-0` → `/tmp/user/1000/wayland-0`): Enables clipboard access from within the container via `wl-paste` — useful for pasting images (e.g. screenshots).
+- **Wayland** (`${XDG_RUNTIME_DIR}/wayland-0` → `/tmp/wayland-0`): Enables clipboard access from within the container via `wl-paste` — useful for pasting images (e.g. screenshots).
 
 To disable either mount, use `--no-pulse-audio` or `--no-wayland-socket`, or ensure the corresponding sockets are not available on the host.
 

@@ -170,6 +170,8 @@ Alacritty → ssh (PTY on host) → sshd → zsh → tmux
 
 This command is useful when you already run tmux on your host machine and want to avoid nested tmux sessions. By opening a new Alacritty window, you get a clean terminal for the container's tmux session. The PTY is allocated by the SSH client on the host side (single PTY), avoiding the conmon PTY bridge that caused some double keystroke issues (like [issue 13](https://github.com/stephane-klein/sklein-devbox/issues/13)).
 
+Each `console` window opens its own grouped tmux session: sessions in the `devbox` group share the same windows, but each session keeps an independent current window, so every console can display a different window of the same tmux session. The per-console session is named `devbox-<remote-sh-PID>` and is removed automatically when its console closes (`destroy-unattached on`), while the stable `devbox` anchor session persists and keeps the windows.
+
 ## Code Style Preferences
 
 - **Inline over extraction**: When code can be placed directly where it's used or extracted to a separate function, prefer inline implementation

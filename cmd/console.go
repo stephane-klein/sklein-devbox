@@ -20,9 +20,7 @@ var consoleCmd = &cobra.Command{
 	Use:   "console",
 	Short: "Open a tmux session in the devbox container with a terminal emulator",
 	Long: `Launch a terminal emulator (foot by default, or Alacritty) and connect to a
-tmux session inside the sklein-devbox container via SSH.
-If a tmux session named "devbox" already exists, it will attach to it.
-Otherwise, a new session will be created.`,
+tmux session inside the sklein-devbox container via SSH.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		runConsole()
 	},
@@ -61,7 +59,7 @@ func runConsole() {
 		}
 		fmt.Println(`    -p <port> \`)
 		fmt.Println(`    sklein@localhost \`)
-		fmt.Println("    \"sh -c 'cd /workspace && exec tmux new-session -A -s devbox'\"")
+		fmt.Println("    \"sh -c 'cd /workspace && { tmux has-session -t devbox 2>/dev/null || tmux new-session -d -s devbox; } && exec tmux new-session -d -t devbox -s devbox-$$ \\; set-option -t devbox-$$ destroy-unattached on \\; attach-session -t devbox-$$'\"")
 		return
 	}
 
@@ -174,10 +172,15 @@ func runConsole() {
 		sshCmd = append(sshCmd, "-o", "SetEnv=SKLEIN_DEVBOX_DISABLE_INIT=1")
 	}
 
+	// Each console opens its own grouped tmux session named "devbox-<remote-sh-PID>":
+	// $$ expands to the PID of the remote sh process, giving a unique name per console.
+	// Sessions in the "devbox" group share the same windows, but each keeps its own
+	// current window, so every console can display a different window independently.
+	// "destroy-unattached on" deletes the per-console session when its console closes.
 	sshCmd = append(sshCmd,
 		"-p", sshPort,
 		"sklein@localhost",
-		"sh -c 'cd /workspace && exec tmux new-session -A -s devbox'",
+		"sh -c 'cd /workspace && { tmux has-session -t devbox 2>/dev/null || tmux new-session -d -s devbox; } && exec tmux new-session -d -t devbox -s devbox-$$ \\; set-option -t devbox-$$ destroy-unattached on \\; attach-session -t devbox-$$'",
 	)
 
 	if terminal == "foot" {

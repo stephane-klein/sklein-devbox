@@ -1,0 +1,7 @@
+[tools]
+"github:lxc/incus" = { version = "6.23", bin = "incus" }
+
+[tasks.incus-list-images]
+run = """
+incus image -c Lfts list sklein:
+"""

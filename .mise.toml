@@ -20,7 +20,7 @@ incus exec sklein-devbox-dev -- bash
 
 [tasks.ssh]
 run = """
-ssh fedora@sklein-devbox-dev.homelab.stephane-klein.info
+ssh devbox@sklein-devbox-dev.homelab.stephane-klein.info
 """
 
 [tasks.mutagen-start]

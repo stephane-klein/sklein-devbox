@@ -1,7 +1,7 @@
 sync:
   workspace:
     alpha: "."
-    beta: "fedora@sklein-devbox-dev.homelab.stephane-klein.info:workspace/"
+    beta: "devbox@sklein-devbox-dev.homelab.stephane-klein.info:workspace/"
     mode: "two-way-resolved"
     ignore:
       vcs: true

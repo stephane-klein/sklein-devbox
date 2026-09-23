@@ -448,8 +448,8 @@ actions:
     #!/bin/sh
     set -eux
 
-    useradd --user-group --create-home --shell /bin/bash fedora
-    echo "fedora ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/fedora
+    useradd --user-group --create-home --shell /bin/bash devbox
+    echo "devbox ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/devbox
     passwd -l root
 
 - trigger: post-packages

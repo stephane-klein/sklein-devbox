@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/../"
+
+if incus info sklein-devbox-dev >/dev/null 2>&1; then
+  echo "Instance 'sklein-devbox-dev' already exists, skipping creation."
+else
+  # Incus reuses the cached simplestreams image without checking the remote.
+  # Delete the cached copy to force a fresh download of the latest published
+  # version on the following incus create.
+  for fingerprint in $(incus image list --format json \
+        | jq -r '.[] | select(.update_source.alias == "sklein-devbox-dev") | .fingerprint'); do
+    incus image delete "$fingerprint"
+  done
+
+  export NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group)"
+  export NETBIRD_PAT="$(fnox get NETBIRD_PAT)"
+
+  incus create sklein:sklein-devbox-dev sklein-devbox-dev \
+    --profile default \
+    --config security.nesting=true \
+    --config cloud-init.user-data="$(cat <<EOF
+#cloud-config
+hostname: sklein-devbox-dev
+fqdn: sklein-devbox-dev.homelab.stephane-klein.info
+prefer_fqdn_over_hostname: true
+create_hostname_file: true
+write_files:
+  - path: /tmp/netbird-setup-key
+    content: ${NETBIRD_SETUP_KEY}
+    permissions: "0600"
+  - path: /tmp/netbird-api-token
+    content: ${NETBIRD_PAT}
+    permissions: "0600"
+runcmd:
+  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key, /tmp/netbird-api-token]
+users:
+  - name: fedora
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEzyNFlEuHIlewK0B8B0uAc9Q3JKjzi7myUMhvtB3JmA2BqHfVHyGimuAajSkaemjvIlWZ3IFddf0UibjOfmQH57/faxcNEino+6uPRjs0pFH8sNKWAaPX1qYqOFhB3m+om0hZDeQCyZ1x1R6m+B0VJHWQ3pxFaxQvL/K+454AmIWB0b87MMHHX0UzUja5D6sHYscHo57rzJI1fc66+AFz4fcRd/z+sUsDlLSIOWfVNuzXuGpKYuG+VW9moiMTUo8gTE9Nam6V2uFwv2w3NaOs/2KL+PpbY662v+iIB2Yyl4EP1JgczShOoZkLatnw823nD1muC8tYODxVq7Xf7pM/NSCf3GPCXtxoOEqxprLapIet0uBSB4oNZhC9h7K/1MEaBGbU+E2J5/5hURYDmYXy6KZWqrK/OEf4raGqx1bsaWcONOfIVXbj3zXTUobsqSkyCkkR3hJbf39JZ8/6ONAJS/3O+wFZknFJYmaRPuaWiLZxRj5/gw01vkNVMrogOIkQtzNDB6fh2q27ghSRkAkM8EVqkW21WkpB7y16Vzva4KSZgQcFcyxUTqG414fP+/V38aCopGpqB6XjnvyRorPHXjm2ViVWbjxmBSQ9aK0+2MeKA9WmHN0QoBMVRPrN6NBa3z20z1kMQ/qlRXiDFOEkuW4C1n2KTVNd6IOGE8AufQ== contact@stephane-klein.info
+EOF
+)"
+fi
+
+if [ "$(incus list sklein-devbox-dev -c s --format csv)" = "RUNNING" ]; then
+  echo "Instance 'sklein-devbox-dev' is already running."
+else
+  incus start sklein-devbox-dev
+fi
+
+# After recreation, the NetBird peer gets a new IP but MagicDNS keeps
+# the old answer cached (TTL ~5 min). Wait for the FQDN to point
+# to the current container before starting the sync.
+DEVBOX_FQDN="sklein-devbox-dev.homelab.stephane-klein.info"
+echo "Waiting for NetBird DNS to publish the new container (TTL ~5 min)..."
+RESOLVED_IPV4=""
+CONTAINER_IPV4=""
+for i in $(seq 1 180); do
+  if RESOLVED_IPV4="$(getent ahostsv4 "$DEVBOX_FQDN" 2>/dev/null | awk 'NR==1{print $1}')" \
+     && CONTAINER_IPV4="$(incus exec sklein-devbox-dev -- ip -4 -o addr show wt0 2>/dev/null | awk 'NR==1{print $4}' | cut -d/ -f1)" \
+     && [ -n "$RESOLVED_IPV4" ] && [ "$RESOLVED_IPV4" = "$CONTAINER_IPV4" ]; then
+    break
+  fi
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "  ... waiting (resolved=${RESOLVED_IPV4:-none} container=${CONTAINER_IPV4:-none})"
+  fi
+  sleep 2
+done
+if [ -z "$RESOLVED_IPV4" ] || [ "$RESOLVED_IPV4" != "$CONTAINER_IPV4" ]; then
+  echo "ERROR: $DEVBOX_FQDN resolves to '${RESOLVED_IPV4:-none}' but container is '${CONTAINER_IPV4:-none}'" >&2
+  exit 1
+fi
+
+# The recreated container has new SSH host keys.
+ssh-keygen -R "$DEVBOX_FQDN" >/dev/null 2>&1 || true
+for _ in $(seq 1 30); do
+  if KEYS="$(ssh-keyscan -t rsa,ecdsa,ed25519 "$DEVBOX_FQDN" 2>/dev/null)" && [ -n "$KEYS" ]; then
+    printf '%s\n' "$KEYS" >> ~/.ssh/known_hosts
+    break
+  fi
+  sleep 2
+done
+
+mutagen project terminate >/dev/null 2>&1 || true
+mutagen project start
+
+echo
+echo "✓ sklein-devbox-dev is ready — enter it with: mise run ssh"

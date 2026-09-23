@@ -46,6 +46,14 @@ files:
     ignore systemd-resolved.service
     ignore systemd-networkd.service
 
+- path: /etc/ssh/sshd_config.d/60-mise-secrets.conf
+  generator: dump
+  mode: "0600"
+  uid: "0"
+  gid: "0"
+  content: |-
+    AcceptEnv MISE_SECRET_*
+
 - path: /etc/default/grub
   generator: dump
   content: |-
@@ -144,18 +152,42 @@ files:
     set -eu
 
     # Enroll the instance into NetBird if a setup key is provided.
-    # Usage: enroll-netbird.sh <setup-key-file>
+    # Usage: enroll-netbird.sh <setup-key-file> [api-token-file]
     # The setup key is read by netbird itself from the file (--setup-key-file).
     # With an empty or missing file, this is a no-op.
     KEY_FILE="${1:-}"
+    TOKEN_FILE="${2:-}"
+
+    # NetBird cloud Management API, used to remove stale peers before enrolling.
+    NETBIRD_API="https://api.netbird.io/api"
 
     # No-op when no key file is provided, or it does not exist or is empty.
     if [ -z "${KEY_FILE}" ] || [ ! -s "${KEY_FILE}" ]; then
       exit 0
     fi
 
-    # Remove the setup key file on exit, whether enrollment succeeds or not.
-    trap 'rm -f "${KEY_FILE}"' EXIT
+    # Remove the setup key (and the API token) on exit, whether enrollment
+    # succeeds or not.
+    trap 'rm -f "${KEY_FILE}"; [ -n "${TOKEN_FILE}" ] && rm -f "${TOKEN_FILE}"' EXIT
+
+    # Remove any stale offline peer that used the same hostname, to avoid
+    # duplicates left behind by a previously deleted instance. No-op when no
+    # API token file is provided.
+    if [ -n "${TOKEN_FILE}" ] && [ -s "${TOKEN_FILE}" ]; then
+      TOKEN="$(cat "${TOKEN_FILE}")"
+      PEER_HOST="$(hostname)"
+      PEER_FQDN="$(hostname -f 2>/dev/null || printf '%s' "${PEER_HOST}")"
+
+      PEERS_JSON="$(curl -fsS -H "Authorization: Token ${TOKEN}" "${NETBIRD_API}/peers")"
+      PEER_IDS="$(printf '%s' "${PEERS_JSON}" \
+        | jq -r --arg h "${PEER_HOST}" --arg f "${PEER_FQDN}" \
+            '.[] | select((.name==$h or .hostname==$h or .dns_label==$f) and (.connected==false)) | .id')"
+
+      for id in ${PEER_IDS}; do
+        echo "enroll-netbird.sh: deleting stale offline peer ${id}" >&2
+        curl -fsS -X DELETE -H "Authorization: Token ${TOKEN}" "${NETBIRD_API}/peers/${id}"
+      done
+    fi
 
     # The netbird daemon is not part of the image (the RPM %post that installs
     # the service is skipped at build time with tsflags=noscripts), so install
@@ -255,6 +287,7 @@ packages:
   sets:
   - packages:
     - cpio
+    - curl
     - file
     - findutils
     - fipscheck
@@ -266,6 +299,7 @@ packages:
     - iproute
     - iproute-tc
     - iputils
+    - jq
     - kbd
     - kmod
     - openssh-clients
@@ -441,7 +475,7 @@ actions:
   action: |-
     #!/bin/sh
     # Generate machine-id in order for the kernel stuff to be configured properly
-    # Toléré si absent : l'image de base Fedora ne livre plus systemd-machine-id-setup
+    # Tolerated if missing: the base Fedora image no longer ships systemd-machine-id-setup
     if command -v systemd-machine-id-setup >/dev/null 2>&1; then
       systemd-machine-id-setup
     fi

@@ -13,7 +13,16 @@ run = """
 if incus info sklein-devbox-dev >/dev/null 2>&1; then
   echo "Instance 'sklein-devbox-dev' already exists, skipping creation."
 else
+  # Incus reuses the cached simplestreams image without checking the remote.
+  # Delete the cached copy to force a fresh download of the latest published
+  # version on the following incus create.
+  for fingerprint in $(incus image list --format json \
+        | jq -r '.[] | select(.update_source.alias == "sklein-devbox-dev") | .fingerprint'); do
+    incus image delete "$fingerprint"
+  done
+
   export NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group)"
+  export NETBIRD_PAT="$(fnox get NETBIRD_PAT)"
 
   incus create sklein:sklein-devbox-dev sklein-devbox-dev \
     --profile default \
@@ -28,8 +37,11 @@ write_files:
   - path: /tmp/netbird-setup-key
     content: ${NETBIRD_SETUP_KEY}
     permissions: "0600"
+  - path: /tmp/netbird-api-token
+    content: ${NETBIRD_PAT}
+    permissions: "0600"
 runcmd:
-  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key]
+  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key, /tmp/netbird-api-token]
 users:
   - name: fedora
     ssh_authorized_keys:
@@ -44,7 +56,79 @@ else
   incus start sklein-devbox-dev
 fi
 
+# After recreation, the NetBird peer gets a new IP but MagicDNS keeps
+# the old answer cached (TTL ~5 min). Wait for the FQDN to point
+# to the current container before starting the sync.
+DEVBOX_FQDN="sklein-devbox-dev.homelab.stephane-klein.info"
+echo "Waiting for NetBird DNS to publish the new container (TTL ~5 min)..."
+RESOLVED_IPV4=""
+CONTAINER_IPV4=""
+for i in $(seq 1 180); do
+  if RESOLVED_IPV4="$(getent ahostsv4 "$DEVBOX_FQDN" 2>/dev/null | awk 'NR==1{print $1}')" \
+     && CONTAINER_IPV4="$(incus exec sklein-devbox-dev -- ip -4 -o addr show wt0 2>/dev/null | awk 'NR==1{print $4}' | cut -d/ -f1)" \
+     && [ -n "$RESOLVED_IPV4" ] && [ "$RESOLVED_IPV4" = "$CONTAINER_IPV4" ]; then
+    break
+  fi
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "  ... waiting (resolved=${RESOLVED_IPV4:-none} container=${CONTAINER_IPV4:-none})"
+  fi
+  sleep 2
+done
+if [ -z "$RESOLVED_IPV4" ] || [ "$RESOLVED_IPV4" != "$CONTAINER_IPV4" ]; then
+  echo "ERROR: $DEVBOX_FQDN resolves to '${RESOLVED_IPV4:-none}' but container is '${CONTAINER_IPV4:-none}'" >&2
+  exit 1
+fi
+
+# The recreated container has new SSH host keys.
+ssh-keygen -R "$DEVBOX_FQDN" >/dev/null 2>&1 || true
+for _ in $(seq 1 30); do
+  if KEYS="$(ssh-keyscan -t rsa,ecdsa,ed25519 "$DEVBOX_FQDN" 2>/dev/null)" && [ -n "$KEYS" ]; then
+    printf '%s\n' "$KEYS" >> ~/.ssh/known_hosts
+    break
+  fi
+  sleep 2
+done
+
+mutagen project terminate >/dev/null 2>&1 || true
 mutagen project start
+
+echo
+echo "✓ sklein-devbox-dev is ready — enter it with: mise run ssh"
+"""
+
+[tasks.incus-destroy-lxc]
+run = """
+mutagen project terminate || true
+
+NETBIRD_API="https://api.netbird.io/api"
+PEER_HOST="sklein-devbox-dev"
+PEER_FQDN="sklein-devbox-dev.homelab.stephane-klein.info"
+
+if NETBIRD_PAT="$(fnox get NETBIRD_PAT 2>/dev/null)"; then
+  PEERS_JSON="$(curl -fsS -H "Authorization: Token ${NETBIRD_PAT}" "${NETBIRD_API}/peers" || true)"
+  PEER_IDS="$(printf '%s' "${PEERS_JSON}" \
+    | jq -r --arg h "${PEER_HOST}" --arg f "${PEER_FQDN}" \
+        '.[]? | select(.name==$h or .hostname==$h or .dns_label==$h or .name==$f or .hostname==$f or .dns_label==$f) | .id')"
+
+  if [ -z "${PEER_IDS}" ]; then
+    echo "No NetBird peer matching '${PEER_HOST}' found."
+  else
+    for id in ${PEER_IDS}; do
+      echo "Deleting NetBird peer ${id}..."
+      curl -fsS -o /dev/null -X DELETE -H "Authorization: Token ${NETBIRD_PAT}" "${NETBIRD_API}/peers/${id}" \
+        && echo "  done." || echo "  failed (ignored)." >&2
+    done
+  fi
+else
+  echo "NETBIRD_PAT unavailable, skipping NetBird peer cleanup." >&2
+fi
+
+if incus info sklein-devbox-dev >/dev/null 2>&1; then
+  incus delete --force sklein-devbox-dev
+  echo "Instance 'sklein-devbox-dev' destroyed."
+else
+  echo "Instance 'sklein-devbox-dev' does not exist."
+fi
 """
 
 [tasks.console]

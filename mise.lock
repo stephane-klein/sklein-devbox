@@ -6,3 +6,85 @@ lockfile_version = 2
 version = "6.23.0"
 backend = "github:lxc/incus"
 specifiers = ["6.23"]
+
+[tools."github:lxc/incus"."platforms.linux-arm64"]
+checksum = "sha256:cbf59dc3071eebf64507bba500c2e10ad5094c60304a68e3863cb4daa07283b8"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.linux.incus.aarch64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656290"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.linux-arm64-musl"]
+checksum = "sha256:cbf59dc3071eebf64507bba500c2e10ad5094c60304a68e3863cb4daa07283b8"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.linux.incus.aarch64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656290"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.linux-x64"]
+checksum = "sha256:d1bfabf048101dd8df19d17c1ace9fdb8e8860f6e90c81844b471795dfe0e921"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.linux.incus.x86_64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656305"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.linux-x64-musl"]
+checksum = "sha256:d1bfabf048101dd8df19d17c1ace9fdb8e8860f6e90c81844b471795dfe0e921"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.linux.incus.x86_64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656305"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.macos-arm64"]
+checksum = "sha256:3baf69b47f03ffaa8aaa12f3e11649b82265dd0f145fecb68d64a0afb91100d3"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.macos.incus.aarch64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656302"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.macos-x64"]
+checksum = "sha256:709109af1f506a00ac5426190501f08cd79584b0b9ae16bce8393222d711dbdb"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.macos.incus.x86_64"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656280"
+provenance = "github-attestations"
+
+[tools."github:lxc/incus"."platforms.windows-x64"]
+checksum = "sha256:dcd29a291febb0a01202e8ba196bfee28afd96fc5d9940e6f45fdf29c23d76a6"
+url = "https://github.com/lxc/incus/releases/download/v6.23.0/bin.windows.incus.x86_64.exe"
+url_api = "https://api.github.com/repos/lxc/incus/releases/assets/382656288"
+provenance = "github-attestations"
+
+[[tools.mutagen]]
+version = "0.18.1"
+backend = "aqua:mutagen-io/mutagen"
+specifiers = ["0.18.1"]
+
+[tools.mutagen."platforms.linux-arm64"]
+checksum = "sha256:bcba735aebf8cbc11da9b3742118a665599ac697fa06bc5751cac8dcd540db8a"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_arm64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224500"
+
+[tools.mutagen."platforms.linux-arm64-musl"]
+checksum = "sha256:bcba735aebf8cbc11da9b3742118a665599ac697fa06bc5751cac8dcd540db8a"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_arm64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224500"
+
+[tools.mutagen."platforms.linux-x64"]
+checksum = "sha256:7735286c778cc438418209f24d03a64f3a0151c8065ef0fe079cfaf093af6f8f"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_amd64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224465"
+
+[tools.mutagen."platforms.linux-x64-musl"]
+checksum = "sha256:7735286c778cc438418209f24d03a64f3a0151c8065ef0fe079cfaf093af6f8f"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_amd64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224465"
+
+[tools.mutagen."platforms.macos-arm64"]
+checksum = "sha256:6f810416d9e5fc4fd5e18431146f8b3c5a2056ba5a24f76c1e66da86eb3257e2"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_darwin_arm64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224354"
+
+[tools.mutagen."platforms.macos-x64"]
+checksum = "sha256:7d06f7d8fcfe90bc7e55cc834a2f2f20c2e0af9ea9bc35911fc4341ad56a9bbf"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_darwin_amd64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224335"
+
+[tools.mutagen."platforms.windows-x64"]
+checksum = "sha256:3e237e77f69959ed520a0f877330a431507bb0a85d9da7919764ba0c87b702c7"
+url = "https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_windows_amd64_v0.18.1.tar.gz"
+url_api = "https://api.github.com/repos/mutagen-io/mutagen/releases/assets/232224780"

@@ -1,5 +1,6 @@
 [tools]
 "github:lxc/incus" = { version = "6.23", bin = "incus" }
+mutagen = "0.18.1"
 
 [tasks.incus-list-images]
 run = """
@@ -43,6 +44,7 @@ else
   incus start sklein-devbox-dev
 fi
 
+mutagen project start
 """
 
 [tasks.console]
@@ -53,4 +55,14 @@ incus exec sklein-devbox-dev -- bash
 [tasks.ssh]
 run = """
 ssh fedora@sklein-devbox-dev.homelab.stephane-klein.info
+"""
+
+[tasks.mutagen-start]
+run = """
+mutagen project start
+"""
+
+[tasks.mutagen-stop]
+run = """
+mutagen project terminate
 """

@@ -1,0 +1,19 @@
+sync:
+  workspace:
+    alpha: "."
+    beta: "fedora@sklein-devbox-dev.homelab.stephane-klein.info:workspace/"
+    mode: "two-way-resolved"
+    ignore:
+      vcs: true
+      paths:
+        - ".jj"
+        - "sklein-devbox-incus-images/.distrobuilder-sources/"
+        - "sklein-devbox-incus-images/dist/"
+        - "sklein-devbox-incus-images/.simplestreams/"
+
+    permissions:
+      defaultFileMode: "0644"
+      defaultDirectoryMode: "0755"
+
+    symlink:
+      mode: "portable"

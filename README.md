@@ -30,3 +30,13 @@ $ mise run incus-list-images
 ```
 
 To create or update this image, follow the instructions in [`./sklein-devbox-incus-images/`](./sklein-devbox-incus-images/).
+
+### Start and enter in sklein-devbox-dev LXC container
+
+```sh
+$ mise run incus-start-lxc
+$ mise run ssh
+[ssh] $ ssh fedora@sklein-devbox-dev.homelab.stephane-klein.info
+Last login: Wed Sep 23 09:37:56 2026 from fd0e:5069:2174:137b:7db2:51cb:33f7:339
+[fedora@sklein-devbox-dev ~]$
+```

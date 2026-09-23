@@ -1,0 +1,13 @@
+[providers.gopass]
+type = "password-store"
+store_dir = "/home/sklein/.local/share/gopass/stores/root"
+
+[secrets]
+NETBIRD_PAT = { provider = "gopass", value="netbird/apikey" }
+SSH_STEPHANE_KLEIN_DEVBOX = { provider = "gopass", value="ssh/stephane-klein-devbox" }
+SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64 = { provider = "gopass", value="sklein-devbox-secrets/age.keyring.base64" }
+GOPASS_AGE_PASSWORD = { provider = "gopass", value="sklein-devbox-secrets/age.passphrase" }
+SCW_ACCESS_KEY = { provider = "gopass", value="homelab/incus-images/SCW_ACCESS_KEY" }
+SCW_SECRET_KEY = { provider = "gopass", value="homelab/incus-images/SCW_SECRET_KEY" }
+REGISTRY_TOKEN = { provider = "gopass", value="homelab/forgejo/container-registry-token" }
+MISE_GITHUB_TOKEN = { provider = "gopass", value="github/mise-ci-readonly" }

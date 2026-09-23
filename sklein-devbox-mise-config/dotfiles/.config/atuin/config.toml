@@ -1,0 +1,18 @@
+# Atuin configuration - format compact with working directory
+# Documentation: https://docs.atuin.sh/configuration/config/
+
+# Display style: compact
+style = "compact"
+
+# Column configuration: date, directory, command
+[ui]
+columns = ["time", "directory", "command"]
+
+# Additional useful options
+show_preview = true
+enter_accept = false
+filter_mode = "global"
+
+# No cloud sync (local only)
+[sync]
+enabled = false

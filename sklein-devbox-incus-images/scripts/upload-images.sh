@@ -17,8 +17,10 @@ rm -rf .simplestreams && mkdir -p .simplestreams
     ../dist/sklein-devbox-dev/rootfs.squashfs
 )
 
-export RCLONE_S3_ACCESS_KEY_ID="$(gopass show -o homelab/incus-images/SCW_ACCESS_KEY)"
-export RCLONE_S3_SECRET_ACCESS_KEY="$(gopass show -o homelab/incus-images/SCW_SECRET_KEY)"
+# Credentials come from the environment when provided (CI: Forgejo Actions
+# secrets), otherwise fall back to gopass (workstation).
+export RCLONE_S3_ACCESS_KEY_ID="${SCW_ACCESS_KEY:-$(gopass show -o homelab/incus-images/SCW_ACCESS_KEY)}"
+export RCLONE_S3_SECRET_ACCESS_KEY="${SCW_SECRET_KEY:-$(gopass show -o homelab/incus-images/SCW_SECRET_KEY)}"
 
 rclone sync .simplestreams/ :s3:incus-images \
   --s3-provider Scaleway \

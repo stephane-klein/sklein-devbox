@@ -1,7 +1,16 @@
+beforeCreate:
+  # Abort when the container was bootstrapped from git (a working tree is
+  # present). Placed before the install below so no directory is created
+  # inside the working tree.
+  - >-
+    ssh devbox@sklein-devbox-dev.homelab.stephane-klein.info 'test ! -d ~/.local/share/sklein-devbox/.git || { echo "git working tree present: aborting mutagen" >&2; exit 1; }'
+  - >-
+    ssh devbox@sklein-devbox-dev.homelab.stephane-klein.info 'install -d -m 700 ~/.local/share/gopass/stores ~/.local/share/sklein-devbox/sklein-devbox-mise-config'
+
 sync:
   workspace:
-    alpha: "."
-    beta: "devbox@sklein-devbox-dev.homelab.stephane-klein.info:workspace/"
+    alpha: "./sklein-devbox-mise-config/"
+    beta: "devbox@sklein-devbox-dev.homelab.stephane-klein.info:.local/share/sklein-devbox/sklein-devbox-mise-config/"
     mode: "two-way-resolved"
     ignore:
       vcs: true
@@ -15,5 +24,12 @@ sync:
       defaultFileMode: "0644"
       defaultDirectoryMode: "0755"
 
+    symlink:
+      mode: "portable"
+
+  gopass:
+    alpha: "~/.local/share/gopass/stores/root/"
+    beta: "devbox@sklein-devbox-dev.homelab.stephane-klein.info:.local/share/gopass/stores/root/"
+    mode: "two-way-resolved"
     symlink:
       mode: "portable"

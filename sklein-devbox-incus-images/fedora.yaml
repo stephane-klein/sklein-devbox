@@ -312,6 +312,8 @@ packages:
     - systemd-udev
     - which
     - xz
+    - zsh
+    - git
     action: install
 
   - packages:

@@ -1,0 +1,16 @@
+# Global mise configuration for the sklein-devbox container.
+#
+# Deployed to ~/.config/mise/config.toml by the bootstrap driver
+# (see ../../../mise.toml and ../../../README.md).
+#
+# Loaded for every `mise` invocation, in every directory. It must not contain
+# [bootstrap.*] or [dotfiles] entries; those live in the driver.
+
+[shell_alias]
+devbox-cd  = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
+devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" dot"
+
+[tools]
+age = "latest"
+gopass = "latest"
+fnox = "latest"

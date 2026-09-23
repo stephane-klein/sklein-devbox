@@ -1,0 +1,23 @@
+FROM node:24-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates curl git make gcc \
+      debootstrap rsync gnupg2 squashfs-tools \
+      genisoimage umoci python3 \
+      libgpgme-dev libbtrfs-dev \
+      docker.io \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://mise.run | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+RUN mise use -g go@1.27
+
+# Pre-install the project tools (distrobuilder, rclone, incus-simplestreams) so
+# that `mise run build-lxc` does not recompile distrobuilder from source on every
+# job. The build context is the repository root: the project .mise.toml/mise.lock
+# are copied here, then `mise install` bakes the tools into the image.
+WORKDIR /build
+COPY sklein-devbox-incus-images/.mise.toml sklein-devbox-incus-images/mise.lock ./
+RUN mise install

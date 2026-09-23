@@ -1,0 +1,29 @@
+name: Build and push sklein-devbox LXC image
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: sklein-devbox-lxc-image-push
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    container:
+      image: forgejo.sklein.internal/stephane-klein/incus-builder-image:latest
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        env:
+          GIT_SSL_NO_VERIFY: 'true'
+      - name: Build LXC image
+        working-directory: sklein-devbox-incus-images
+        env:
+          MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+        run: mise run build-lxc
+      - name: Upload image
+        working-directory: sklein-devbox-incus-images
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+        run: mise run upload-images

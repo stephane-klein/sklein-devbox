@@ -1,0 +1,58 @@
+[settings]
+lockfile = true
+system_packages.sudo = true
+dotfiles.root = "./dotfiles/"
+# The repository is the source of truth for these dotfiles; disable mise's
+# own git-backed history (removes the "History" / "Setup repository" hints
+# from `mise dot status`).
+history.enabled = false
+
+[bootstrap.secrets]
+SSH_ID_RSA_2016_PRIVATE = "SSH_ID_RSA_2016_PRIVATE"
+MISE_CI_READONLY_GITHUB_TOKEN = "MISE_CI_READONLY_GITHUB_TOKEN"
+
+[bootstrap.packages]
+"dnf:zsh" = "latest"
+"dnf:fzf" = "latest"
+"dnf:tree" = "latest"
+
+[bootstrap.user]
+login_shell = "/bin/zsh"
+
+[bootstrap.hooks.pre-user]
+run = "sudo chsh -s /bin/zsh devbox"
+
+[bootstrap.mise_shell_activate]
+zprofile = "shims"
+zshrc = "activate"
+bash_profile = "shims"
+bashrc = "activate"
+
+[tools]
+starship = "1.26.0"
+
+[dotfiles]
+"~/.ssh/config"        = { mode = "copy", permissions = "0600" }
+"~/.zshenv"            = { content = "export PATH=\"$HOME/.local/bin:$PATH\"\n", permissions = "0644" }
+"~/.config/atuin"      = { mode = "copy" }
+"~/.config/mise/config.toml" = { mode = "copy" }
+
+[bootstrap.directories."~/.ssh/"]
+mode = "0700"
+
+[bootstrap.files."~/.ssh/id_rsa_2016"]
+content = '''
+{{ secret(name="SSH_ID_RSA_2016_PRIVATE")}}
+'''
+template = true
+mode = "0600"
+
+[bootstrap.files."~/.config/mise/github_tokens.toml"]
+content = '''
+[tokens."github.com"]
+# GitHub token with read access to public repositories only. Useful to avoid
+# GitHub rate limits when Mise installs tools. It grants no access to any of my private data.
+token = "{{ secret(name="MISE_CI_READONLY_GITHUB_TOKEN") }}"
+'''
+template = true
+mode = "0600"

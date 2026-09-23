@@ -1,34 +1,86 @@
 [tools]
 "github:lxc/incus" = { version = "6.23", bin = "incus" }
 mutagen = "0.18.1"
+fnox = "1.35.3"
+"github:mitsuhiko/minijinja" = "2.24.0"
 
 [tasks.incus-list-images]
+description = "List the images available on the sklein Incus remote"
 run = """
 incus image -c Lfts list sklein:
 """
 
 [tasks.incus-start-lxc]
-run = "scripts/incus-start-lxc.sh"
+description = "Create (if needed) and start the container, workstation-synced mode"
+run = "fnox exec -- scripts/incus-start-lxc.sh"
+
+[tasks.incus-start-lxc-with-bootstrap]
+description = "Create the container, clone the repo and run the mise bootstrap (mutagen disabled)"
+run = "SKLEIN_DEVBOX_GIT_CLONE=1 SKLEIN_DEVBOX_BOOTSTRAP=1 fnox exec -- scripts/incus-start-lxc.sh"
+
+[tasks.check-cloud-init]
+description = "Render and validate cloud-init user-data with real fnox values (no secret written to disk)"
+run = "fnox exec -- scripts/check-cloud-init-render.sh"
 
 [tasks.incus-destroy-lxc]
+description = "Delete the NetBird peer and the container"
 run = "scripts/incus-destroy-lxc.sh"
 
 [tasks.console]
+description = "Open a shell in the container (incus exec)"
 run = """
 incus exec sklein-devbox-dev -- bash
 """
 
 [tasks.ssh]
+description = "Open an SSH session as devbox"
 run = """
 ssh devbox@sklein-devbox-dev.homelab.stephane-klein.info
 """
 
 [tasks.mutagen-start]
+description = "Start the mutagen two-way sync"
 run = """
 mutagen project start
 """
 
 [tasks.mutagen-stop]
+description = "Stop the mutagen two-way sync"
 run = """
 mutagen project terminate
 """
+
+[bootstrap.remote]
+source = "sklein-devbox-mise-config"
+mise_env = ["linux", "dev"]
+install_mise = true
+
+[bootstrap.remote.hosts.sklein-devbox-dev]
+host = "sklein-devbox-dev.homelab.stephane-klein.info"
+user = "devbox"
+tags = ["dev"]
+ssh_options = ["SendEnv=MISE_SECRET_*"]
+
+[tasks.bootstrap-sklein-devbox]
+description = "Upload the gopass access keys, then run the in-container Mise bootstrap"
+run = """
+fnox exec -- scripts/upload-gopass-access-keys.sh
+ssh devbox@sklein-devbox-dev.homelab.stephane-klein.info 'bash -s' < bootstrap-sklein-devbox.sh
+"""
+
+
+[tasks.upload-gopass-access-keys]
+description = "Upload the gopass access keys (SSH key, age key, gopass config) into the container (dev only)"
+run = "fnox exec -- scripts/upload-gopass-access-keys.sh"
+
+[tasks.create-forgejo-secrets]
+description = "Create the Forgejo Actions secrets (SCW_*) used by the LXC image build workflow"
+run = "fnox exec -- scripts/create-forgejo-secrets.sh"
+
+[tasks.build-lxc-image]
+description = "Trigger the Forgejo Actions workflow that builds and publishes the LXC image"
+run = "scripts/dispatch-forgejo-workflow.sh build-lxc-image.yml"
+
+[tasks.build-incus-builder-image]
+description = "Trigger the Forgejo Actions workflow that builds the incus-builder job image"
+run = "scripts/dispatch-forgejo-workflow.sh build-incus-builder-image.yml"

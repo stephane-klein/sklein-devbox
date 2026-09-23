@@ -3,7 +3,27 @@ set -e
 
 cd "$(dirname "$0")/../"
 
+# Set SKLEIN_DEVBOX_VERBOSE=1 to trace every command.
+if [ -n "${SKLEIN_DEVBOX_VERBOSE:-}" ]; then
+  set -x
+fi
+
+# Git bootstrap mode is enabled by SKLEIN_DEVBOX_GIT_CLONE: cloud-init clones
+# the repository into the container on first boot, and mutagen is disabled
+# (the git working tree becomes the source of truth).
+if [ -n "${SKLEIN_DEVBOX_GIT_CLONE:-}" ]; then
+  export SKLEIN_DEVBOX_GIT_BRANCH="${SKLEIN_DEVBOX_GIT_BRANCH:-poc-reboot-to-incus-lxc-and-mise-bootstrap}"
+fi
+
 if incus info sklein-devbox-dev >/dev/null 2>&1; then
+  # cloud-init only runs on first boot: a clone cannot happen on an existing
+  # instance. Fail loudly rather than silently skip the bootstrap.
+  if [ -n "${SKLEIN_DEVBOX_GIT_CLONE:-}" ] \
+     && ! incus exec sklein-devbox-dev -- test -d /home/devbox/.local/share/sklein-devbox/.git 2>/dev/null; then
+    echo "ERROR: instance 'sklein-devbox-dev' already exists without a git tree;" >&2
+    echo "cloud-init won't re-run the clone. Run 'mise run incus-destroy-lxc' first." >&2
+    exit 1
+  fi
   echo "Instance 'sklein-devbox-dev' already exists, skipping creation."
 else
   # Incus reuses the cached simplestreams image without checking the remote.
@@ -15,32 +35,23 @@ else
   done
 
   export NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group)"
-  export NETBIRD_PAT="$(fnox get NETBIRD_PAT)"
+  export NETBIRD_PAT="${NETBIRD_PAT:-$(fnox get NETBIRD_PAT)}"
+
+  # Optional gopass access material, injected into cloud-init by
+  # templates/cloud-init.yaml.jinja when present in the environment. The
+  # secrets themselves come from `fnox exec` (see the incus-start-lxc task).
+  # The age keyring is already base64-encoded in fnox.
+  export SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64="${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-}"
+  export DEVBOX_SSH_CONFIG="$(cat sklein-devbox-mise-config/dotfiles/.ssh/config)"
+
+  # The rendered user-data is kept in a shell variable only: it is never
+  # written to disk.
+  cloud_init="$(minijinja-cli --strict --env templates/cloud-init.yaml.jinja)"
 
   incus create sklein:sklein-devbox-dev sklein-devbox-dev \
     --profile default \
     --config security.nesting=true \
-    --config cloud-init.user-data="$(cat <<EOF
-#cloud-config
-hostname: sklein-devbox-dev
-fqdn: sklein-devbox-dev.homelab.stephane-klein.info
-prefer_fqdn_over_hostname: true
-create_hostname_file: true
-write_files:
-  - path: /tmp/netbird-setup-key
-    content: ${NETBIRD_SETUP_KEY}
-    permissions: "0600"
-  - path: /tmp/netbird-api-token
-    content: ${NETBIRD_PAT}
-    permissions: "0600"
-runcmd:
-  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key, /tmp/netbird-api-token]
-users:
-  - name: devbox
-    ssh_authorized_keys:
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEzyNFlEuHIlewK0B8B0uAc9Q3JKjzi7myUMhvtB3JmA2BqHfVHyGimuAajSkaemjvIlWZ3IFddf0UibjOfmQH57/faxcNEino+6uPRjs0pFH8sNKWAaPX1qYqOFhB3m+om0hZDeQCyZ1x1R6m+B0VJHWQ3pxFaxQvL/K+454AmIWB0b87MMHHX0UzUja5D6sHYscHo57rzJI1fc66+AFz4fcRd/z+sUsDlLSIOWfVNuzXuGpKYuG+VW9moiMTUo8gTE9Nam6V2uFwv2w3NaOs/2KL+PpbY662v+iIB2Yyl4EP1JgczShOoZkLatnw823nD1muC8tYODxVq7Xf7pM/NSCf3GPCXtxoOEqxprLapIet0uBSB4oNZhC9h7K/1MEaBGbU+E2J5/5hURYDmYXy6KZWqrK/OEf4raGqx1bsaWcONOfIVXbj3zXTUobsqSkyCkkR3hJbf39JZ8/6ONAJS/3O+wFZknFJYmaRPuaWiLZxRj5/gw01vkNVMrogOIkQtzNDB6fh2q27ghSRkAkM8EVqkW21WkpB7y16Vzva4KSZgQcFcyxUTqG414fP+/V38aCopGpqB6XjnvyRorPHXjm2ViVWbjxmBSQ9aK0+2MeKA9WmHN0QoBMVRPrN6NBa3z20z1kMQ/qlRXiDFOEkuW4C1n2KTVNd6IOGE8AufQ== contact@stephane-klein.info
-EOF
-)"
+    --config cloud-init.user-data="$cloud_init"
 fi
 
 if [ "$(incus list sklein-devbox-dev -c s --format csv)" = "RUNNING" ]; then
@@ -51,9 +62,9 @@ fi
 
 # After recreation, the NetBird peer gets a new IP but MagicDNS keeps
 # the old answer cached (TTL ~5 min). Wait for the FQDN to point
-# to the current container before starting the sync.
+# to the current container before continuing.
 DEVBOX_FQDN="sklein-devbox-dev.homelab.stephane-klein.info"
-echo "Waiting for NetBird DNS to publish the new container (TTL ~5 min)..."
+echo "==> Waiting for NetBird DNS to publish the new container (TTL ~5 min)..."
 RESOLVED_IPV4=""
 CONTAINER_IPV4=""
 for i in $(seq 1 180); do
@@ -69,10 +80,14 @@ for i in $(seq 1 180); do
 done
 if [ -z "$RESOLVED_IPV4" ] || [ "$RESOLVED_IPV4" != "$CONTAINER_IPV4" ]; then
   echo "ERROR: $DEVBOX_FQDN resolves to '${RESOLVED_IPV4:-none}' but container is '${CONTAINER_IPV4:-none}'" >&2
+  echo "--- netbird status in the container ---" >&2
+  incus exec sklein-devbox-dev -- netbird status >&2 2>&1 || true
   exit 1
 fi
+echo "==> DNS OK: $DEVBOX_FQDN -> $RESOLVED_IPV4"
 
 # The recreated container has new SSH host keys.
+echo "==> Refreshing SSH host keys for $DEVBOX_FQDN..."
 ssh-keygen -R "$DEVBOX_FQDN" >/dev/null 2>&1 || true
 for _ in $(seq 1 30); do
   if KEYS="$(ssh-keyscan -t rsa,ecdsa,ed25519 "$DEVBOX_FQDN" 2>/dev/null)" && [ -n "$KEYS" ]; then
@@ -82,8 +97,36 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 
+# In git bootstrap mode the clone and the in-container bootstrap run during
+# cloud-init: wait for it and make sure the working tree actually exists before
+# going further. A cloud-init error makes `cloud-init status --wait` exit
+# non-zero; dump the log so the failure is actionable.
+if [ -n "${SKLEIN_DEVBOX_GIT_CLONE:-}" ]; then
+  echo "==> Waiting for cloud-init (git clone + in-container bootstrap)..."
+  if ! incus exec sklein-devbox-dev -- cloud-init status --wait; then
+    echo "ERROR: cloud-init failed. tail of /var/log/cloud-init-output.log:" >&2
+    incus exec sklein-devbox-dev -- tail -n 100 /var/log/cloud-init-output.log >&2 || true
+    exit 1
+  fi
+  if ! incus exec sklein-devbox-dev -- test -d /home/devbox/.local/share/sklein-devbox/.git; then
+    echo "ERROR: git bootstrap did not create /home/devbox/.local/share/sklein-devbox/.git" >&2
+    exit 1
+  fi
+  echo "==> cloud-init done. Cloned commit:"
+  incus exec sklein-devbox-dev -- git -c safe.directory=/home/devbox/.local/share/sklein-devbox \
+    -C /home/devbox/.local/share/sklein-devbox log --oneline -1 || true
+fi
+
+echo "==> Configuring mutagen..."
 mutagen project terminate >/dev/null 2>&1 || true
-mutagen project start
+
+# A git working tree means the container was bootstrapped from git: mutagen
+# must not synchronize over it.
+if incus exec sklein-devbox-dev -- test -d /home/devbox/.local/share/sklein-devbox/.git; then
+  echo "git working tree detected — mutagen skipped."
+else
+  mutagen project start
+fi
 
 echo
 echo "✓ sklein-devbox-dev is ready — enter it with: mise run ssh"

@@ -3,7 +3,13 @@ set -e
 
 cd "$(dirname "$0")/../"
 
-mutagen project terminate || true
+# Mutagen may already be stopped (git-bootstrap mode never starts it, or after
+# `mise run mutagen-stop`): only terminate a project that is actually running.
+if mutagen project list >/dev/null 2>&1; then
+  mutagen project terminate || true
+else
+  echo "Mutagen project is not running, skipping termination."
+fi
 
 NETBIRD_API="https://api.netbird.io/api"
 PEER_HOST="sklein-devbox-dev"

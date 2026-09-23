@@ -1,0 +1,7 @@
+[providers.gopass]
+type = "password-store"
+store_dir = "~/.local/share/gopass/stores/root"
+
+[secrets]
+SSH_ID_RSA_2016_PRIVATE = { provider = "gopass", value = "ssh/id_rsa_2016/private" }
+MISE_CI_READONLY_GITHUB_TOKEN = { provider = "gopass", value = "github/mise-ci-readonly" }

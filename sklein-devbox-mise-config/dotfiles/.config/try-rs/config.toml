@@ -1,0 +1,13 @@
+tries_path = "~/tries"
+editor = "nvim"
+apply_date_prefix = true
+transparent_background = true
+
+# ui configuration
+show_right_panel = true
+right_panel_width = 25
+show_disk = true
+show_preview = true
+show_legend = true
+
+theme = "Catppuccin Mocha"

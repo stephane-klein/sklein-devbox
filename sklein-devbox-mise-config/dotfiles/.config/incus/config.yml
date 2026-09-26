@@ -1,0 +1,26 @@
+default-remote: incus1
+remotes:
+  images:
+    addr: https://images.linuxcontainers.org
+    protocol: simplestreams
+    public: true
+  incus1:
+    addr: https://incus-server1.homelab.stephane-klein.info:8443
+    auth_type: tls
+    project: default
+    protocol: incus
+    public: false
+  local:
+    addr: unix://
+    protocol: incus
+    public: false
+  sklein:
+    addr: https://incus-images.s3.fr-par.scw.cloud
+    protocol: simplestreams
+    public: true
+aliases: {}
+defaults:
+  list_format: ""
+  console_type: ""
+  console_spice_command: ""
+  no_color: false

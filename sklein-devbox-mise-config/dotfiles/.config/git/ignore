@@ -1,0 +1,9 @@
+.DS_Store
+node_modules
+.cache
+.issues/
+.secrets/
+ATOMIC-SPLIT-PLAN.md
+DRAFT.md
+mise.local.toml
+mise.local.lock

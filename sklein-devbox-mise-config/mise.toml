@@ -10,6 +10,9 @@ history.enabled = false
 [bootstrap.secrets]
 SSH_ID_RSA_2016_PRIVATE = "SSH_ID_RSA_2016_PRIVATE"
 MISE_CI_READONLY_GITHUB_TOKEN = "MISE_CI_READONLY_GITHUB_TOKEN"
+OPENCHAMBER_UI_PASSWORD = "OPENCHAMBER_UI_PASSWORD"
+INCUS_PRIVATE_CLIENT_CRT = "INCUS_PRIVATE_CLIENT_CRT"
+INCUS_PRIVATE_CLIENT_KEY = "INCUS_PRIVATE_CLIENT_KEY"
 
 [bootstrap.packages]
 "dnf:zsh" = "latest"
@@ -70,6 +73,27 @@ starship = "1.26.0"
 "~/.config/tmux"             = { mode = "copy" }
 "~/.zshrc"                   = { mode = "copy" }
 "~/.config/starship.toml"    = { mode = "copy" }
+"~/.config/containers"       = { mode = "copy" }
+"~/.config/git"              = { mode = "copy" }
+"~/.config/jj"               = { mode = "copy" }
+"~/.config/try-rs/"          = { mode = "copy" }
+"~/.config/yazi"             = { mode = "copy" }
+
+"~/.config/pitchfork/config.toml" = {
+  source = "dotfiles/.config/pitchfork/config.toml.tera",
+  mode = "template"
+}
+
+# Incus
+"~/.config/incus/config.yml" = { mode = "copy" }
+"~/.config/incus/client.crt" = {
+  source = "dotfiles/.config/incus/client.crt.tera",
+  mode = "template"
+}
+"~/.config/incus/client.key" = {
+  source = "dotfiles/.config/incus/client.key.tera",
+  mode = "template"
+}
 
 [bootstrap.directories."~/.ssh/"]
 mode = "0700"

@@ -1,0 +1,24 @@
+[git]
+# Never push wip:/private: commits (prevents accidental push of work in progress)
+private-commits = "description(glob:'wip:*') | description(glob:'private:*')"
+
+[user]
+name = "Stéphane Klein"
+email = "contact@stephane-klein.info"
+
+[ui]
+pager = "delta"
+diff-formatter = ":git"
+
+[aliases]
+up = ["edit", "@-"]
+down = ["edit", "@+"]
+publish-main = ["util", "exec", "--", "bash", "-c", "jj bookmark set main -r @- && jj git push -b main"]
+
+[templates]
+commit_trailers = ''' format_signed_off_by_trailer(self) '''
+
+[signing]
+behavior = "own"
+backend = "gpg"
+key = "2918F482FCE7DCBE"

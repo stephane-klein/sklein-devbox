@@ -1,0 +1,21 @@
+[daemons.chromium-headless]
+run = """
+chromium-browser --headless=new  --remote-debugging-port=9222  --remote-debugging-address=0.0.0.0  --remote-allow-origins="*"  --no-sandbox --window-size=1920,1200 --use-gl=angle --use-angle=swiftshader
+"""
+retry = true
+
+[daemons.opencode-server]
+run = "mise exec -- opencode serve --port 4096"
+retry = true
+
+[daemons.openchamber]
+run = """
+export XDG_RUNTIME_DIR=/tmp/user/1000
+export GOPASS_AGE_NO_CONFIRM=1
+export OPENCODE_SKIP_START=true
+export OPENCODE_PORT=4096
+OPENCHAMBER_UI_PASSWORD={{ secret(name="OPENCHAMBER_UI_PASSWORD") }}
+export OPENCHAMBER_UI_PASSWORD
+exec mise exec -- openchamber --lan --port 3000
+"""
+retry = true

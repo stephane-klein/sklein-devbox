@@ -1,0 +1,47 @@
+[init]
+    defaultBranch = main
+
+[user]
+    name = Stéphane Klein
+    email = contact@stephane-klein.info
+    signingkey = 2918F482FCE7DCBE
+
+[push]
+    default = current
+    autoSetupRemote = true
+
+[pull]
+    rebase = true
+
+[color]
+    ui = true
+
+[commit]
+    gpgsign = true
+
+[tag]
+    gpgsign = true
+
+[rerere]
+    enabled = true
+
+[core]
+    pager = delta
+	excludesfile = /home/sklein/.config/git/ignore
+
+[interactive]
+    diffFilter = delta --color-only
+
+[include]
+    path = ~/.config/git/catppuccin.gitconfig
+
+[delta]
+    features = catppuccin-mocha
+    navigate = true
+    dark = true
+    line-numbers = true
+    side-by-side = true
+    pager = less -FRX
+
+[merge]
+    conflictStyle = zdiff3

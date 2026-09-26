@@ -22,6 +22,9 @@ login_shell = "/bin/zsh"
 [bootstrap.hooks.pre-user]
 run = "sudo chsh -s /bin/zsh devbox"
 
+[bootstrap.hooks.post-dotfiles]
+run = "mise install"
+
 [bootstrap.mise_shell_activate]
 zprofile = "shims"
 zshrc = "activate"

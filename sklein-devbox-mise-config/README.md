@@ -94,6 +94,13 @@ Falling back to the explicit form always works:
 mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
 ```
 
+`mise dot apply` finishes by installing the tools of the freshly applied
+global config. The driver declares a `post-dotfiles` bootstrap hook with
+`run = "mise install"`; `mise dot apply` runs it (see
+[hooks](https://mise.jdx.dev/bootstrap.html#hooks)), so a new entry in
+`dotfiles/.config/mise/config.toml` takes effect without a manual
+`mise install`.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.
@@ -101,6 +108,7 @@ mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
 - `dotfiles.root` stays in the driver (relative path resolution).
 - A `copy` entry overwrites its target on apply; replacing a real file with a
   `symlink` entry needs `mise bootstrap --force-dotfiles` (or `mise dot apply --force`).
-- mise reads configs at process start: a config written during the `dotfiles`
-  phase is not re-read in the same run. Run `mise install` again if a change to
-  the global tools must take effect immediately.
+- mise reads configs at process start: the driver's `post-dotfiles` hook runs
+  `mise install` after every `mise dot apply`, so a `[tools]` change in the
+  global config is installed in the same run. `status` and `diff` do not
+  trigger it.

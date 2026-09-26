@@ -84,3 +84,19 @@ run = "scripts/dispatch-forgejo-workflow.sh build-lxc-image.yml"
 [tasks.build-incus-builder-image]
 description = "Trigger the Forgejo Actions workflow that builds the incus-builder job image"
 run = "scripts/dispatch-forgejo-workflow.sh build-incus-builder-image.yml"
+
+[tasks.foot]
+description = "Open a foot terminal connected to sklein-devbox"
+run = """
+set -euo pipefail
+
+foot \
+  --config foot.ini \
+  --maximized \
+  -e \
+  ssh -t \
+    -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR \
+    devbox@sklein-devbox-dev.homelab.stephane-klein.info
+"""

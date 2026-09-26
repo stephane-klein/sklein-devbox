@@ -114,6 +114,33 @@ when starting the container:
 $ SKLEIN_DEVBOX_GIT_BRANCH=my-branch mise run incus-start-lxc-with-bootstrap
 ```
 
+### Connect through a foot terminal
+
+`mise run ssh` is a plain SSH session. `mise run foot` opens the same session
+inside a maximized [foot](https://codeberg.org/dnkl/foot) terminal configured by
+the repository [`foot.ini`](./foot.ini):
+
+```sh
+$ mise run foot
+```
+
+foot is used for what a plain terminal cannot do over the SSH + tmux chain:
+
+- **bidirectional OSC 52 clipboard** — copy/paste between the local desktop and
+  the container, including through tmux;
+- **SIXEL image rendering** — `chafa`, `img2sixel`, and Neovim's `image.nvim`
+  display images inline;
+- **tmux auto-start** — `ssh -t` forces a tty and the login is routed through
+  `/usr/local/bin/ssh-tmux-login`, so an interactive login lands in tmux
+  directly (see [`sklein-devbox-mise-config/`](./sklein-devbox-mise-config/)).
+
+`foot.ini` enables `osc52`, uses the Hack Nerd Font, and binds `Ctrl+Shift+F5`
+to switch between the Catppuccin dark and light themes.
+
+The `foot` task passes `-o StrictHostKeyChecking=accept-new` and
+`-o UserKnownHostsFile=/dev/null`: host key verification is disabled. This is a
+POC shortcut, not suitable outside this throwaway environment.
+
 ### Inspect the rendered cloud-init
 
 Optionally, render and validate the cloud-init user-data:
@@ -150,6 +177,7 @@ build-lxc-image                                  Trigger the Forgejo Actions wor
 check-cloud-init                                 Render and validate cloud-init user-data with real fnox values (no secret written to disk)
 console                                          Open a shell in the container (incus exec)
 create-forgejo-secrets                           Create the Forgejo Actions secrets (SCW_*) used by the LXC image build workflow
+foot                                             Open a foot terminal connected to sklein-devbox
 incus-destroy-lxc                                Delete the NetBird peer and the container
 incus-list-images                                List the images available on the sklein Incus remote
 incus-start-lxc                                  Create (if needed) and start the container, workstation-synced mode

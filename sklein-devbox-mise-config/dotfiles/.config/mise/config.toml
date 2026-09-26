@@ -14,4 +14,5 @@ devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-conf
 age = "latest"
 gopass = "latest"
 fnox = "latest"
+tmux = "3.7c"
 fzf = "0.74.4"

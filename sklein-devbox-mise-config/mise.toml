@@ -38,6 +38,7 @@ starship = "1.26.0"
 "~/.zshenv"            = { content = "export PATH=\"$HOME/.local/bin:$PATH\"\n", permissions = "0644" }
 "~/.config/atuin"      = { mode = "copy" }
 "~/.config/mise/config.toml" = { mode = "copy" }
+"~/.config/tmux"       = { mode = "copy" }
 
 [bootstrap.directories."~/.ssh/"]
 mode = "0700"
@@ -58,3 +59,28 @@ token = "{{ secret(name="MISE_CI_READONLY_GITHUB_TOKEN") }}"
 '''
 template = true
 mode = "0600"
+
+[bootstrap.files."/usr/local/bin/ssh-tmux-login"]
+source = "./files/ssh-tmux-login"
+owner = "root"
+group = "root"
+mode = "0755"
+
+[bootstrap.files."/etc/ssh/sshd_config.d/20-tmux-force.conf"]
+source = "./files/sshd-tmux-force.conf"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["sshd"]
+
+[bootstrap.files."/etc/ssh/sshd_config.d/21-foot-link.conf"]
+source = "./files/sshd-foot-link.conf"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["sshd"]
+
+[bootstrap.services.sshd]
+state = "running"
+enabled = true
+on_change = "reload_or_restart"

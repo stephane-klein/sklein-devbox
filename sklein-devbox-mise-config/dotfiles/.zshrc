@@ -16,3 +16,8 @@ if command -v atuin &> /dev/null; then
     eval "$(atuin init zsh --disable-up-arrow)"
 fi
 
+# starship must be the LAST thing that sets the prompt: keep this block at
+# the end of the file, after every other prompt-affecting init.
+if command -v starship &> /dev/null; then
+    eval "$(starship init zsh)"
+fi

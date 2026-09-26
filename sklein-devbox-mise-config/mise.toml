@@ -38,7 +38,9 @@ starship = "1.26.0"
 "~/.zshenv"            = { content = "export PATH=\"$HOME/.local/bin:$PATH\"\n", permissions = "0644" }
 "~/.config/atuin"      = { mode = "copy" }
 "~/.config/mise/config.toml" = { mode = "copy" }
-"~/.config/tmux"       = { mode = "copy" }
+"~/.config/tmux"             = { mode = "copy" }
+"~/.zshrc"                   = { mode = "copy" }
+"~/.config/starship.toml"    = { mode = "copy" }
 
 [bootstrap.directories."~/.ssh/"]
 mode = "0700"

@@ -17,3 +17,11 @@ fnox = "latest"
 tmux = "3.7c"
 fzf = "0.74.4"
 atuin = "18.22.0"
+
+jujutsu = "0.45.1"
+
+starship = "1.26.0"
+"github:dmmulroy/jj-starship" = {
+  version = "0.7.4",
+  postinstall = "chmod u+x ${MISE_TOOL_INSTALL_PATH}/jj-starship"
+}

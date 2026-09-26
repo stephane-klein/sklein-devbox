@@ -25,3 +25,10 @@ starship = "1.26.0"
   version = "0.7.4",
   postinstall = "chmod u+x ${MISE_TOOL_INSTALL_PATH}/jj-starship"
 }
+
+# Tmux status bar / window scripts (see dotfiles/.config/tmux/scripts/):
+# gum for the input prompts, petname for the default window name, and uv which
+# mise's pypi/pipx backend needs to install petname.
+"aqua:charmbracelet/gum" = "2.0.2"
+uv = "0.12.19"
+"pipx:petname" = "2.9"

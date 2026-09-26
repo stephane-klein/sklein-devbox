@@ -16,6 +16,21 @@ if command -v atuin &> /dev/null; then
     eval "$(atuin init zsh --disable-up-arrow)"
 fi
 
+# Refresh the tmux status bar after each command, and keep the pane title in
+# sync with the current directory (the tmux status bar and the choose-window
+# popup rely on it).
+_tmux_refresh() {
+    [[ -n "$TMUX" ]] && tmux refresh-client -S 2>/dev/null
+}
+precmd_functions+=( _tmux_refresh )
+
+chpwd() {
+    tmux select-pane -t "$TMUX_PANE" -T "$PWD" 2>/dev/null
+}
+if [[ -n "$TMUX_PANE" ]]; then
+    tmux select-pane -t "$TMUX_PANE" -T "$PWD"
+fi
+
 # starship must be the LAST thing that sets the prompt: keep this block at
 # the end of the file, after every other prompt-affecting init.
 if command -v starship &> /dev/null; then

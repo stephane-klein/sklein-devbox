@@ -21,8 +21,22 @@ login_shell = "/bin/zsh"
 [bootstrap.hooks.pre-user]
 run = "sudo chsh -s /bin/zsh devbox"
 
+[bootstrap.hooks.pre-dotfiles]
+# The catppuccin/tmux plugin is not committed (see ../.gitignore); fetch it the
+# first time the dotfiles are applied, before they are copied to ~/.config/tmux.
+# The directory is empty only on a fresh machine, so this is a no-op afterwards.
+run = '''
+if [ -z "$(ls -A "{{ config_root }}/dotfiles/.config/tmux/plugins/catppuccin/tmux" 2>/dev/null)" ]; then
+  bash "{{ config_root }}/scripts/sync-catppuccin-tmux.sh"
+fi
+'''
+
 [bootstrap.hooks.post-dotfiles]
 run = "mise install"
+
+[tasks.update-catppuccin-tmux]
+description = "Re-vendor the catppuccin/tmux plugin into the dotfiles"
+run = "bash scripts/sync-catppuccin-tmux.sh"
 
 [bootstrap.mise_shell_activate]
 zprofile = "shims"

@@ -61,7 +61,7 @@ destroying and recreating the container.
 ### Workstation-synced mode (mutagen)
 
 Create and start the container, bootstrap it from the directories mounted and shared 
-y Mutagen, then connect over SSH:
+by Mutagen, then connect over SSH:
 
 ```sh
 $ mise run incus-start-lxc

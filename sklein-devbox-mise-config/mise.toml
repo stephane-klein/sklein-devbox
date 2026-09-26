@@ -38,6 +38,21 @@ run = "mise install"
 description = "Re-vendor the catppuccin/tmux plugin into the dotfiles"
 run = "bash scripts/sync-catppuccin-tmux.sh"
 
+# Bootstrap secret inputs are resolved by fnox (backed by gopass), not by mise.
+# `mise dot` and `mise bootstrap` must therefore run inside `fnox exec`, which
+# exports the `[bootstrap.secrets]` values as environment variables. `raw_args`
+# forwards the wrapped command's arguments verbatim (`apply`, `status`,
+# `diff <target>`, `--force`, `--dry-run`, `--help`, ...).
+[tasks.dot]
+description = "Run `mise dot` with the bootstrap secrets injected by fnox"
+raw_args = true
+run = "fnox -c fnox.toml exec -- mise dot"
+
+[tasks.bootstrap-all]
+description = "Run the full mise bootstrap with fnox-provided secrets"
+raw_args = true
+run = "fnox -c fnox.toml exec -- mise bootstrap --yes"
+
 [bootstrap.mise_shell_activate]
 zprofile = "shims"
 zshrc = "activate"

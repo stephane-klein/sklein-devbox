@@ -47,7 +47,6 @@ ln -sf ~/.local/share/mise/installs/gopass/latest/gopass ~/.local/bin/pass
 # Verify Mise activation in the current (non-interactive) shell
 eval "$(~/.local/bin/mise activate bash)"
 eval "$(~/.local/bin/mise hook-env)"
-~/.local/bin/mise doctor
 
 export PATH="$HOME/.local/bin:$PATH" # set here so fnox can reach pass (a symlink to gopass)
 
@@ -62,3 +61,5 @@ if [ ! -d "$STORE_ROOT/.git" ]; then
 fi
 
 fnox -c "$CONFIG_DIR/fnox.toml" exec -- mise -C "$CONFIG_DIR" bootstrap --yes
+
+~/.local/bin/mise doctor

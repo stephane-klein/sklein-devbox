@@ -19,8 +19,11 @@ same role, and confusing them is the main pitfall.
 Project-scoped config, and the entry point:
 
 ```sh
-mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config bootstrap --yes
+mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run bootstrap-all
 ```
+
+That task runs `fnox exec -- mise bootstrap --yes` (see
+[Bootstrap secrets and fnox](#bootstrap-secrets-and-fnox)).
 
 `-C` matters: without it mise never loads this file, so none of the
 `[bootstrap.*]` or `[dotfiles]` entries are seen. For the same reason, `mise dot`
@@ -35,6 +38,34 @@ against this directory.
 (`history.enabled = false`): this repository is the source of truth, so the
 history store and the watcher are unused and `mise dot status` omits the
 history/setup-repository hints.
+
+### Bootstrap secrets and fnox
+
+The driver declares `[bootstrap.secrets]` (`SSH_ID_RSA_2016_PRIVATE`,
+`MISE_CI_READONLY_GITHUB_TOKEN`, `OPENCHAMBER_UI_PASSWORD`). mise only reads those
+values from the environment; the provider is [fnox](https://fnox.jdx.dev),
+backed by the gopass store. `mise dot` and `mise bootstrap` must therefore run
+inside `fnox exec`, which exports the secrets for the duration of the command:
+
+```sh
+fnox -c ~/.local/share/sklein-devbox/sklein-devbox-mise-config/fnox.toml \
+  exec -- mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
+```
+
+Two driver tasks wrap this so callers never type it:
+
+```sh
+cd ~/.local/share/sklein-devbox/sklein-devbox-mise-config
+mise run dot apply       # -> fnox exec -- mise dot apply
+mise run bootstrap-all   # -> fnox exec -- mise bootstrap --yes
+```
+
+Both use `raw_args = true`, so subcommands, targets and flags pass through
+verbatim: `mise run dot status`, `mise run dot diff ~/.config/atuin`,
+`mise run dot apply --force`, `mise run bootstrap-all --dry-run`, ...
+
+Without fnox (e.g. an attended one-off run), mise can prompt for the values
+instead: `mise dot apply --prompt-secrets`.
 
 ### Global config — `~/.config/mise/config.toml`
 
@@ -59,13 +90,15 @@ The global config defines shortcuts so you never have to type the driver path:
 ```toml
 [shell_alias]
 devbox-cd  = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
-devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" dot"
+devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
 ```
 
 `mise activate` sets these aliases in interactive bash/zsh/fish shells. They are
 **not** available in tasks, scripts, or `mise exec`. `devbox-cd` changes the
 current shell's directory; `devbox-dot apply` is shorthand for
-`mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply`.
+`mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run dot apply`,
+which in turn runs the dotfiles under `fnox exec` (see
+[Bootstrap secrets and fnox](#bootstrap-secrets-and-fnox)).
 
 ## Applying dotfiles
 
@@ -75,9 +108,9 @@ container:
 
 ```sh
 devbox-cd                      # cd into the driver
-mise dot status
-mise dot diff ~/.config/atuin
-mise dot apply
+mise run dot status
+mise run dot diff ~/.config/atuin
+mise run dot apply
 ```
 
 or, without changing directory:
@@ -88,10 +121,12 @@ devbox-dot diff ~/.config/atuin
 devbox-dot apply
 ```
 
-Falling back to the explicit form always works:
+Falling back to the explicit form always works (the fnox wrapper supplies the
+bootstrap secrets):
 
 ```sh
-mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
+fnox -c ~/.local/share/sklein-devbox/sklein-devbox-mise-config/fnox.toml \
+  exec -- mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
 ```
 
 `mise dot apply` finishes by installing the tools of the freshly applied
@@ -106,6 +141,9 @@ global config. The driver declares a `post-dotfiles` bootstrap hook with
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.
 - The driver keeps only what bootstrap itself needs.
 - `dotfiles.root` stays in the driver (relative path resolution).
+- `mise dot` and `mise bootstrap` need `[bootstrap.secrets]` in the environment:
+  go through `mise run dot` / `mise run bootstrap-all` (or `fnox exec`) rather
+  than a bare `mise dot` / `mise bootstrap`.
 - A `copy` entry overwrites its target on apply; replacing a real file with a
   `symlink` entry needs `mise bootstrap --force-dotfiles` (or `mise dot apply --force`).
 - mise reads configs at process start: the driver's `post-dotfiles` hook runs

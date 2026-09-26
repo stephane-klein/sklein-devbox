@@ -55,12 +55,18 @@ The container's configuration is the **deployed** form of this repo's
   `mise run mutagen-stop` / `mise run mutagen-start`.
 - Then apply the dotfiles **inside the container**:
 
-      mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config dot apply
+      mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run dot apply
+
+  The driver tasks `mise run dot` / `mise run bootstrap-all` wrap `fnox exec`,
+  which supplies the `[bootstrap.secrets]` values. A bare `mise ... dot apply`
+  fails without those secrets in the environment; the explicit fallback is
+  `fnox -c <driver>/fnox.toml exec -- mise -C <driver> dot apply`.
 
 - In an interactive shell the aliases `devbox-cd` and
-  `devbox-dot status|diff|apply` do the same. They come from `mise activate` and
-  are **not** available in tasks, scripts, or `mise exec`; use the explicit
-  `mise -C …` form there.
+  `devbox-dot status|diff|apply` do the same (`devbox-dot` maps to
+  `mise -C <driver> run dot`). They come from `mise activate` and are **not**
+  available in tasks, scripts, or `mise exec`; use `mise -C <driver> run dot …`
+  there.
 
 ### Git-bootstrapped mode (production, no mutagen)
 
@@ -83,6 +89,10 @@ The container's configuration is the **deployed** form of this repo's
   and `diff` do not trigger it.
 - A `copy` dotfile entry overwrites its target; switching it to `symlink`
   requires `mise bootstrap --force-dotfiles` (or `mise dot apply --force`).
+- `mise dot` and `mise bootstrap` resolve `[bootstrap.secrets]` from the
+  environment; run them through the driver tasks `mise -C <driver> run dot` /
+  `mise -C <driver> run bootstrap-all` (or `fnox exec`) rather than bare
+  `mise dot` / `mise bootstrap`.
 
 ## If you are already inside the container
 

@@ -14,3 +14,4 @@ devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-conf
 age = "latest"
 gopass = "latest"
 fnox = "latest"
+fzf = "0.74.4"

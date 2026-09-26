@@ -13,7 +13,6 @@ MISE_CI_READONLY_GITHUB_TOKEN = "MISE_CI_READONLY_GITHUB_TOKEN"
 
 [bootstrap.packages]
 "dnf:zsh" = "latest"
-"dnf:fzf" = "latest"
 "dnf:tree" = "latest"
 
 [bootstrap.user]

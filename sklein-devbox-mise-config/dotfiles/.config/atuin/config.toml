@@ -16,3 +16,8 @@ filter_mode = "global"
 # No cloud sync (local only)
 [sync]
 enabled = false
+
+# Catppuccin theme. All 56 flavor/accent combinations are vendored in ./themes/
+# (source: https://github.com/catppuccin/atuin). Switch flavor/accent via `name`.
+[theme]
+name = "catppuccin-macchiato-mauve"

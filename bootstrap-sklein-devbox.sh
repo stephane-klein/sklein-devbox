@@ -62,4 +62,6 @@ fi
 
 fnox -c "$CONFIG_DIR/fnox.toml" exec -- mise -C "$CONFIG_DIR" bootstrap --yes
 
+"$HOME/bin/import-gpg-keys.sh"
+
 ~/.local/bin/mise doctor

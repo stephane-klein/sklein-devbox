@@ -115,6 +115,7 @@ starship = "1.26.0"
 
 # Binaries
 "~/bin/export-gpg-keys.sh" = { mode ="copy", permissions = "0700" }
+"~/bin/import-gpg-keys.sh" = { mode ="copy", permissions = "0700" }
 
 [bootstrap.directories."~/.kube/"]
 mode = "0700"

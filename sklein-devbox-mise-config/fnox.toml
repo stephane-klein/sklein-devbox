@@ -9,3 +9,4 @@ OPENCHAMBER_UI_PASSWORD                    = { provider = "gopass", value = "ope
 INCUS_PRIVATE_CLIENT_CRT                   = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.crt" }
 INCUS_PRIVATE_CLIENT_KEY                   = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.key" }
 HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = { provider = "gopass", value = "homelab/homelab-stephane-klein-info.kubeconfig" }
+GITHUB_CLI_TOKEN                           = { provider = "gopass", value = "github-cli/token" }

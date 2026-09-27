@@ -1,0 +1,6 @@
+github.com:
+    users:
+        stephane-klein:
+            oauth_token: {{ secret(name="GITHUB_CLI_TOKEN") }}
+    user: stephane-klein
+    oauth_token: {{ secret(name="GITHUB_CLI_TOKEN") }}

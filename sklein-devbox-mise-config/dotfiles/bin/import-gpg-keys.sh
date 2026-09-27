@@ -42,10 +42,10 @@ for KEY_ID in $FINGERPRINTS; do
     echo "==> Importing key: ${KEY_ID}"
 
     echo "    Importing public key..."
-    gopass show "gpg/keys/${KEY_ID}/private" | gpg --pinentry-mode loopback --import
+    gopass show "gpg/keys/${KEY_ID}/private" | gpg --batch --pinentry-mode loopback --import
 
     echo "    Importing private key..."
-    gopass show "gpg/keys/${KEY_ID}/private-subkeys" | gpg --pinentry-mode loopback --import
+    gopass show "gpg/keys/${KEY_ID}/private-subkeys" | gpg --batch --pinentry-mode loopback --import
 
     echo "    Done."
 done

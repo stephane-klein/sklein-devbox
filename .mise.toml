@@ -92,6 +92,7 @@ set -euo pipefail
 
 foot \
   --config foot.ini \
+  --log-level=error \
   --maximized \
   -e \
   ssh -t \
@@ -100,3 +101,7 @@ foot \
     -o LogLevel=ERROR \
     devbox@sklein-devbox-dev.homelab.stephane-klein.info
 """
+
+[tasks.install-local]
+description = "Install the sklein-devbox CLI locally as sklein-devbox-wip (no curl)"
+run = "mise -C sklein-devbox-cli run install-local"

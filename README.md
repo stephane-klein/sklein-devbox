@@ -23,6 +23,20 @@ This project was developed using:
 - [Mise bootstrap](https://mise.jdx.dev/bootstrap.html)
 - [mutagen](https://github.com/mutagen-io/mutagen) — optional, workstation-synced mode only
 
+## CLI
+
+[`sklein-devbox-cli/`](./sklein-devbox-cli/) holds the `sklein-devbox`
+command-line interface, a single self-contained bash script installed over
+`curl`. See its [README](./sklein-devbox-cli/README.md) for installation and
+usage.
+
+```sh
+$ curl -fsSL https://raw.githubusercontent.com/stephane-klein/sklein-devbox/poc-reboot-to-incus-lxc-and-mise-bootstrap/sklein-devbox-cli/install.sh | bash
+```
+
+This is an early version: only the `console` subcommand (equivalent to
+`mise run foot`) is implemented.
+
 ## Getting started
 
 Before continuing, the `sklein-devbox-dev` image must be available in the Incus image

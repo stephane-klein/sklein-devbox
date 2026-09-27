@@ -1,0 +1,832 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly VERSION="dev"
+readonly INSTANCE_PREFIX="sklein-devbox"
+readonly REQUIRED_COMMANDS=(foot incus ssh)
+readonly UP_REQUIRED_COMMANDS=(incus ssh-keygen ssh-keyscan getent)
+readonly GIT_BRANCH="${SKLEIN_DEVBOX_GIT_BRANCH:-poc-reboot-to-incus-lxc-and-mise-bootstrap}"
+readonly IMAGE="sklein:sklein-devbox-dev"
+readonly UP_SSH_AUTHORIZED_KEY='ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDEzyNFlEuHIlewK0B8B0uAc9Q3JKjzi7myUMhvtB3JmA2BqHfVHyGimuAajSkaemjvIlWZ3IFddf0UibjOfmQH57/faxcNEino+6uPRjs0pFH8sNKWAaPX1qYqOFhB3m+om0hZDeQCyZ1x1R6m+B0VJHWQ3pxFaxQvL/K+454AmIWB0b87MMHHX0UzUja5D6sHYscHo57rzJI1fc66+AFz4fcRd/z+sUsDlLSIOWfVNuzXuGpKYuG+VW9moiMTUo8gTE9Nam6V2uFwv2w3NaOs/2KL+PpbY662v+iIB2Yyl4EP1JgczShOoZkLatnw823nD1muC8tYODxVq7Xf7pM/NSCf3GPCXtxoOEqxprLapIet0uBSB4oNZhC9h7K/1MEaBGbU+E2J5/5hURYDmYXy6KZWqrK/OEf4raGqx1bsaWcONOfIVXbj3zXTUobsqSkyCkkR3hJbf39JZ8/6ONAJS/3O+wFZknFJYmaRPuaWiLZxRj5/gw01vkNVMrogOIkQtzNDB6fh2q27ghSRkAkM8EVqkW21WkpB7y16Vzva4KSZgQcFcyxUTqG414fP+/V38aCopGpqB6XjnvyRorPHXjm2ViVWbjxmBSQ9aK0+2MeKA9WmHN0QoBMVRPrN6NBa3z20z1kMQ/qlRXiDFOEkuW4C1n2KTVNd6IOGE8AufQ== contact@stephane-klein.info'
+readonly DEVBOX_SSH_CONFIG_DEFAULT='AddKeysToAgent yes
+
+Identityfile ~/.ssh/stephane-klein-devbox
+IdentityFile ~/.ssh/id_rsa_2016
+
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/stephane-klein-devbox
+    IdentitiesOnly yes'
+
+PROG_NAME="${SKLEIN_DEVBOX_EXEC_NAME:-${0##*/}}"
+INSTANCE_NAME="${SKLEIN_DEVBOX_NAME:-dev1}"
+FQDN_SUFFIX="${SKLEIN_DEVBOX_FQDN_SUFFIX:-homelab.stephane-klein.info}"
+SSH_USER="${SKLEIN_DEVBOX_SSH_USER:-devbox}"
+FOOT_LOG_LEVEL="${SKLEIN_DEVBOX_FOOT_LOG_LEVEL:-error}"
+
+DRY_RUN=0
+HELP_REQUESTED=0
+declare -a POSITIONAL=()
+
+die() { printf '%s: error: %s\n' "$PROG_NAME" "$*" >&2; exit 1; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+yaml_squote() { printf "'%s'" "${1//\'/\'\'}"; }
+
+indent6() { sed '/./ s/^/      /'; }
+
+check_commands() {
+  local cmd path missing=0 w=0
+  for cmd in "$@"; do
+    if (( ${#cmd} > w )); then w=${#cmd}; fi
+  done
+  for cmd in "$@"; do
+    if path="$(command -v "$cmd" 2>/dev/null)"; then
+      printf '  ok    %-*s %s\n' "$w" "$cmd" "$path"
+    else
+      printf '  FAIL  %-*s not found\n' "$w" "$cmd"
+      missing=1
+    fi
+  done
+  if (( missing )); then return 1; fi
+  return 0
+}
+
+run() {
+  if (( DRY_RUN )); then
+    printf '+ ' >&2
+    printf '%q ' "$@" >&2
+    printf '\n' >&2
+    return 0
+  fi
+  "$@"
+}
+
+declare -Ar CMD_DESC=(
+  [completion]="Generate the autocompletion script for the specified shell"
+  [console]="Open a tmux session in the devbox instance with a terminal emulator"
+  [destroy]="Destroy the sklein-devbox instance and all its data"
+  [doctor]="Check that the required commands are installed"
+  [help]="Help about any command"
+  [list]="List all sklein-devbox instances"
+  [logs]="Show cloud-init and bootstrap logs of the instance"
+  [stop]="Stop the sklein-devbox instance"
+  [up]="Start the sklein-devbox instance"
+)
+declare -ar CMD_ORDER=(completion console destroy doctor help list logs stop up)
+
+instance_name() { printf '%s-%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME"; }
+
+instance_fqdn() { printf '%s-%s.%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME" "$FQDN_SUFFIX"; }
+
+foot_config() {
+  local candidate
+  if [ -n "${SKLEIN_DEVBOX_FOOT_CONFIG:-}" ]; then
+    printf '%s' "$SKLEIN_DEVBOX_FOOT_CONFIG"
+    return 0
+  fi
+  candidate="${SKLEIN_DEVBOX_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/sklein-devbox}/foot.ini"
+  if [ -f "$candidate" ]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+  if [ -f "$PWD/foot.ini" ]; then
+    printf '%s' "$PWD/foot.ini"
+    return 0
+  fi
+  return 0
+}
+
+parse_global_flags() {
+  while (( $# )); do
+    case "$1" in
+      -n|--name)    INSTANCE_NAME="${2:?--name requires a value}"; shift 2 ;;
+      --name=*)     INSTANCE_NAME="${1#*=}"; shift ;;
+      --dry-run)    DRY_RUN=1; shift ;;
+      -v|--version) printf '%s version %s\n' "$PROG_NAME" "$VERSION"; exit 0 ;;
+      -h|--help)    HELP_REQUESTED=1; shift ;;
+      --)           shift; POSITIONAL+=("$@"); break ;;
+      -*)           die "unknown flag: $1" ;;
+      *)            POSITIONAL+=("$1"); shift ;;
+    esac
+  done
+}
+
+usage() {
+  printf '%s launches a system development environment powered by Incus.\n\n' "$PROG_NAME"
+  printf 'Usage:\n  %s [command]\n\nAvailable Commands:\n' "$PROG_NAME"
+  local n w=0
+  for n in "${CMD_ORDER[@]}"; do
+    if (( ${#n} > w )); then w=${#n}; fi
+  done
+  for n in "${CMD_ORDER[@]}"; do
+    printf '  %-*s  %s\n' "$((w + 2))" "$n" "${CMD_DESC[$n]}"
+  done
+  cat <<EOF
+
+Flags:
+      --dry-run      Print commands without executing
+  -h, --help         help for $PROG_NAME
+  -n, --name string  Instance name (default "$INSTANCE_NAME")
+  -v, --version      version for $PROG_NAME
+
+Use "$PROG_NAME [command] --help" for more information about a command.
+EOF
+}
+
+usage_for() {
+  local cmd="$1"
+  printf '%s\n\nUsage:\n  %s %s\n' "${CMD_DESC[$cmd]}" "$PROG_NAME" "$cmd"
+  if declare -F "usage_extra_$cmd" >/dev/null; then
+    "usage_extra_$cmd"
+  fi
+}
+
+usage_extra_up() {
+  printf '\nEnvironment:\n'
+  printf '  %-40s  %s\n' NETBIRD_PAT "NetBird API token (prompted if unset)"
+  printf '  %-40s  %s\n' SSH_STEPHANE_KLEIN_DEVBOX "SSH private key (prompted if unset)"
+  printf '  %-40s  %s\n' SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64 "age keyring, base64 (prompted if unset)"
+  printf '  %-40s  %s\n' NETBIRD_SETUP_KEY "NetBird setup key (gopass, then prompt)"
+  printf '  %-40s  %s\n' GOPASS_AGE_PASSWORD "gopass age password (prompted if unset)"
+  printf '  %-40s  %s\n' SKLEIN_DEVBOX_GIT_BRANCH "branch cloned in the instance"
+  printf '  %-40s  %s\n' SKLEIN_DEVBOX_SSH_CONFIG "override the devbox .ssh/config content"
+  printf '  %-40s  %s\n' SKLEIN_DEVBOX_VERBOSE "set -x trace in up"
+}
+
+cmd_console() {
+  local instance
+  instance="$(instance_name)"
+  if (( ! DRY_RUN )); then
+    have foot || die "foot not found in PATH"
+    incus info "$instance" >/dev/null 2>&1 \
+      || die "instance '$instance' does not exist; create it with: $PROG_NAME up --name $INSTANCE_NAME"
+    [ "$(incus list "$instance" -c s --format csv 2>/dev/null)" = "RUNNING" ] \
+      || die "instance '$instance' is not running; start it with: $PROG_NAME up --name $INSTANCE_NAME"
+  fi
+  local -a args=(--maximized --log-level="$FOOT_LOG_LEVEL")
+  local cfg
+  cfg="$(foot_config)"
+  if [ -n "$cfg" ]; then
+    args+=(--config "$cfg")
+  fi
+  args+=(-e ssh -t
+         -o StrictHostKeyChecking=accept-new
+         -o UserKnownHostsFile=/dev/null
+         -o LogLevel=ERROR
+         "${SSH_USER}@$(instance_fqdn)")
+  run foot "${args[@]}"
+}
+
+cmd_doctor() {
+  local cfg rc=0
+  printf '==> Required commands\n'
+  check_commands "${REQUIRED_COMMANDS[@]}" || rc=1
+
+  printf '\n==> Up requirements\n'
+  check_commands "${UP_REQUIRED_COMMANDS[@]}" || rc=1
+
+  cfg="$(foot_config)"
+  printf '\n==> Configuration\n'
+  printf '  %-9s %s\n' version "$VERSION"
+  printf '  %-9s %s\n' instance "$(instance_name)"
+  printf '  %-9s %s\n' fqdn "$(instance_fqdn)"
+  printf '  %-9s %s\n' user "$SSH_USER"
+  printf '  %-9s %s\n' foot.ini "${cfg:-(foot defaults)}"
+  printf '  %-9s %s\n' foot-log "$FOOT_LOG_LEVEL"
+
+  if (( rc )); then
+    return 1
+  fi
+  return 0
+}
+
+prompt_var() {
+  local var="$1" desc="$2" mode="$3" val=""
+  case "$mode" in
+    line)
+      printf '%s: ' "$desc" >&2
+      IFS= read -rs val || true
+      printf '\n' >&2
+      ;;
+    multiline)
+      printf 'Paste %s, then press Ctrl-D:\n' "$desc" >&2
+      val="$(cat)"
+      ;;
+    *)
+      die "prompt_var: bad mode '$mode'"
+      ;;
+  esac
+  printf -v "$var" '%s' "$val"
+  export "$var"
+}
+
+require_tools() {
+  local missing=0 cmd
+  for cmd in "${UP_REQUIRED_COMMANDS[@]}"; do
+    if ! have "$cmd"; then
+      printf '%s: error: %s not found in PATH\n' "$PROG_NAME" "$cmd" >&2
+      missing=1
+    fi
+  done
+  if [ -z "${NETBIRD_SETUP_KEY:-}" ] && ! have gopass; then
+    printf '%s: error: gopass not found in PATH\n' "$PROG_NAME" >&2
+    missing=1
+  fi
+  if (( missing )); then return 1; fi
+  return 0
+}
+
+normalize_multiline_secret() {
+  local var="$1" val
+  val="${!var}"
+  case "$val" in
+    *'\n'*)
+      case "$val" in
+        *$'\n'*) ;;
+        *) printf -v "$var" '%b' "$val"; export "$var" ;;
+      esac
+      ;;
+  esac
+}
+
+validate_secrets() {
+  local key="${SSH_STEPHANE_KLEIN_DEVBOX:-}"
+  if [ -n "$key" ]; then
+    case "$key" in
+      "-----BEGIN "*"PRIVATE KEY-----"*"-----END "*"PRIVATE KEY-----"*) ;;
+      *) die "SSH_STEPHANE_KLEIN_DEVBOX is not a valid private key (use real newlines or literal \\n)" ;;
+    esac
+  fi
+  if [ -n "${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-}" ]; then
+    printf '%s' "$SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64" | base64 -d >/dev/null 2>&1 \
+      || die "SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64 is not valid base64"
+  fi
+}
+
+resolve_secrets() {
+  if [ -z "${NETBIRD_PAT:-}" ]; then
+    prompt_var NETBIRD_PAT "NETBIRD_PAT" line
+  fi
+  if [ -z "${SSH_STEPHANE_KLEIN_DEVBOX:-}" ]; then
+    prompt_var SSH_STEPHANE_KLEIN_DEVBOX "the stephane-klein-devbox SSH private key" multiline
+  fi
+  if [ -z "${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-}" ]; then
+    prompt_var SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64 "the age keyring (base64, single line)" line
+  fi
+  if [ -z "${NETBIRD_SETUP_KEY:-}" ]; then
+    if NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group 2>/dev/null)" \
+       && [ -n "$NETBIRD_SETUP_KEY" ]; then
+      export NETBIRD_SETUP_KEY
+    else
+      prompt_var NETBIRD_SETUP_KEY "the NetBird setup key" multiline
+    fi
+  fi
+  if [ -z "${GOPASS_AGE_PASSWORD:-}" ]; then
+    prompt_var GOPASS_AGE_PASSWORD "the gopass age password" line
+  fi
+  normalize_multiline_secret SSH_STEPHANE_KLEIN_DEVBOX
+  normalize_multiline_secret SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64
+  validate_secrets
+  export SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64="$SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64"
+  export DEVBOX_SSH_CONFIG="${SKLEIN_DEVBOX_SSH_CONFIG:-$DEVBOX_SSH_CONFIG_DEFAULT}"
+}
+
+render_cloud_init() {
+  printf '#cloud-config\n'
+  printf 'hostname: %s\n' "$(instance_name)"
+  printf 'fqdn: %s\n' "$(instance_fqdn)"
+  printf 'prefer_fqdn_over_hostname: true\n'
+  printf 'create_hostname_file: true\n'
+  printf 'write_files:\n'
+  printf '  - path: /tmp/netbird-setup-key\n'
+  printf '    content: %s\n' "$NETBIRD_SETUP_KEY"
+  printf '    permissions: "0600"\n'
+  printf '  - path: /tmp/netbird-api-token\n'
+  printf '    content: %s\n' "$NETBIRD_PAT"
+  printf '    permissions: "0600"\n'
+  if [ -n "${GOPASS_AGE_PASSWORD:-}" ]; then
+    printf '  - path: /tmp/sklein-devbox-gopass-age-password\n'
+    printf '    content: %s\n' "$(yaml_squote "$GOPASS_AGE_PASSWORD")"
+    printf '    permissions: "0600"\n'
+    printf '    owner: devbox:devbox\n'
+  fi
+  if [ -n "${SSH_STEPHANE_KLEIN_DEVBOX:-}" ]; then
+    printf '  - path: /home/devbox/.ssh/stephane-klein-devbox\n'
+    printf '    content: |\n'
+    printf '%s\n' "$SSH_STEPHANE_KLEIN_DEVBOX" | indent6
+    printf '    permissions: "0600"\n'
+    printf '    owner: devbox:devbox\n'
+    printf '    defer: true\n'
+  fi
+  if [ -n "${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64:-}" ]; then
+    printf '  - path: /home/devbox/.config/gopass/age/identities\n'
+    printf '    encoding: b64\n'
+    printf '    content: %s\n' "$SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64"
+    printf '    permissions: "0600"\n'
+    printf '    owner: devbox:devbox\n'
+    printf '    defer: true\n'
+    printf '  - path: /home/devbox/.config/gopass/config\n'
+    printf '    content: |\n'
+    printf '      [mounts]\n'
+    printf '              path = /home/devbox/.local/share/gopass/stores/root\n'
+    printf '      [recipients]\n'
+    printf '              hash = 3ee561c30c8c84a3462a2c948d4595c3e1ff122ed42e43f74c9086b5d9ffce30\n'
+    printf '      [age]\n'
+    printf '              agent-timeout = 604800\n'
+    printf '              agent-enabled = true\n'
+    printf '      [core]\n'
+    printf '              auto = false\n'
+    printf '              autopush = false\n'
+    printf '    permissions: "0600"\n'
+    printf '    owner: devbox:devbox\n'
+    printf '    defer: true\n'
+  fi
+  if [ -n "${DEVBOX_SSH_CONFIG:-}" ]; then
+    printf '  - path: /home/devbox/.ssh/config\n'
+    printf '    content: |\n'
+    printf '%s\n' "$DEVBOX_SSH_CONFIG" | indent6
+    printf '    permissions: "0600"\n'
+    printf '    owner: devbox:devbox\n'
+    printf '    defer: true\n'
+  fi
+  printf 'runcmd:\n'
+  printf '  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key, /tmp/netbird-api-token]\n'
+  printf '  - [su, devbox, -c, "mkdir -p ~/.local/share && git clone --branch %s --single-branch https://github.com/stephane-klein/sklein-devbox.git ~/.local/share/sklein-devbox"]\n' "$GIT_BRANCH"
+  printf '  - [su, devbox, -c, "bash $HOME/.local/share/sklein-devbox/bootstrap-sklein-devbox.sh"]\n'
+  printf 'users:\n'
+  printf '  - name: devbox\n'
+  printf '    ssh_authorized_keys:\n'
+  printf '      - %s\n' "$UP_SSH_AUTHORIZED_KEY"
+}
+
+wait_for_dns() {
+  local instance="$1" fqdn resolved="" container="" i
+  fqdn="$(instance_fqdn)"
+  printf '==> Waiting for NetBird DNS to publish the new container (TTL ~5 min)...\n' >&2
+  for i in $(seq 1 180); do
+    if resolved="$(getent ahostsv4 "$fqdn" 2>/dev/null | awk 'NR==1{print $1}')" \
+       && container="$(incus exec "$instance" -- ip -4 -o addr show wt0 2>/dev/null | awk 'NR==1{print $4}' | cut -d/ -f1)" \
+       && [ -n "$resolved" ] && [ "$resolved" = "$container" ]; then
+      break
+    fi
+    if [ $((i % 10)) -eq 0 ]; then
+      printf '  ... waiting (resolved=%s container=%s)\n' "${resolved:-none}" "${container:-none}" >&2
+    fi
+    sleep 2
+  done
+  if [ -z "$resolved" ] || [ "$resolved" != "$container" ]; then
+    printf 'ERROR: %s resolves to %s but container is %s\n' "$fqdn" "${resolved:-none}" "${container:-none}" >&2
+    incus exec "$instance" -- netbird status >&2 2>&1 || true
+    return 1
+  fi
+  printf '==> DNS OK: %s -> %s\n' "$fqdn" "$resolved" >&2
+}
+
+refresh_host_keys() {
+  local fqdn keys
+  fqdn="$(instance_fqdn)"
+  printf '==> Refreshing SSH host keys for %s...\n' "$fqdn" >&2
+  if (( DRY_RUN )); then
+    printf '+ ssh-keygen -R %q\n' "$fqdn" >&2
+    printf '+ ssh-keyscan -t rsa,ecdsa,ed25519 %q >> ~/.ssh/known_hosts\n' "$fqdn" >&2
+    return 0
+  fi
+  ssh-keygen -R "$fqdn" >/dev/null 2>&1 || true
+  for _ in $(seq 1 30); do
+    if keys="$(ssh-keyscan -t rsa,ecdsa,ed25519 "$fqdn" 2>/dev/null)" && [ -n "$keys" ]; then
+      printf '%s\n' "$keys" >> ~/.ssh/known_hosts
+      break
+    fi
+    sleep 2
+  done
+}
+
+show_cloud_init_state() {
+  local instance="$1" tail_lines="${2:-200}"
+  printf '=== cloud-init status --long ===\n' >&2
+  incus exec "$instance" -- cloud-init status --long >&2 || true
+  printf '\n=== /var/log/cloud-init.log (warnings/errors) ===\n' >&2
+  incus exec "$instance" -- bash -c \
+    "grep -nE 'WARNING|ERROR|CRITICAL|Traceback|Command:|Exit code:' /var/log/cloud-init.log | tail -n 60" >&2 || true
+  printf '\n=== /var/lib/cloud/instance/scripts/runcmd ===\n' >&2
+  incus exec "$instance" -- cat /var/lib/cloud/instance/scripts/runcmd >&2 || true
+  printf '\n=== /var/log/cloud-init-output.log (tail -n %s) ===\n' "$tail_lines" >&2
+  incus exec "$instance" -- tail -n "$tail_lines" /var/log/cloud-init-output.log >&2 || true
+}
+
+cloud_init_diagnostics() {
+  local instance="$1"
+  printf '\nERROR: cloud-init failed. Inspect it with: %s logs\n' "$PROG_NAME" >&2
+  printf '\n' >&2
+  show_cloud_init_state "$instance" 120
+}
+
+wait_for_cloud_init() {
+  local instance="$1"
+  printf '==> Waiting for cloud-init (git clone + in-container bootstrap)...\n' >&2
+  if ! incus exec "$instance" -- cloud-init status --wait; then
+    cloud_init_diagnostics "$instance"
+    return 1
+  fi
+  if ! incus exec "$instance" -- test -d /home/devbox/.local/share/sklein-devbox/.git; then
+    printf 'ERROR: git bootstrap did not create /home/devbox/.local/share/sklein-devbox/.git\n' >&2
+    return 1
+  fi
+  printf '==> cloud-init done. Cloned commit:\n' >&2
+  incus exec "$instance" -- git -c safe.directory=/home/devbox/.local/share/sklein-devbox \
+    -C /home/devbox/.local/share/sklein-devbox log --oneline -1 || true
+}
+
+cmd_up() {
+  if [ -n "${SKLEIN_DEVBOX_VERBOSE:-}" ]; then set -x; fi
+  local instance
+  instance="$(instance_name)"
+
+  local exists=0
+  if (( ! DRY_RUN )) && incus info "$instance" >/dev/null 2>&1; then
+    exists=1
+    if ! incus exec "$instance" -- test -d /home/devbox/.local/share/sklein-devbox/.git 2>/dev/null; then
+      die "instance '$instance' already exists without a git tree; destroy it first"
+    fi
+    if incus exec "$instance" -- test -f /home/devbox/.ssh/stephane-klein-devbox 2>/dev/null; then
+      incus exec "$instance" -- grep -qE '^-----END .*PRIVATE KEY-----$' /home/devbox/.ssh/stephane-klein-devbox 2>/dev/null \
+        || die "SSH key inside '$instance' is invalid (single-line or literal \\n); destroy it and re-run up"
+    fi
+    printf "Instance '%s' already exists, skipping creation.\n" "$instance" >&2
+  fi
+
+  if (( ! exists )); then
+    if (( DRY_RUN )); then
+      NETBIRD_PAT="${NETBIRD_PAT:-<netbird-pat>}"
+      SSH_STEPHANE_KLEIN_DEVBOX="${SSH_STEPHANE_KLEIN_DEVBOX:-<ssh-private-key>}"
+      SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64="${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-<age-keyring-b64>}"
+      NETBIRD_SETUP_KEY="${NETBIRD_SETUP_KEY:-<netbird-setup-key>}"
+      GOPASS_AGE_PASSWORD="${GOPASS_AGE_PASSWORD:-<gopass-age-password>}"
+      export SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64="$SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64"
+      export DEVBOX_SSH_CONFIG="${SKLEIN_DEVBOX_SSH_CONFIG:-$DEVBOX_SSH_CONFIG_DEFAULT}"
+    else
+      require_tools
+      resolve_secrets
+    fi
+
+    if (( DRY_RUN )); then
+      printf '+ incus image list ... | incus image info ... | incus image delete ...\n' >&2
+    else
+      local fp
+      for fp in $(incus image list -f csv,noheader -c f); do
+        if incus image info "$fp" 2>/dev/null | grep -qE '^[[:space:]]*Alias: sklein-devbox-dev$'; then
+          incus image delete "$fp"
+        fi
+      done
+    fi
+
+    local cloud_init
+    cloud_init="$(render_cloud_init)"
+
+    local cloud_init_arg="$cloud_init"
+    if (( DRY_RUN )); then
+      cloud_init_arg='<cloud-init>'
+    fi
+    run incus create "$IMAGE" "$instance" \
+      --profile default \
+      --config security.nesting=true \
+      --config cloud-init.user-data="$cloud_init_arg"
+
+    if (( DRY_RUN )); then
+      printf '\n--- cloud-init.user-data (dry-run) ---\n%s\n' "$cloud_init" >&2
+    fi
+  fi
+
+  if (( ! DRY_RUN )) && [ "$(incus list "$instance" -c s --format csv 2>/dev/null)" = "RUNNING" ]; then
+    printf "Instance '%s' is already running.\n" "$instance" >&2
+  else
+    run incus start "$instance"
+  fi
+
+  if (( DRY_RUN )); then
+    refresh_host_keys
+    printf '\n[dry-run] no command executed.\n' >&2
+    return 0
+  fi
+
+  wait_for_dns "$instance"
+  refresh_host_keys
+  wait_for_cloud_init "$instance"
+
+  printf '\n✓ %s is ready — enter it with: %s console\n' "$instance" "$PROG_NAME" >&2
+}
+
+cmd_logs() {
+  local instance what
+  instance="$(instance_name)"
+  what="${1:-all}"
+  case "$what" in
+    all)
+      show_cloud_init_state "$instance" 200
+      ;;
+    output)
+      incus exec "$instance" -- cat /var/log/cloud-init-output.log
+      ;;
+    *)
+      die "logs: unknown target '$what' (expected: all, output)"
+      ;;
+  esac
+}
+
+cmd_stop() {
+  local instance status
+  instance="$(instance_name)"
+  if (( DRY_RUN )); then
+    run incus stop "$instance"
+    return 0
+  fi
+  incus info "$instance" >/dev/null 2>&1 \
+    || die "instance '$instance' does not exist"
+  status="$(incus list "$instance" -c s --format csv 2>/dev/null)"
+  if [ "$status" = "RUNNING" ]; then
+    printf "Stopping instance '%s'...\n" "$instance" >&2
+    run incus stop "$instance"
+    printf "Instance '%s' stopped.\n" "$instance" >&2
+  else
+    printf "Instance '%s' is already stopped.\n" "$instance" >&2
+  fi
+}
+
+destroy_netbird_peer() {
+  local instance="$1" fqdn peers ids id
+  fqdn="$(instance_fqdn)"
+  if [ -z "${NETBIRD_PAT:-}" ]; then
+    printf 'NETBIRD_PAT not set, skipping NetBird peer cleanup.\n' >&2
+    return 0
+  fi
+  if ! have jq || ! have curl; then
+    printf 'jq/curl not found, skipping NetBird peer cleanup.\n' >&2
+    return 0
+  fi
+  peers="$(curl -fsS -H "Authorization: Token ${NETBIRD_PAT}" https://api.netbird.io/api/peers 2>/dev/null || true)"
+  ids="$(printf '%s' "$peers" | jq -r --arg h "$instance" --arg f "$fqdn" \
+    '.[]? | select(.name==$h or .hostname==$h or .dns_label==$h or .name==$f or .hostname==$f or .dns_label==$f) | .id' 2>/dev/null || true)"
+  if [ -z "$ids" ]; then
+    printf "No NetBird peer matching '%s' found.\n" "$instance" >&2
+    return 0
+  fi
+  for id in $ids; do
+    printf 'Deleting NetBird peer %s...\n' "$id" >&2
+    curl -fsS -o /dev/null -X DELETE -H "Authorization: Token ${NETBIRD_PAT}" \
+      "https://api.netbird.io/api/peers/${id}" \
+      && printf '  done.\n' >&2 || printf '  failed (ignored).\n' >&2
+  done
+  return 0
+}
+
+cmd_destroy() {
+  local instance answer
+  instance="$(instance_name)"
+
+  if (( DRY_RUN )); then
+    run incus delete --force "$instance"
+    return 0
+  fi
+
+  if ! incus info "$instance" >/dev/null 2>&1; then
+    printf "Instance '%s' does not exist.\n" "$instance" >&2
+    return 0
+  fi
+
+  printf 'WARNING: destroying instance %s.\n' "'$instance'" >&2
+  printf 'All data inside the instance (home directory, projects, configuration)\n' >&2
+  printf 'will be permanently lost. This cannot be undone.\n\n' >&2
+  printf 'Type the instance name (%s) to confirm: ' "$instance" >&2
+  IFS= read -r answer || true
+  [ "$answer" = "$instance" ] || die "aborted (confirmation did not match)"
+
+  destroy_netbird_peer "$instance"
+  run incus delete --force "$instance"
+  printf "Instance '%s' destroyed.\n" "$instance" >&2
+}
+
+cmd_list() {
+  local n s c created i w=4
+  local -a names=() states=() createds=()
+  while IFS=, read -r n s c; do
+    [ -n "$n" ] || continue
+    created=""
+    if [ -n "$c" ]; then
+      created="$(date -d "$c" '+%Y/%m/%d %H:%M' 2>/dev/null)" || created="${c% UTC}"
+    fi
+    names+=("$n")
+    states+=("$s")
+    createds+=("$created")
+    if (( ${#n} > w )); then w=${#n}; fi
+  done < <(incus list "${INSTANCE_PREFIX}-" -c n,s,c --format csv 2>/dev/null)
+
+  if [ ${#names[@]} -eq 0 ]; then
+    printf 'No sklein-devbox instances.\n' >&2
+    return 0
+  fi
+
+  printf '%-*s  %-8s  %-16s  %s\n' "$w" NAME STATUS CREATED FQDN
+  for i in "${!names[@]}"; do
+    printf '%-*s  %-8s  %-16s  %s\n' "$w" "${names[$i]}" "${states[$i]}" "${createds[$i]}" "${names[$i]}.${FQDN_SUFFIX}"
+  done
+}
+
+_completion_names() {
+  incus list "${INSTANCE_PREFIX}-" -c n --format csv 2>/dev/null | sed -n "s/^${INSTANCE_PREFIX}-//p"
+}
+
+completion_bash() {
+  local func cmds
+  func="${PROG_NAME//-/_}"
+  cmds="${CMD_ORDER[*]}"
+  sed -e "s|@FUNC@|${func}|g" \
+      -e "s|@PROG@|${PROG_NAME}|g" \
+      -e "s|@PREFIX@|${INSTANCE_PREFIX}|g" \
+      -e "s|@CMDS@|${cmds}|g" <<'EOF'
+__names_@FUNC@() {
+  incus list @PREFIX@- -c n --format csv 2>/dev/null | sed -n 's/^@PREFIX@-//p'
+}
+
+_@FUNC@_complete() {
+  local cur prev cmds flags
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  cmds="@CMDS@"
+  flags="--dry-run --help --name --version"
+
+  case "$prev" in
+    -n|--name)
+      COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "$cur") )
+      return
+      ;;
+  esac
+
+  case "$cur" in
+    --name=*)
+      COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "${cur#--name=}") )
+      return
+      ;;
+    -*)
+      COMPREPLY=( $(compgen -W "$flags" -- "$cur") )
+      return
+      ;;
+  esac
+
+  local i
+  for (( i=1; i<COMP_CWORD; i++ )); do
+    case "${COMP_WORDS[i]}" in
+      -*) ;;
+      *) COMPREPLY=( $(compgen -W "$flags" -- "$cur") ); return ;;
+    esac
+  done
+  COMPREPLY=( $(compgen -W "$cmds $flags" -- "$cur") )
+}
+
+complete -F _@FUNC@_complete @PROG@
+EOF
+}
+
+_zsh_completion_body() {
+  local cmds
+  cmds="${CMD_ORDER[*]}"
+  sed -e "s|@CMDS@|${cmds}|g" \
+      -e "s|@PREFIX@|${INSTANCE_PREFIX}|g" <<'EOF'
+local -a cmds names
+cmds=(@CMDS@)
+names=( ${(f)"$(incus list @PREFIX@- -c n --format csv 2>/dev/null | sed -n 's/^@PREFIX@-//p')"} )
+_arguments -C \
+  '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
+  '--dry-run[print commands without executing]' \
+  '(-h --help)'{-h,--help}'[help]' \
+  '(-v --version)'{-v,--version}'[version]' \
+  '1:command:(${cmds[@]})' \
+  '*::arg:->args'
+EOF
+}
+
+completion_zsh() {
+  printf '#compdef %s\n\n' "$PROG_NAME"
+  printf 'function _%s {\n' "$PROG_NAME"
+  _zsh_completion_body | sed 's/^/  /'
+  printf '}\n\ncompdef _%s %s\n' "$PROG_NAME" "$PROG_NAME"
+}
+
+completion_zsh_fpath() {
+  printf '#compdef %s\n' "$PROG_NAME"
+  _zsh_completion_body
+}
+
+completion_fish() {
+  local cmds
+  cmds="${CMD_ORDER[*]}"
+  sed -e "s|@PROG@|${PROG_NAME}|g" \
+      -e "s|@PREFIX@|${INSTANCE_PREFIX}|g" \
+      -e "s|@CMDS@|${cmds}|g" <<'EOF'
+set -l prog @PROG@
+for sub in @CMDS@
+    complete -c $prog -f -n "__fish_use_subcommand" -a "$sub"
+end
+complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
+complete -c $prog -f -l dry-run -d 'print commands without executing'
+complete -c $prog -f -s h -l help -d 'help'
+complete -c $prog -f -s v -l version -d 'version'
+EOF
+}
+
+detect_shell() {
+  local sh
+  sh="$(basename "${SHELL:-}")"
+  case "$sh" in
+    bash|zsh|fish) printf '%s' "$sh"; return 0 ;;
+  esac
+  if [ -n "${ZSH_VERSION:-}" ]; then printf 'zsh'; return 0; fi
+  if [ -n "${BASH_VERSION:-}" ]; then printf 'bash'; return 0; fi
+  if [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/fish" ]; then printf 'fish'; return 0; fi
+  return 1
+}
+
+completion_install() {
+  local shell="${1:-}" dir file
+  if [ -z "$shell" ]; then
+    shell="$(detect_shell)" || die "completion install: cannot detect shell; pass bash|zsh|fish"
+  fi
+  case "$shell" in
+    bash)
+      dir="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
+      file="$dir/$PROG_NAME"
+      install -d "$dir"
+      completion_bash > "$file"
+      chmod 0644 "$file"
+      printf 'Installed bash completion: %s\n' "$file" >&2
+      ;;
+    zsh)
+      dir="$HOME/.zsh/completions"
+      file="$dir/_$PROG_NAME"
+      install -d "$dir"
+      completion_zsh_fpath > "$file"
+      chmod 0644 "$file"
+      printf 'Installed zsh completion: %s\n' "$file" >&2
+      printf 'Ensure ~/.zsh/completions is in fpath, e.g. in ~/.zshrc:\n  fpath=(~/.zsh/completions $fpath)\n  autoload -Uz compinit && compinit\n' >&2
+      ;;
+    fish)
+      dir="${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions"
+      file="$dir/$PROG_NAME.fish"
+      install -d "$dir"
+      completion_fish > "$file"
+      chmod 0644 "$file"
+      printf 'Installed fish completion: %s\n' "$file" >&2
+      ;;
+    *)
+      die "completion install: unsupported shell '$shell' (expected: bash, zsh, fish)"
+      ;;
+  esac
+}
+
+cmd_completion() {
+  local sub="${1:-}"
+  case "$sub" in
+    bash) completion_bash ;;
+    zsh) completion_zsh ;;
+    fish) completion_fish ;;
+    install) completion_install "${2:-}" ;;
+    ""|help) usage_extra_completion ;;
+    *) die "completion: unknown argument '$sub' (expected: bash, zsh, fish, install)" ;;
+  esac
+}
+
+usage_extra_completion() {
+  printf '\nShells:\n  bash, zsh, fish\n\nUsage:\n  %s completion <shell>\n  %s completion install [shell]\n' "$PROG_NAME" "$PROG_NAME"
+}
+
+cmd_help() {
+  local cmd="${1:-}"
+  if [ -n "$cmd" ] && declare -F "cmd_$cmd" >/dev/null; then
+    usage_for "$cmd"
+  else
+    usage
+  fi
+}
+
+main() {
+  parse_global_flags "$@"
+
+  local cmd="${POSITIONAL[0]:-}"
+
+  if (( HELP_REQUESTED )) && [ -n "$cmd" ]; then
+    if declare -F "cmd_$cmd" >/dev/null; then usage_for "$cmd"; else usage; fi
+    return 0
+  fi
+
+  if [ -z "$cmd" ]; then
+    usage
+    return 0
+  fi
+
+  declare -F "cmd_$cmd" >/dev/null || die "unknown command \"$cmd\" for \"$PROG_NAME\""
+  "cmd_$cmd" "${POSITIONAL[@]:1}"
+}
+
+main "$@"

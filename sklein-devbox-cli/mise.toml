@@ -1,0 +1,3 @@
+[tasks.install-local]
+description = "Install the CLI locally as sklein-devbox-wip (no curl)"
+run = "./install.sh --local --exec-name sklein-devbox-wip"

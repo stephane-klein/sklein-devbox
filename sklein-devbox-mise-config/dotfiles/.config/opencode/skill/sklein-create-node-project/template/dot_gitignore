@@ -1,0 +1,8 @@
+node_modules/
+dist/
+NEXT_STEPS.md
+TODO.md
+TASKS.md
+.secrets/
+.secret
+.DS_Store

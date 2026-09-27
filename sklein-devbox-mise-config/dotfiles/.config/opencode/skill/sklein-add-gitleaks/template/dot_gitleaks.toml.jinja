@@ -1,0 +1,29 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+entropy = 2
+{%- if use_jujutsu %}
+
+[[allowlists]]
+description = "Allow .jj internal files (local-only, never committed)"
+paths = [
+    "\\.jj/"
+]
+{%- endif %}
+
+[[allowlists]]
+description = "Allow .secret files (local-only, never committed)"
+paths = [
+    "\\.secret$"
+]
+{%- if extra_allowlist_paths %}
+{%- for path in extra_allowlist_paths %}
+
+[[allowlists]]
+paths = [
+    "{{ path }}"
+]
+{%- endfor %}
+{%- endif %}

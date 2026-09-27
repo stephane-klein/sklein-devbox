@@ -10,3 +10,23 @@ INCUS_PRIVATE_CLIENT_CRT                   = { provider = "gopass", value = "hom
 INCUS_PRIVATE_CLIENT_KEY                   = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.key" }
 HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = { provider = "gopass", value = "homelab/homelab-stephane-klein-info.kubeconfig" }
 GITHUB_CLI_TOKEN                           = { provider = "gopass", value = "github-cli/token" }
+
+# OpenCode providers
+OPENCODE_GO_APIKEY                         = { provider = "gopass", value = "opencode-go/apikey" }
+OPENROUTER_SKLEIN_DEVBOX_APIKEY            = { provider = "gopass", value = "openrouter/sklein-devbox/apikey" }
+DEEPSEEK_COM_OPENCODE_SKLEIN_DEVBOX_APIKEY = { provider = "gopass", value = "deepseek.com/opencode-sklein-devbox/apikey" }
+OPENCODE_GO_ACCOUNT2_APIKEY                = { provider = "gopass", value = "opencode-go/account2/apikey" }
+
+# OpenCode MCP
+CONTEXT7_APIKEY                            = { provider = "gopass", value = "context7/apikey" }
+TAVILY_APIKEY                              = { provider = "gopass", value = "tavily/apikey" }
+EXA_IA_OPENCODE_DEVBOX_APIKEY              = { provider = "gopass", value = "exa.ia/opencode-devbox/apikey" }
+HINDSIGHT_MCP_TOKEN                        = { provider = "gopass", value = "hindsight/mcp_token" }
+BROWSER_CONTROL_MCP_EXTENSION_SECRET       = { provider = "gopass", value = "browser-control-mcp/EXTENSION_SECRET" }
+MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN = { provider = "gopass", value = "memex.sklein.xyz/mcp-reader/opencode_token" }
+
+
+
+
+
+

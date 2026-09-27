@@ -1,0 +1,30 @@
+# Agent Instructions
+
+## Project Context
+
+{{ project_short_description }}
+
+## Language Policy
+
+- **All project content must be in English**: source code, comments, commit messages, and documentation.
+- **Human conversations in OpenCode remain in French**.
+
+## Package Manager Policy
+
+- Always use `pnpm` for installing, adding, and removing packages.
+- Never use `npm` or `yarn`.
+
+## Code Quality
+
+This project uses [Biome](https://biomejs.dev) for linting and formatting:
+- `pnpm lint` — check for code issues
+- `pnpm format` — auto-format code
+- `pnpm check` — run both (format + lint + organize imports)
+
+Configuration: `biome.jsonc`
+
+{% if use_jujutsu -%}
+## Version Control
+
+This project uses **Jujutsu** for version control.
+{%- endif %}

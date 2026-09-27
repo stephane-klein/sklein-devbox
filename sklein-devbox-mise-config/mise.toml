@@ -16,6 +16,20 @@ INCUS_PRIVATE_CLIENT_KEY = "INCUS_PRIVATE_CLIENT_KEY"
 HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = "HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG"
 GITHUB_CLI_TOKEN = "GITHUB_CLI_TOKEN"
 
+# OpenCode MCP
+CONTEXT7_APIKEY = "CONTEXT7_APIKEY"
+TAVILY_APIKEY = "TAVILY_APIKEY"
+EXA_IA_OPENCODE_DEVBOX_APIKEY = "EXA_IA_OPENCODE_DEVBOX_APIKEY"
+HINDSIGHT_MCP_TOKEN = "HINDSIGHT_MCP_TOKEN"
+BROWSER_CONTROL_MCP_EXTENSION_SECRET = "BROWSER_CONTROL_MCP_EXTENSION_SECRET"
+MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN = "MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN"
+
+# OpenCode provider
+OPENCODE_GO_APIKEY = "OPENCODE_GO_APIKEY"
+OPENROUTER_SKLEIN_DEVBOX_APIKEY = "OPENROUTER_SKLEIN_DEVBOX_APIKEY"
+DEEPSEEK_COM_OPENCODE_SKLEIN_DEVBOX_APIKEY = "DEEPSEEK_COM_OPENCODE_SKLEIN_DEVBOX_APIKEY"
+OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
+
 [bootstrap.packages]
 "dnf:zsh" = "latest"
 "dnf:tree" = "latest"
@@ -128,6 +142,24 @@ starship = "1.26.0"
   mode = "template"
 }
 
+# OpenCode
+"~/.config/opencode/"  = { mode = "copy" }
+"~/.config/opencode/opencode.jsonc" = {
+  source = "dotfiles/.config/opencode/opencode.jsonc.tera",
+  mode = "template"
+}
+"~/.local/share/opencode/auth.json" = {
+  source = "dotfiles/.local/share/opencode/auth.json.tera",
+  mode = "template"
+}
+"~/.local/share/opencode/auth.json1" = {
+  source = "dotfiles/.local/share/opencode/auth.json.tera",
+  mode = "template"
+}
+"~/.local/share/opencode/auth.json2" = {
+  source = "dotfiles/.local/share/opencode/auth.json2.tera",
+  mode = "template"
+}
 
 # Binaries
 "~/bin/export-gpg-keys.sh"          = { mode ="copy", permissions = "0700" }
@@ -136,6 +168,8 @@ starship = "1.26.0"
 "~/bin/wakeup_incus1.sh"            = { mode ="copy", permissions = "0700" }
 "~/bin/lock-ssh-agent.sh"           = { mode ="copy", permissions = "0700" }
 "~/bin/install-or-update-neovim.sh" = { mode ="copy", permissions = "0700" }
+"~/bin/switch-opencode-auth-1.sh"   = { mode ="copy", permissions = "0700" }
+"~/bin/switch-opencode-auth-2.sh"   = { mode ="copy", permissions = "0700" }
 
 [bootstrap.directories."~/.kube/"]
 mode = "0700"

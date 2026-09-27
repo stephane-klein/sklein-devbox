@@ -1,0 +1,14 @@
+{
+  "opencode-go": {
+    "type": "api",
+    "key": "{{ secret(name="OPENCODE_GO_APIKEY") }}"
+  },
+  "openrouter": {
+    "type": "api",
+    "key": "{{ secret(name="OPENROUTER_SKLEIN_DEVBOX_APIKEY") }}"
+  },
+  "deepseek": {
+    "type": "api",
+    "key": "{{ secret(name="OPENCODE_GO_ACCOUNT2_APIKEY") }}"
+  }
+}

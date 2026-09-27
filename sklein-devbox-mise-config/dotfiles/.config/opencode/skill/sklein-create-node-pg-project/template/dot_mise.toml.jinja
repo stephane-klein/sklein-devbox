@@ -1,0 +1,63 @@
+[env]
+_.path = './node_modules/.bin'
+_.source = [
+  '.envrc',
+  { path = 'scripts/load_postgres_variables.sh', tools = true, cacheable = false }
+]
+{% if include_environment_secrets -%}
+_.file = '.secret'
+{% endif -%}
+
+[shell_alias]
+reload = "source scripts/load_postgres_variables.sh"
+
+
+[tools]
+node = "{{ last_node_lts_version }}"
+pnpm = "{{ last_pnpm_version }}"
+usql = "0.21.4"
+
+[tasks.lint]
+run ="pnpm run lint"
+
+[tasks.format]
+run ="pnpm run format"
+
+[tasks.check]
+run ="pnpm run check"
+
+[tasks.lint-pkg]
+run = "pnpm run lint:pkg"
+
+[tasks.up]
+run = "podman compose up -d"
+
+[tasks.migrate]
+run = "node src/migrate.js"
+
+[tasks.seed]
+run = "node src/seed.js"
+
+[tasks.dump-schema]
+run = "./scripts/dump-schema.sh"
+
+[tasks.teardown]
+run = "podman compose down -v --remove-orphans"
+
+[tasks.clean]
+run = "usql postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB} < sqls/clean.sql"
+
+[tasks.enter-in-pg]
+run = "usql postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
+
+[tasks.build-image]
+run = "podman build -t {{ project_slug }} ."
+
+[tasks.build-image-cache]
+run = "podman build --layers -t {{ project_slug }} ."
+
+{% if include_gopass_setup_secret -%}
+[tasks.setup-secret]
+description = "Generate .secret from scripts/generate-secret.sh via gopass"
+run = "bash scripts/generate-secret.sh > .secret"
+{% endif -%}

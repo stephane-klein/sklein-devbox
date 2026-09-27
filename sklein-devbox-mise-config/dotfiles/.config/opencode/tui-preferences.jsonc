@@ -1,0 +1,27 @@
+{
+  "opencode-metrics": {
+    // Slot ordering. Default: 160. OpenCode built-ins occupy 100-500.
+    "order": 160,
+    // When true, sort to the top of the sidebar (below the forced band).
+    "forceToTop": false,
+    // Whole-section visibility and collapse.
+    "section": {
+      "enabled": true,       // false = render nothing
+      "collapsed": null,     // null | boolean; persisted when rememberCollapsed is true
+      "rememberCollapsed": true,
+      "label": "Metrics"     // header badge text (max 24 chars)
+    },
+    // Per-row visibility (additive with opencode-bar.json `visible`).
+    // A row shows only if BOTH this and the runtime config say true.
+    "rows": {
+      "speed": true,
+      "ttft": true,
+      "input": true,
+      "output": true,
+      "cache": true,
+      "elapsed": true,
+      "session": true,
+      "model": true
+    }
+  }
+}

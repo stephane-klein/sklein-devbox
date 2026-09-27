@@ -1,0 +1,27 @@
+{
+  "sound": true,
+  "notification": true,
+  "bell": false,
+  "timeout": 5,
+  "showProjectName": true,
+  "suppressWhenFocused": true,
+  "events": {
+    "permission": { "sound": true, "notification": true },
+    "complete": { "sound": true, "notification": true },
+    "error": { "sound": true, "notification": true },
+    "question": { "sound": true, "notification": true }
+  },
+  "messages": {
+    "permission": "Session needs permission",
+    "complete": "Session has finished",
+    "error": "Session encountered an error",
+    "question": "Session has a question"
+  },
+  "sounds": {
+    "permission": "/home/sklein/.local/share/sounds/single-sound-message-icq-ooh.mp3",
+    "complete": "/home/sklein/.local/share/sounds/single-sound-message-icq-ooh.mp3",
+    "error": "/home/sklein/.local/share/sounds/single-sound-message-icq-ooh.mp3",
+    "question": "/home/sklein/.local/share/sounds/single-sound-message-icq-ooh.mp3"
+  }
+}
+

@@ -1,0 +1,35 @@
+# {{ project_name }}
+
+{{ project_short_description }}
+
+## Prerequisite
+
+Install [mise](https://mise.jdx.dev/getting-started.html) — it will handle installing Node.js and pnpm for you.
+
+## Getting Started
+
+```bash
+$ mise install
+$ pnpm install
+```
+
+{% if include_environment_secrets -%}
+## Environment Configuration
+
+Copy `.secret.example` to `.secret` and fill in your API keys:
+
+```bash
+$ cp .secret.example .secret
+$ edit .secret
+```
+
+{% if include_gopass_setup_secret -%}
+For Stéphane Klein (gopass user), generate `.secret` directly from the password store:
+
+```bash
+$ mise run setup-secret
+```
+{% endif -%}
+
+Mise loads `.secret` automatically when present — no additional setup needed.
+{% endif -%}

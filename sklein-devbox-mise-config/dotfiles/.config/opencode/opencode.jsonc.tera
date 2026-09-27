@@ -1,0 +1,87 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "default_agent": "dialogue",
+  "lsp": {},
+  "permission": {
+    "bash": "allow",
+    "external_directory": {
+      "/workspace/examples/**": "allow",
+      "~/.corrections/": "allow"
+    }
+  },
+  // I use `mise exec --cd / -- ...` to launch MCP servers with the Node instance installed globally by Mise
+  "mcp": {
+    "fetch": {
+      "type": "local",
+      "command": ["mise", "exec", "--cd", "/", "--", "mcp-server-fetch"],
+      "enabled": true,
+      "environment": {
+        "DEFAULT_LIMIT": "0"
+      }
+    },
+    "context7": {
+      "type": "local",
+      "command": ["mise", "exec", "--cd", "/", "--", "context7-mcp", "--api-key", "{{ secret(name="CONTEXT7_APIKEY") }}"],
+      "enabled": false,
+    },
+    "tavily": {
+      "type": "local",
+      "command": ["mise", "exec", "--cd", "/", "--", "tavily-mcp"],
+      "environment": {
+        "TAVILY_API_KEY": "{{ secret(name="TAVILY_APIKEY") }}",
+        "DEFAULT_PARAMETERS": "{\"include_images\": false, \"max_results\": 15, \"search_depth\": \"advanced\"}"
+      },
+      "enabled": false,
+    },
+    "exa": {
+      "type": "local",
+      "command": ["mise", "exec", "--cd", "/", "--", "exa-mcp-server"],
+      "enabled": false,
+      "environment": {
+        "EXA_API_KEY": "{{ secret(name="EXA_IA_OPENCODE_DEVBOX_APIKEY") }}"
+      }
+    },
+    "hindsight": {
+      "enabled": false,
+      "type": "remote",
+      "url": "https://api.hindsight.sklein.internal/mcp/",
+      "headers": {
+        "Authorization": "Bearer {{ secret(name="HINDSIGHT_MCP_TOKEN") }}"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["mise", "exec", "--cd", "/", "--", "playwright-mcp", "--no-sandbox"],
+      "enabled": false,
+      "environment": {
+        "PLAYWRIGHT_MCP_CDP_ENDPOINT": "http://127.0.0.1:9222"
+      }
+    },
+    "browser-control": {
+      "type": "local",
+      "command": ["node", "{{ env.HOME }}/.local/share/browser-control-mcp/mcp-server/dist/server.js"],
+      "enabled": false,
+      "environment": {
+        "EXTENSION_SECRET": "{{ secret(name="BROWSER_CONTROL_MCP_EXTENSION_SECRET") }}",
+        "EXTENSION_PORT": "8090"
+      }
+    },
+    "toggl-pg-mirror-readonly": {
+      "type": "remote",
+      "url": "https://memex.sklein.xyz/mcp/readonly",
+      "enabled": false,
+      "headers": {
+        "Authorization": "Bearer {{ secret(name="MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN") }}"
+      }
+    }
+  },
+  "plugin": [
+    // "@mohak34/opencode-notifier@0.2.8",
+    "@slkiser/opencode-quota@4.9.0",
+    "cc-safety-net@2.3.4",
+    "opencode-vibeguard@0.1.0",
+    "opencode-hashline@1.4.0",
+    // "opencode-claude-auth@latest"
+  ]
+}

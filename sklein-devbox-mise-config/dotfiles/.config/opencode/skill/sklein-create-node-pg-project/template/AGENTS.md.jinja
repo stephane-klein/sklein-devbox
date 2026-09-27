@@ -1,0 +1,58 @@
+# Agent Instructions
+
+## Project Context
+
+{{ project_short_description }}
+
+## Language Policy
+
+- **All project content must be in English**: source code, comments, commit messages, and documentation.
+- **Human conversations in OpenCode remain in French**.
+
+## Package Manager Policy
+
+- Always use `pnpm` for installing, adding, and removing packages.
+- Never use `npm` or `yarn`.
+
+## Code Quality
+
+This project uses [Biome](https://biomejs.dev) for linting and formatting:
+- `pnpm lint` — check for code issues
+- `pnpm format` — auto-format code
+- `pnpm check` — run both (format + lint + organize imports)
+
+Configuration: `biome.jsonc`
+
+## Database
+
+This project uses **PostgreSQL** as its database, accessed directly with raw SQL — **no ORM**.
+
+SQL queries are executed using the [`postgres`](https://github.com/porsager/postgres) library (package name: `postgres`).
+
+Migrations are managed by [`postgres-shift`](https://github.com/porsager/postgres-shift) and located in `sqls/migrations/`.
+
+The complete schema (consolidated) is written by hand in `sqls/schema.sql`.
+
+## Example / Scaffolding Files
+
+The following files are examples meant to be replaced with your actual project code:
+
+- `sqls/migrations/00001_initial/` — example migration (creates a sample `contacts` table)
+- `sqls/fixtures/00001_contacts.sql` — example fixture data
+- `sqls/schema.sql` — example consolidated schema
+- `src/hello_world.js` — example script demonstrating database access
+- `README.md` — update the example output in the Getting Started section when replacing `src/hello_world.js`
+
+These files are marked with comments (`-- Example` / `// Example`) at the top. Replace or remove them as needed.
+
+> **Remove this entire section once the example files have been replaced or deleted.**
+
+{% if use_jujutsu -%}
+## Version Control
+
+This project uses **Jujutsu** for version control.
+{%- endif %}
+
+## Documentation Maintenance
+
+Remove from this file any section or reference that becomes obsolete after file deletions or structural changes. Keep AGENTS.md up to date.

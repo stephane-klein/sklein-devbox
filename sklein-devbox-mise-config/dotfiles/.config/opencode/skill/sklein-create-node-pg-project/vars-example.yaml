@@ -1,0 +1,31 @@
+author_name: Stéphane Klein
+
+# Project name (used in package.json, README, etc.)
+project_name:
+
+# Repository name on GitHub (lowercase, no spaces, use hyphens instead)
+project_slug:
+
+# Brief project description (1-2 sentences)
+project_short_description:
+
+# Use Jujutsu (J) as version control instead of Git?
+use_jujutsu: false
+
+# Latest Node.js LTS version
+last_node_lts_version: 24.15.0
+
+# Latest pnpm version
+last_pnpm_version: 11.1.3
+
+# Latest @biomejs/biome version
+last_biome_version: 2.3.11
+
+# Latest npm-package-json-lint version
+last_npm_package_json_lint_version: 9.0.2
+
+# Include environment secrets template (.secret)
+include_environment_secrets: true
+
+# Include gopass setup secret script
+include_gopass_setup_secret: true

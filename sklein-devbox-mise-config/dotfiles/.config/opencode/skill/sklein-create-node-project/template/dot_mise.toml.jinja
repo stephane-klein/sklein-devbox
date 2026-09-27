@@ -1,0 +1,28 @@
+[env]
+_.path = './node_modules/.bin'
+{% if include_environment_secrets -%}
+_.file = '.secret'
+{% endif -%}
+
+[tools]
+node = "{{ last_node_lts_version }}"
+pnpm = "{{ last_pnpm_version }}"
+
+{% if include_gopass_setup_secret -%}
+[tasks.setup-secret]
+description = "Generate .secret from scripts/generate-secret.sh via gopass"
+run = "bash scripts/generate-secret.sh > .secret"
+{% endif -%}
+
+[tasks.lint]
+run ="pnpm run lint"
+
+[tasks.format]
+run ="pnpm run format"
+
+[tasks.check]
+run ="pnpm run check"
+
+[tasks.lint-pkg]
+run = "pnpm run lint:pkg"
+

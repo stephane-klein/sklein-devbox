@@ -1,0 +1,48 @@
+# Next Steps
+
+The project has been generated. Here are the steps to complete the setup.
+
+- [ ] Replace the example schema in `sqls/migrations/00001_initial/index.sql` with your actual schema
+- [ ] Replace the example data in `sqls/fixtures/00001_contacts.sql` with your actual fixtures
+- [ ] Replace the example schema in `sqls/schema.sql` with your actual consolidated schema
+- [ ] Replace `src/hello_world.js` with your actual code (or remove it)
+
+{% if use_jujutsu -%}
+- [ ] Initialize a Jujutsu repository:
+
+```sh
+$ jj git init && jj describe -m "chore: initial commit" && jj bookmark create main
+```
+
+- [ ] Create a remote repository and push:
+
+```sh
+$ gh repo create {{ project_slug }} --public --disable-wiki
+$ jj git remote add origin git@github.com:Stéphane\ Klein/{{ project_slug }}.git
+$ jj git push --remote-tracks=main@origin
+```
+
+{%- else %}
+- [ ] Initialize a git repository:
+
+```sh
+$ git init && git add . && git commit -m "chore: initial commit"
+```
+
+- [ ] Create a remote repository and push:
+
+```sh
+$ gh repo create {{ project_slug }} --public --disable-wiki --push --source=.
+```
+{%- endif %}
+
+{% if include_environment_secrets -%}
+
+- [ ] Add the required secret environment variables in `.secret.example` (API keys, tokens, passwords) and document how to obtain each secret (link to provider, command, or procedure)
+
+{% if include_gopass_setup_secret -%}
+
+- [ ] Add the corresponding `gopass` commands in `./scripts/generate-secret.sh` to retrieve each secret and export it as an environment variable
+
+{% endif -%}
+{% endif -%}

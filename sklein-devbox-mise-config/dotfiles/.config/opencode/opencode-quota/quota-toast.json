@@ -1,0 +1,22 @@
+{
+  "enableToast": true,
+  "showSessionTokens": false,
+  "enabledProviders": [
+    "opencode-go"
+  ],
+  "formatStyle": "singleWindow",
+  "percentDisplayMode": "used",
+  "tuiSidebarPanel": {
+    "enabled": true
+  },
+  "tuiCompactStatus": {
+    "enabled": true,
+    "homeBottom": true,
+    "sessionPrompt": true,
+    "suppressWhenNativeProviderQuota": true
+  },
+  "maintainerAnnouncements": {
+    "enabled": true,
+    "home": true
+  }
+}

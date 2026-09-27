@@ -13,6 +13,7 @@ MISE_CI_READONLY_GITHUB_TOKEN = "MISE_CI_READONLY_GITHUB_TOKEN"
 OPENCHAMBER_UI_PASSWORD = "OPENCHAMBER_UI_PASSWORD"
 INCUS_PRIVATE_CLIENT_CRT = "INCUS_PRIVATE_CLIENT_CRT"
 INCUS_PRIVATE_CLIENT_KEY = "INCUS_PRIVATE_CLIENT_KEY"
+HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = "HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG"
 
 [bootstrap.packages]
 "dnf:zsh" = "latest"
@@ -35,7 +36,17 @@ fi
 '''
 
 [bootstrap.hooks.post-dotfiles]
-run = "mise install"
+run = '''
+if [ ! -f "$HOME/.kube/config.d/00-current.kubeconfig" ]; then
+  mkdir -p "$HOME/.kube/config.d"
+  cat > "$HOME/.kube/config.d/00-current.kubeconfig" <<'EOF'
+apiVersion: v1
+kind: Config
+current-context: homelab
+EOF
+fi
+mise install
+'''
 
 [tasks.update-catppuccin-tmux]
 description = "Re-vendor the catppuccin/tmux plugin into the dotfiles"
@@ -94,6 +105,22 @@ starship = "1.26.0"
   source = "dotfiles/.config/incus/client.key.tera",
   mode = "template"
 }
+
+# Kubernetes
+"~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = {
+  source = "dotfiles/.kube/config.d/homelab-stephane-klein-info.kubeconfig.tera",
+  mode = "template",
+  permissions = "0600",
+}
+
+# Binaries
+"~/bin/export-gpg-keys.sh" = { mode ="copy", permissions = "0700" }
+
+[bootstrap.directories."~/.kube/"]
+mode = "0700"
+
+[bootstrap.directories."~/.kube/config.d/"]
+mode = "0700"
 
 [bootstrap.directories."~/.ssh/"]
 mode = "0700"

@@ -10,6 +10,13 @@
 devbox-cd  = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
 devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
 
+# Point kubectl (and kubectx / kubens / k9s) at the per-cluster kubeconfigs
+# deployed under ~/.kube/config.d/ by the driver's [dotfiles] entries. The
+# state file comes first: kubectl reads and writes `current-context` in the
+# first file of the list, so that file owns the active context.
+[env]
+KUBECONFIG = "{{ env.HOME }}/.kube/config.d/00-current.kubeconfig:{{ env.HOME }}/.kube/config.d/homelab-stephane-klein-info.kubeconfig"
+
 # Install the Python CLI tools with pipx instead of uv. mise's uv
 # dependency-graph locking names the install directory after a digest of the
 # freshly resolved uv.lock; uv stamps that lock with a fresh `exclude-newer`

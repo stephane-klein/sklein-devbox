@@ -42,7 +42,9 @@ history/setup-repository hints.
 ### Bootstrap secrets and fnox
 
 The driver declares `[bootstrap.secrets]` (`SSH_ID_RSA_2016_PRIVATE`,
-`MISE_CI_READONLY_GITHUB_TOKEN`, `OPENCHAMBER_UI_PASSWORD`). mise only reads those
+`MISE_CI_READONLY_GITHUB_TOKEN`, `OPENCHAMBER_UI_PASSWORD`,
+`INCUS_PRIVATE_CLIENT_CRT`, `INCUS_PRIVATE_CLIENT_KEY`,
+`HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG`). mise only reads those
 values from the environment; the provider is [fnox](https://fnox.jdx.dev),
 backed by the gopass store. `mise dot` and `mise bootstrap` must therefore run
 inside `fnox exec`, which exports the secrets for the duration of the command:
@@ -74,6 +76,8 @@ user-wide content:
 
 - `[tools]` — the global toolset
 - `[shell_alias]` — interactive shortcuts available everywhere
+- `[env]` — user-wide environment variables (e.g. `KUBECONFIG`, see
+  [Kubernetes access](#kubernetes-access))
 
 It must **not** contain `[bootstrap.*]` or `[dotfiles]`. Its source is
 `dotfiles/.config/mise/config.toml`, installed by a `[dotfiles]` entry declared

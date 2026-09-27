@@ -3,8 +3,9 @@ type = "password-store"
 store_dir = "~/.local/share/gopass/stores/root"
 
 [secrets]
-SSH_ID_RSA_2016_PRIVATE       = { provider = "gopass", value = "ssh/id_rsa_2016/private" }
-MISE_CI_READONLY_GITHUB_TOKEN = { provider = "gopass", value = "github/mise-ci-readonly" }
-OPENCHAMBER_UI_PASSWORD       = { provider = "gopass", value = "opencode/stephane/password" }
-INCUS_PRIVATE_CLIENT_CRT      = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.crt" }
-INCUS_PRIVATE_CLIENT_KEY      = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.key" }
+SSH_ID_RSA_2016_PRIVATE                    = { provider = "gopass", value = "ssh/id_rsa_2016/private" }
+MISE_CI_READONLY_GITHUB_TOKEN              = { provider = "gopass", value = "github/mise-ci-readonly" }
+OPENCHAMBER_UI_PASSWORD                    = { provider = "gopass", value = "opencode/stephane/password" }
+INCUS_PRIVATE_CLIENT_CRT                   = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.crt" }
+INCUS_PRIVATE_CLIENT_KEY                   = { provider = "gopass", value = "homelab/incus-server1.homelab.stephane-klein.info/incus/client.key" }
+HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = { provider = "gopass", value = "homelab/homelab-stephane-klein-info.kubeconfig" }

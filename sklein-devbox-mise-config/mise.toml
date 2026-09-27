@@ -47,12 +47,16 @@ login_shell = "/bin/zsh"
 run = "sudo chsh -s /bin/zsh devbox"
 
 [bootstrap.hooks.pre-dotfiles]
-# The catppuccin/tmux plugin is not committed (see ../.gitignore); fetch it the
-# first time the dotfiles are applied, before they are copied to ~/.config/tmux.
-# The directory is empty only on a fresh machine, so this is a no-op afterwards.
+# The catppuccin/tmux and fzf-tab plugins are not committed (see ../.gitignore);
+# fetch them the first time the dotfiles are applied, before they are copied to
+# ~/.config/tmux and ~/.config/zsh. The directories are empty only on a fresh
+# machine, so this is a no-op afterwards.
 run = '''
 if [ -z "$(ls -A "{{ config_root }}/dotfiles/.config/tmux/plugins/catppuccin/tmux" 2>/dev/null)" ]; then
   bash "{{ config_root }}/scripts/sync-catppuccin-tmux.sh"
+fi
+if [ -z "$(ls -A "{{ config_root }}/dotfiles/.config/zsh/fzf-tab" 2>/dev/null)" ]; then
+  bash "{{ config_root }}/scripts/sync-fzf-tab.sh"
 fi
 '''
 
@@ -72,6 +76,10 @@ mise install
 [tasks.update-catppuccin-tmux]
 description = "Re-vendor the catppuccin/tmux plugin into the dotfiles"
 run = "bash scripts/sync-catppuccin-tmux.sh"
+
+[tasks.update-fzf-tab]
+description = "Re-vendor the fzf-tab zsh plugin into the dotfiles"
+run = "bash scripts/sync-fzf-tab.sh"
 
 # Bootstrap secret inputs are resolved by fnox (backed by gopass), not by mise.
 # `mise dot` and `mise bootstrap` must therefore run inside `fnox exec`, which
@@ -103,6 +111,7 @@ starship = "1.26.0"
 "~/.config/atuin"      = { mode = "copy" }
 "~/.config/mise/config.toml" = { mode = "copy" }
 "~/.config/tmux"             = { mode = "copy" }
+"~/.config/zsh"              = { mode = "copy" }
 "~/.zshrc"                   = { mode = "copy" }
 "~/.config/starship.toml"    = { mode = "copy" }
 "~/.config/containers"       = { mode = "copy" }

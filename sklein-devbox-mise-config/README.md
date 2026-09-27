@@ -104,6 +104,15 @@ current shell's directory; `devbox-dot apply` is shorthand for
 which in turn runs the dotfiles under `fnox exec` (see
 [Bootstrap secrets and fnox](#bootstrap-secrets-and-fnox)).
 
+## Shell completions
+
+`dotfiles/.zshrc` wires four completion sources, in this order:
+
+- **mise** — `eval "$(mise completion zsh)"`. `mise activate` only wires completions for managed tools that ship one (fnox, pitchfork, ...), never for the `mise` command itself, which needs its own line.
+- **carapace** — the multi-command completion engine (`carapace` in the global `[tools]`). A single `source <(carapace _carapace)` dispatches to per-command completers, so no per-tool script is needed. Supported completers: <https://carapace-sh.github.io/carapace-bin/completers.html>
+- **gopass** — native `source <(gopass completion zsh)` (carapace has no gopass completer).
+- **fzf-tab** — turns zsh's completion menu into an fzf picker. The plugin is vendored into `~/.config/zsh/fzf-tab` by `scripts/sync-fzf-tab.sh` (not committed; fetched by the driver's `pre-dotfiles` hook, refresh with `mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run update-fzf-tab`).
+
 ## Applying dotfiles
 
 The `[dotfiles]` entries live in the project-scoped driver, so mise only sees

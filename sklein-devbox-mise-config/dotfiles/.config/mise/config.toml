@@ -36,6 +36,11 @@ fzf = "0.74.4"
 atuin = "18.22.0"
 pitchfork = "2.27.0"
 
+# Multi-command shell completion engine: dynamic completions for jj, gh,
+# kubectl, k9s, helm, ... Loaded from dotfiles/.zshrc.
+# Supported completers: https://carapace-sh.github.io/carapace-bin/completers.html
+carapace = "1.8.0"
+
 jujutsu = "0.45.1"
 jjui = "0.10.10"
 

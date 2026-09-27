@@ -11,6 +11,37 @@ setopt COMPLETE_IN_WORD
 eval "$(mise activate zsh)"
 # <<< mise:activate <<<
 
+# Completion for mise itself (subcommands, versions, tasks, ...). `mise activate`
+# only wires completions for managed tools that ship one (fnox, pitchfork, ...),
+# never for the `mise` command: it must be installed explicitly.
+eval "$(mise completion zsh)"
+
+# Carapace - multi-command completion engine (jj, gh, kubectl, k9s, helm, ...).
+# carapace is a mise-managed tool: it must be on PATH, so load it after the
+# `mise activate` block above. It overrides the built-in completions of the
+# commands it covers; the ones it does not know fall back to zsh/bash.
+if command -v carapace &> /dev/null; then
+    export CARAPACE_BRIDGES='zsh,bash'
+    zstyle ':completion:*' format $'%{\e[2;37m%}Completing %d%{\e[m%}'
+    source <(carapace _carapace)
+fi
+
+# gopass has no carapace completer: use its native zsh completion.
+if command -v gopass &> /dev/null; then
+    source <(gopass completion zsh)
+fi
+
+# fzf-tab - replace zsh's completion menu with an fzf picker (needs the fzf
+# binary, hence after `mise activate`; and after `compinit`). The plugin is
+# vendored by scripts/sync-fzf-tab.sh into ~/.config/zsh/fzf-tab.
+if [[ -r "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+    # 'menu no' lets fzf-tab capture the unambiguous prefix.
+    zstyle ':completion:*' menu no
+    # Enable group support in the fzf menu.
+    zstyle ':completion:*:descriptions' format '[%d]'
+    source "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh"
+fi
+
 # Atuin - advanced history with pwd, duration, and context
 if command -v atuin &> /dev/null; then
     eval "$(atuin init zsh --disable-up-arrow)"
@@ -55,7 +86,7 @@ function y() {
 # try-rs integration
 alias try="try-rs"
 
-source '~/.config/try-rs/try-rs.zsh'
+source "$HOME/.config/try-rs/try-rs.zsh"
 # try-rs tab completion for directory names
 _try_rs_get_tries_path() {
     # Check TRY_PATH environment variable first

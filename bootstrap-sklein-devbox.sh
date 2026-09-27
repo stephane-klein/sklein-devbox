@@ -63,5 +63,6 @@ fi
 fnox -c "$CONFIG_DIR/fnox.toml" exec -- mise -C "$CONFIG_DIR" bootstrap --yes
 
 "$HOME/bin/import-gpg-keys.sh"
+"$HOME/bin/install-or-update-neovim.sh"
 
 ~/.local/bin/mise doctor

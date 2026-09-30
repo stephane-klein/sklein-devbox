@@ -20,6 +20,7 @@ This project was developed using:
 ## Tech stack
 
 - [Incus LXC](https://linuxcontainers.org/incus/)
+- [Mosh](https://github.com/mobile-shell/mosh)
 - [Mise bootstrap](https://mise.jdx.dev/bootstrap.html)
 - [mutagen](https://github.com/mutagen-io/mutagen) — optional, workstation-synced mode only
 

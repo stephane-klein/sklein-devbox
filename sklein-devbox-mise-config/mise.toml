@@ -34,6 +34,10 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 "dnf:zsh" = "latest"
 "dnf:tree" = "latest"
 
+# mosh-server, required by `sklein-devbox console --terminal=mosh` (the mosh
+# client runs on the workstation; this is the server side inside the instance).
+"dnf:mosh" = "latest"
+
 # Build toolchain required to compile Neovim TreeSitter parsers (and native plugins).
 "dnf:gcc" = "latest"
 "dnf:gcc-c++" = "latest"

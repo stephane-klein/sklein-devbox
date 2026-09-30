@@ -4,9 +4,9 @@ The `sklein-devbox` command-line interface: a single, self-contained bash
 script that launches and drives the Incus-based development environment.
 
 The script has no build step. Installation needs `bash` and `curl`; `console`
-needs `foot` and `ssh`; `up` additionally needs `incus`, `ssh-keygen`,
-`ssh-keyscan` and `getent` (plus `gopass` when `NETBIRD_SETUP_KEY` is not
-already exported).
+needs `foot` and `ssh`, and optionally `mosh`; `up` additionally needs `incus`,
+`ssh-keygen`, `ssh-keyscan` and `getent` (plus `gopass` when
+`NETBIRD_SETUP_KEY` is not already exported).
 
 ## Install
 
@@ -89,9 +89,32 @@ automatically after installing the binary.
 
 ### `console`
 
-Opens a maximized [foot](https://codeberg.org/dnkl/foot) terminal running
-`ssh -t` against the instance. Equivalent to `mise run foot`. The instance must
-exist and be running, otherwise `console` fails with an explicit message.
+Opens a maximized [foot](https://codeberg.org/dnkl/foot) terminal running a
+remote shell against the instance. The instance must exist and be running,
+otherwise `console` fails with an explicit message.
+
+The transport is selected with `--terminal` (or `SKLEIN_DEVBOX_TERMINAL`):
+
+- `auto` (default): [mosh](https://mosh.org) when the `mosh` client is installed
+  on this machine, `ssh` otherwise;
+- `ssh`: `ssh -t` against the instance (equivalent to `mise run ssh`);
+- `mosh`: `mosh` against the instance. The ssh bootstrap reuses the same
+  `StrictHostKeyChecking`, `UserKnownHostsFile` and `LogLevel` options, and mosh
+  launches `env -u SSH_ORIGINAL_COMMAND /usr/local/bin/ssh-tmux-login`, so the
+  shared tmux workspace is preserved.
+
+  `SSH_ORIGINAL_COMMAND` must be cleared: `mosh-server` forwards it to the
+  command it launches, and `ssh-tmux-login` (the sshd `ForceCommand`) uses it to
+  decide between running a client command and starting tmux. Left set, it would
+  contain the `mosh-server new …` line and the wrapper would re-launch
+  `mosh-server` — detaching immediately — instead of starting tmux. The
+  `--` before the host is required because the remote command contains `-u`,
+  which mosh's own option parser would otherwise consume.
+
+`mosh` is an **optional** dependency: the client only needs to be present where
+the CLI runs (the `mosh-server` side is installed inside the instance). Without
+it, `console` falls back to `ssh`. Forcing `--terminal=mosh` without the client
+fails with an explicit message.
 
 foot is invoked with `--log-level=error` to silence benign warnings (the
 Wayland compositor and the COLRv1 emoji font). Override with
@@ -99,6 +122,7 @@ Wayland compositor and the COLRv1 emoji font). Override with
 
 ```sh
 $ sklein-devbox console
+$ sklein-devbox console --terminal=mosh
 $ sklein-devbox --name dev2 console
 $ sklein-devbox --dry-run console
 ```
@@ -107,8 +131,9 @@ $ sklein-devbox --dry-run console
 
 Checks that the required commands (`foot`, `incus`, `ssh`) and the `up`
 requirements (`incus`, `ssh-keygen`, `ssh-keyscan`, `getent`) are installed,
-then prints the resolved configuration. Exits non-zero when a command is
-missing.
+then reports the optional commands (`mosh`) and the resolved configuration.
+Exits non-zero when a required command is missing; a missing optional command
+does not affect the exit status.
 
 ```sh
 $ sklein-devbox doctor
@@ -123,11 +148,15 @@ $ sklein-devbox doctor
   ok    ssh-keyscan /usr/bin/ssh-keyscan
   ok    getent      /usr/bin/getent
 
+==> Optional commands
+  opt   mosh        not found (optional)
+
 ==> Configuration
   version   dev
   instance  sklein-devbox-dev1
   fqdn      sklein-devbox-dev1.homelab.stephane-klein.info
   user      devbox
+  terminal  auto
   foot.ini  /home/sklein/.config/sklein-devbox/foot.ini
 ```
 
@@ -239,6 +268,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_CONFIG_DIR` | `~/.config/sklein-devbox` | `foot.ini` directory |
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
+| `SKLEIN_DEVBOX_TERMINAL` | `auto` | `console` transport: `ssh`, `mosh` or `auto` |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |

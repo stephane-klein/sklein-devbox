@@ -23,6 +23,8 @@ PROG_NAME="${SKLEIN_DEVBOX_EXEC_NAME:-${0##*/}}"
 INSTANCE_NAME="${SKLEIN_DEVBOX_NAME:-dev1}"
 FQDN_SUFFIX="${SKLEIN_DEVBOX_FQDN_SUFFIX:-homelab.stephane-klein.info}"
 SSH_USER="${SKLEIN_DEVBOX_SSH_USER:-devbox}"
+TERMINAL_MODE="${SKLEIN_DEVBOX_TERMINAL:-}"
+TMUX_LOGIN_COMMAND="/usr/local/bin/ssh-tmux-login"
 FOOT_LOG_LEVEL="${SKLEIN_DEVBOX_FOOT_LOG_LEVEL:-error}"
 
 DRY_RUN=0
@@ -51,6 +53,21 @@ check_commands() {
     fi
   done
   if (( missing )); then return 1; fi
+  return 0
+}
+
+check_optional_commands() {
+  local cmd path w=0
+  for cmd in "$@"; do
+    if (( ${#cmd} > w )); then w=${#cmd}; fi
+  done
+  for cmd in "$@"; do
+    if path="$(command -v "$cmd" 2>/dev/null)"; then
+      printf '  ok    %-*s %s\n' "$w" "$cmd" "$path"
+    else
+      printf '  opt   %-*s not found (optional)\n' "$w" "$cmd"
+    fi
+  done
   return 0
 }
 
@@ -105,6 +122,8 @@ parse_global_flags() {
       -n|--name)    INSTANCE_NAME="${2:?--name requires a value}"; shift 2 ;;
       --name=*)     INSTANCE_NAME="${1#*=}"; shift ;;
       --dry-run)    DRY_RUN=1; shift ;;
+      --terminal)   TERMINAL_MODE="${2:?--terminal requires a value}"; shift 2 ;;
+      --terminal=*) TERMINAL_MODE="${1#*=}"; shift ;;
       -v|--version) printf '%s version %s\n' "$PROG_NAME" "$VERSION"; exit 0 ;;
       -h|--help)    HELP_REQUESTED=1; shift ;;
       --)           shift; POSITIONAL+=("$@"); break ;;
@@ -130,6 +149,7 @@ Flags:
       --dry-run      Print commands without executing
   -h, --help         help for $PROG_NAME
   -n, --name string  Instance name (default "$INSTANCE_NAME")
+      --terminal string  Terminal transport: ssh, mosh or auto (default "auto")
   -v, --version      version for $PROG_NAME
 
 Use "$PROG_NAME [command] --help" for more information about a command.
@@ -156,6 +176,11 @@ usage_extra_up() {
   printf '  %-40s  %s\n' SKLEIN_DEVBOX_VERBOSE "set -x trace in up"
 }
 
+usage_extra_console() {
+  printf '\nFlags:\n'
+  printf '  %-17s  %s\n' --terminal "Terminal transport: ssh, mosh or auto (default \"auto\")"
+}
+
 cmd_console() {
   local instance
   instance="$(instance_name)"
@@ -172,11 +197,35 @@ cmd_console() {
   if [ -n "$cfg" ]; then
     args+=(--config "$cfg")
   fi
-  args+=(-e ssh -t
-         -o StrictHostKeyChecking=accept-new
-         -o UserKnownHostsFile=/dev/null
-         -o LogLevel=ERROR
-         "${SSH_USER}@$(instance_fqdn)")
+  local -a ssh_opts=(-o StrictHostKeyChecking=accept-new
+                     -o UserKnownHostsFile=/dev/null
+                     -o LogLevel=ERROR)
+  local transport="$TERMINAL_MODE"
+  case "$transport" in
+    ""|auto)
+      if have mosh; then transport=mosh; else transport=ssh; fi
+      ;;
+  esac
+  local target="${SSH_USER}@$(instance_fqdn)"
+  case "$transport" in
+    ssh)
+      args+=(-e ssh -t "${ssh_opts[@]}" "$target")
+      ;;
+    mosh)
+      if (( ! DRY_RUN )); then
+        have mosh || die "mosh not found in PATH (use --terminal=ssh)"
+      fi
+      # mosh passes its own `--` before the remote command; the `--` here must
+      # therefore sit before the host (the command contains `-u`, which mosh's
+      # option parser would otherwise consume). mosh-server leaves
+      # SSH_ORIGINAL_COMMAND set, so it must be cleared or ssh-tmux-login would
+      # re-run mosh-server instead of starting tmux.
+      args+=(-e mosh "--ssh=ssh ${ssh_opts[*]}" -- "$target" env -u SSH_ORIGINAL_COMMAND "$TMUX_LOGIN_COMMAND")
+      ;;
+    *)
+      die "console: unknown terminal '$transport' (expected: ssh, mosh, auto)"
+      ;;
+  esac
   run foot "${args[@]}"
 }
 
@@ -188,12 +237,16 @@ cmd_doctor() {
   printf '\n==> Up requirements\n'
   check_commands "${UP_REQUIRED_COMMANDS[@]}" || rc=1
 
+  printf '\n==> Optional commands\n'
+  check_optional_commands mosh
+
   cfg="$(foot_config)"
   printf '\n==> Configuration\n'
   printf '  %-9s %s\n' version "$VERSION"
   printf '  %-9s %s\n' instance "$(instance_name)"
   printf '  %-9s %s\n' fqdn "$(instance_fqdn)"
   printf '  %-9s %s\n' user "$SSH_USER"
+  printf '  %-9s %s\n' terminal "${TERMINAL_MODE:-auto}"
   printf '  %-9s %s\n' foot.ini "${cfg:-(foot defaults)}"
   printf '  %-9s %s\n' foot-log "$FOOT_LOG_LEVEL"
 
@@ -655,11 +708,15 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--dry-run --help --name --version"
+  flags="--dry-run --help --name --version --terminal"
 
   case "$prev" in
     -n|--name)
       COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "$cur") )
+      return
+      ;;
+    --terminal)
+      COMPREPLY=( $(compgen -W "ssh mosh auto" -- "$cur") )
       return
       ;;
   esac
@@ -667,6 +724,10 @@ _@FUNC@_complete() {
   case "$cur" in
     --name=*)
       COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "${cur#--name=}") )
+      return
+      ;;
+    --terminal=*)
+      COMPREPLY=( $(compgen -W "ssh mosh auto" -- "${cur#--terminal=}") )
       return
       ;;
     -*)
@@ -700,6 +761,7 @@ names=( ${(f)"$(incus list @PREFIX@- -c n --format csv 2>/dev/null | sed -n 's/^
 _arguments -C \
   '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
   '--dry-run[print commands without executing]' \
+  '--terminal[terminal transport]:transport:(ssh mosh auto)' \
   '(-h --help)'{-h,--help}'[help]' \
   '(-v --version)'{-v,--version}'[version]' \
   '1:command:(${cmds[@]})' \
@@ -731,6 +793,7 @@ for sub in @CMDS@
 end
 complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
+complete -c $prog -f -l terminal -x -a 'ssh mosh auto' -d 'terminal transport'
 complete -c $prog -f -s h -l help -d 'help'
 complete -c $prog -f -s v -l version -d 'version'
 EOF

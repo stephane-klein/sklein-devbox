@@ -1,0 +1,17 @@
+#!/bin/bash
+# Remote-desktop link: the system xdg-open fails on the headless instance. This
+# wrapper calls the foot host's desktop portal (org.freedesktop.portal.OpenURI)
+# over the session bus reverse-forwarded to /tmp/foot-host-bus by the CLI's
+# `console` (sklein-devbox-foot-link-<instance>.service), so a remote
+# `xdg-open` opens the URL in the local foot host's browser.
+#
+# See: stephane-klein/foot-incus-ssh-tmux-osc52-poc (docs/remote-desktop-link.md).
+DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/foot-host-bus"
+export DBUS_SESSION_BUS_ADDRESS
+for url in "$@"; do
+  gdbus call --session \
+    --dest org.freedesktop.portal.Desktop \
+    --object-path /org/freedesktop/portal/desktop \
+    --method org.freedesktop.portal.OpenURI.OpenURI \
+    '' "$url" '{}' >/dev/null 2>&1
+done

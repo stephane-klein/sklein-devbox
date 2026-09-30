@@ -149,6 +149,34 @@ global config. The driver declares a `post-dotfiles` bootstrap hook with
 `dotfiles/.config/mise/config.toml` takes effect without a manual
 `mise install`.
 
+## Remote-desktop link
+
+The foot host gives the headless instance access to its desktop (open URLs,
+notifications, audio) over two reverse-unix-socket ssh forwards that the
+`sklein-devbox console` subcommand sets up as a per-instance systemd **user**
+unit on the foot host (`sklein-devbox-foot-link-<instance>.service`, one
+dedicated `ssh -N`). It is adapted from
+[stephane-klein/foot-incus-ssh-tmux-osc52-poc](https://github.com/stephane-klein/foot-incus-ssh-tmux-osc52-poc)
+(`docs/remote-desktop-link.md`).
+
+This repository provides the **instance side** of the link:
+
+- `[bootstrap.packages]` — `libnotify` (`notify-send`) and `pulseaudio-utils`
+  (`paplay`, `pactl`).
+- `files/xdg-open` deployed to `/usr/local/bin/xdg-open` — the system
+  `xdg-open` fails on the headless instance; this wrapper calls the foot host's
+  desktop portal (`org.freedesktop.portal.OpenURI`) over the forwarded session
+  bus.
+- `files/ssh-tmux-login` — exports `DBUS_SESSION_BUS_ADDRESS` and
+  `PULSE_SERVER` **only when** `/tmp/foot-host-bus` / `/tmp/foot-host-pulse`
+  exist (so a missing carrier does not leave the variables dangling, which
+  breaks podman's cgroup-manager detection), and mirrors them into the tmux
+  server/session environment (the wrapper's own environment only seeds the tmux
+  server at its creation, and `update-environment` does not list these
+  variables).
+- `files/sshd-foot-link.conf` (`StreamLocalBindUnlink yes`) — lets a restarted
+  carrier re-bind the reverse socket over a stale one.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.

@@ -120,9 +120,23 @@ foot is invoked with `--log-level=error` to silence benign warnings (the
 Wayland compositor and the COLRv1 emoji font). Override with
 `SKLEIN_DEVBOX_FOOT_LOG_LEVEL=warning` (or `info`) to see them again.
 
+Before opening foot, `console` ensures a dedicated **remote-desktop link**: a
+per-instance [systemd](https://systemd.io) **user** unit
+(`sklein-devbox-foot-link-<instance>.service`) running an `ssh -N` that
+reverse-forwards the foot host's session bus and audio server into the instance
+as the unix sockets `/tmp/foot-host-bus` and `/tmp/foot-host-pulse`.
+`ssh-tmux-login` exports them, so `notify-send`, `xdg-open` and `paplay` in the
+instance reach the local desktop. The unit is `enable`d and restarted only when
+its content changes (opening a second console does not flap it); it is stopped
+by `stop` and removed by `destroy`. Orphan units (instance deleted by other
+means) are pruned by `console` and `doctor`. Disable with `--no-link` or
+`SKLEIN_DEVBOX_FOOT_LINK=0`; a missing systemd user manager is a non-fatal
+warning.
+
 ```sh
 $ sklein-devbox console
 $ sklein-devbox console --terminal=mosh
+$ sklein-devbox --no-link console
 $ sklein-devbox --name dev2 console
 $ sklein-devbox --dry-run console
 ```
@@ -158,6 +172,13 @@ $ sklein-devbox doctor
   user      devbox
   terminal  auto
   foot.ini  /home/sklein/.config/sklein-devbox/foot.ini
+
+==> Remote-desktop link
+  systemd   available
+  unit      sklein-devbox-foot-link-dev1
+  path      /home/sklein/.config/systemd/user/sklein-devbox-foot-link-dev1.service
+  state     active
+  enabled   enabled
 ```
 
 ### `up`
@@ -269,6 +290,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
 | `SKLEIN_DEVBOX_TERMINAL` | `auto` | `console` transport: `ssh`, `mosh` or `auto` |
+| `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console` manages the reverse link (`0`/`--no-link` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |

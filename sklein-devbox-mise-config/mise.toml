@@ -51,6 +51,12 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 "dnf:pinentry" = "latest"
 "dnf:pinentry-tty" = "latest"
 
+# Remote-desktop link: notify-send and paplay/pactl reach the foot host's
+# desktop over the session dbus and pulse sockets reverse-forwarded into the
+# instance by the CLI's `console` (sklein-devbox-foot-link-<instance>.service).
+"dnf:libnotify" = "latest"
+"dnf:pulseaudio-utils" = "latest"
+
 [bootstrap.user]
 login_shell = "/bin/zsh"
 
@@ -221,6 +227,16 @@ mode = "0600"
 
 [bootstrap.files."/usr/local/bin/ssh-tmux-login"]
 source = "./files/ssh-tmux-login"
+owner = "root"
+group = "root"
+mode = "0755"
+
+# Remote-desktop link: the system xdg-open fails on the headless instance; this
+# wrapper calls the foot host's desktop portal (org.freedesktop.portal.OpenURI)
+# over the session bus reverse-forwarded to /tmp/foot-host-bus, so a remote
+# `xdg-open` opens the URL in the local foot host's browser.
+[bootstrap.files."/usr/local/bin/xdg-open"]
+source = "./files/xdg-open"
 owner = "root"
 group = "root"
 mode = "0755"

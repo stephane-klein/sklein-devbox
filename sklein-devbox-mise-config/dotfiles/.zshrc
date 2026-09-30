@@ -267,4 +267,8 @@ fi
 # ---
 export EDITOR="nvim"
 
+# gpg-agent/pinentry needs the terminal to prompt for the passphrase when
+# signing commits (git/jj). Evaluated per TTY, so it belongs in the shell rc.
+export GPG_TTY="$(tty)"
+
 alias opencode='TMUX= command opencode'

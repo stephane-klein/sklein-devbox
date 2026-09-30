@@ -44,6 +44,13 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 "dnf:make" = "latest"
 "dnf:cmake" = "latest"
 
+# GPG commit/tag signing (git, jj) needs a pinentry to prompt for the key
+# passphrase; the secret keys are imported into ~/.config/gnupg by
+# import-gpg-keys.sh. Without a pinentry, `jj git init` fails with
+# "gpg: signing failed: No pinentry".
+"dnf:pinentry" = "latest"
+"dnf:pinentry-tty" = "latest"
+
 [bootstrap.user]
 login_shell = "/bin/zsh"
 
@@ -121,6 +128,8 @@ starship = "1.26.0"
 "~/.config/containers"       = { mode = "copy" }
 "~/.config/git"              = { mode = "copy" }
 "~/.config/jj"               = { mode = "copy" }
+# gpg-agent config for commit/tag signing (pinentry + passphrase caching).
+"~/.config/gnupg/gpg-agent.conf" = { mode = "copy" }
 "~/.config/try-rs/"          = { mode = "copy" }
 "~/.config/yazi"             = { mode = "copy" }
 "~/.config/nvim"             = { mode = "copy" }

@@ -17,6 +17,12 @@ devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-conf
 [env]
 KUBECONFIG = "{{ env.HOME }}/.kube/config.d/00-current.kubeconfig:{{ env.HOME }}/.kube/config.d/homelab-stephane-klein-info.kubeconfig"
 
+# gpg keys are imported by ~/bin/import-gpg-keys.sh into ~/.config/gnupg (the
+# XDG location used on the workstation); gpg defaults to ~/.gnupg instead, so
+# expose GNUPGHOME to every mise-activated shell and task. Without it, jj/git
+# signing fails with "No secret key".
+GNUPGHOME = "{{ env.HOME }}/.config/gnupg"
+
 # Install the Python CLI tools with pipx instead of uv. mise's uv
 # dependency-graph locking names the install directory after a digest of the
 # freshly resolved uv.lock; uv stamps that lock with a fresh `exclude-newer`

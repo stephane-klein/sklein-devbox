@@ -263,3 +263,6 @@ unset -f _zsh_bind
 if command -v starship &> /dev/null; then
     eval "$(starship init zsh)"
 fi
+
+# ---
+export EDITOR="nvim"

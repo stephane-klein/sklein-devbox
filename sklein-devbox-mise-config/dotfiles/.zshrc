@@ -136,6 +136,53 @@ _try_rs_complete() {
 
 compdef _try_rs_complete try-rs
 
+# Key bindings for the editing keys, ported from oh-my-zsh's
+# lib/key-bindings.zsh (this setup does not load oh-my-zsh). Stock zsh binds
+# only the arrow keys: Delete/Home/End/... stay unbound and their escape
+# sequence leaks a trailing '~'. Ctrl-R is intentionally left to atuin.
+zmodload zsh/terminfo 2>/dev/null
+
+# Put the terminal in application mode while ZLE is active, so the sequences
+# read from $terminfo are the valid ones.
+if (( ${+terminfo[smkx]} )) && (( ${+terminfo[rmkx]} )); then
+    zle-line-init()   { echoti smkx }
+    zle-line-finish() { echoti rmkx }
+    zle -N zle-line-init
+    zle -N zle-line-finish
+fi
+
+bindkey -e
+
+_zsh_bind() {
+    [[ -z "$1" ]] && return
+    bindkey -M emacs "$1" "$2"
+    bindkey -M viins "$1" "$2"
+    bindkey -M vicmd "$1" "$2"
+}
+
+_zsh_bind "${terminfo[kpp]}"   up-line-or-history
+_zsh_bind "${terminfo[knp]}"   down-line-or-history
+_zsh_bind "${terminfo[khome]}" beginning-of-line
+_zsh_bind "${terminfo[kend]}"  end-of-line
+_zsh_bind "${terminfo[kcbt]}"  reverse-menu-complete
+if [[ -n "${terminfo[kdch1]}" ]]; then
+    _zsh_bind "${terminfo[kdch1]}" delete-char
+else
+    _zsh_bind '^[[3~' delete-char
+fi
+
+bindkey -M emacs '^[[1;5C' forward-word
+bindkey -M viins '^[[1;5C' forward-word
+bindkey -M vicmd '^[[1;5C' forward-word
+bindkey -M emacs '^[[1;5D' backward-word
+bindkey -M viins '^[[1;5D' backward-word
+bindkey -M vicmd '^[[1;5D' backward-word
+bindkey -M emacs '^[[3;5~' kill-word
+bindkey -M viins '^[[3;5~' kill-word
+bindkey -M vicmd '^[[3;5~' kill-word
+
+unset -f _zsh_bind
+
 # starship must be the LAST thing that sets the prompt: keep this block at
 # the end of the file, after every other prompt-affecting init.
 if command -v starship &> /dev/null; then

@@ -2,6 +2,14 @@
 -- Default options that are always set: https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/options.lua
 -- Add any additional options here
 
+-- OSC 52 clipboard over SSH. Inside tmux Neovim prefers its built-in "tmux"
+-- provider, whose paste reads tmux's own buffer, not the host clipboard. Force
+-- OSC 52 so copy/paste round-trip through tmux (set-clipboard/get-clipboard)
+-- to foot. Must run before any has('clipboard') call.
+if vim.env.SSH_CONNECTION or vim.env.SSH_TTY or vim.env.SSH_CLIENT then
+  vim.g.clipboard = "osc52"
+end
+
 vim.api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
   pattern = "*.lua",
   callback = function()

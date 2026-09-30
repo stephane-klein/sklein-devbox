@@ -266,3 +266,5 @@ fi
 
 # ---
 export EDITOR="nvim"
+
+alias opencode='TMUX= command opencode'

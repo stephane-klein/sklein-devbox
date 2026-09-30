@@ -13,6 +13,11 @@ show_preview = true
 enter_accept = false
 filter_mode = "global"
 
+# Interactive search UI (Ctrl-R): when running inside tmux, render it in a
+# floating display-popup over the current pane instead of drawing over it.
+[tmux]
+enabled = true
+
 # No cloud sync (local only)
 [sync]
 enabled = false

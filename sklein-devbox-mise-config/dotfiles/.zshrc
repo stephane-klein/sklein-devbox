@@ -42,10 +42,80 @@ if [[ -r "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh" ]]; then
     source "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh"
 fi
 
-# Atuin - advanced history with pwd, duration, and context
+# Atuin - advanced history with pwd, duration, and context.
+# Ctrl-R opens Atuin's global search (a popup in tmux, see
+# ~/.config/atuin/config.toml); the plain Up arrow keeps the native zsh
+# history (--disable-up-arrow). Ctrl-Up / Ctrl-Down are bound further down to
+# the inline "previous command" widgets below, scoped to the current shell
+# session (Atuin session history, no UI).
 if command -v atuin &> /dev/null; then
     eval "$(atuin init zsh --disable-up-arrow)"
 fi
+
+# Ctrl-Up / Ctrl-Down: inline recall of the commands run in the *current shell
+# session*, sourced from Atuin's session history. No UI, no tmux popup. The
+# key binding itself happens in the "Key bindings" section below.
+typeset -gi _atuin_sess_off=-1      # -1: not navigating; else offset from newest
+typeset -g  _atuin_sess_saved=""    # line being edited before navigation started
+typeset -g  _atuin_sess_shown=""    # value currently displayed by the widget
+
+_atuin_sess_fetch() {               # $1 = offset from the most recent session command
+    atuin search --filter-mode session --limit 1 --offset "$1" \
+        --cmd-only --print0 2>/dev/null | tr -d '\0'
+}
+
+_atuin_sess_reset() {
+    _atuin_sess_off=-1
+    _atuin_sess_shown=""
+}
+
+_atuin_sess_up() {
+    emulate -L zsh
+    # Move within a multi-line buffer instead of recalling history, like the
+    # shell's own up-line-or-history (mirrors Atuin's _atuin_up_search).
+    if (( _atuin_sess_off < 0 )) && [[ $BUFFER == *$'\n'* ]]; then
+        zle up-line
+        return 0
+    fi
+    [[ $BUFFER != $_atuin_sess_shown ]] && _atuin_sess_reset
+    (( _atuin_sess_off < 0 )) && _atuin_sess_saved=$BUFFER
+    local next=$(( _atuin_sess_off + 1 )) cmd
+    cmd=$(_atuin_sess_fetch "$next")
+    (( ${#cmd} == 0 )) && return 0
+    _atuin_sess_off=$next
+    _atuin_sess_shown=$cmd
+    BUFFER=$cmd
+    CURSOR=${#BUFFER}
+    zle redisplay
+}
+
+_atuin_sess_down() {
+    emulate -L zsh
+    if (( _atuin_sess_off < 0 )) && [[ $BUFFER == *$'\n'* ]]; then
+        zle down-line
+        return 0
+    fi
+    [[ $BUFFER != $_atuin_sess_shown ]] && _atuin_sess_reset
+    if (( _atuin_sess_off <= 0 )); then
+        _atuin_sess_reset
+        BUFFER=$_atuin_sess_saved
+        CURSOR=${#BUFFER}
+        zle redisplay
+        return 0
+    fi
+    local prev=$(( _atuin_sess_off - 1 )) cmd
+    cmd=$(_atuin_sess_fetch "$prev")
+    _atuin_sess_off=$prev
+    _atuin_sess_shown=$cmd
+    BUFFER=$cmd
+    CURSOR=${#BUFFER}
+    zle redisplay
+}
+
+zle -N _atuin_sess_up
+zle -N _atuin_sess_down
+autoload -U add-zsh-hook
+add-zsh-hook precmd _atuin_sess_reset
 
 # zoxide - smarter cd
 eval "$(zoxide init zsh)"
@@ -180,6 +250,11 @@ bindkey -M vicmd '^[[1;5D' backward-word
 bindkey -M emacs '^[[3;5~' kill-word
 bindkey -M viins '^[[3;5~' kill-word
 bindkey -M vicmd '^[[3;5~' kill-word
+
+# Ctrl-Up / Ctrl-Down: previous / next command of the current shell session
+# (inline, from Atuin's session history). Widgets defined near the Atuin block.
+_zsh_bind '^[[1;5A' _atuin_sess_up
+_zsh_bind '^[[1;5B' _atuin_sess_down
 
 unset -f _zsh_bind
 

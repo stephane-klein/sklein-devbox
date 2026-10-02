@@ -155,7 +155,9 @@ The foot host gives the headless instance access to its desktop (open URLs,
 notifications, audio) over two reverse-unix-socket ssh forwards that the
 `sklein-devbox console` subcommand sets up as a per-instance systemd **user**
 unit on the foot host (`sklein-devbox-foot-link-<instance>.service`, one
-dedicated `ssh -N`). It is adapted from
+dedicated `ssh -N`). The same link can be created, repaired or restarted for
+every running instance without opening foot with `sklein-devbox foot-link`. It
+is adapted from
 [stephane-klein/foot-incus-ssh-tmux-osc52-poc](https://github.com/stephane-klein/foot-incus-ssh-tmux-osc52-poc)
 (`docs/remote-desktop-link.md`).
 

@@ -89,13 +89,14 @@ declare -Ar CMD_DESC=(
   [console]="Open a tmux session in the devbox instance with a terminal emulator"
   [destroy]="Destroy the sklein-devbox instance and all its data"
   [doctor]="Check that the required commands are installed"
+  [foot-link]="Ensure the remote-desktop links (session bus + audio) to all instances"
   [help]="Help about any command"
   [list]="List all sklein-devbox instances"
   [logs]="Show cloud-init and bootstrap logs of the instance"
   [stop]="Stop the sklein-devbox instance"
   [up]="Start the sklein-devbox instance"
 )
-declare -ar CMD_ORDER=(completion console destroy doctor help list logs stop up)
+declare -ar CMD_ORDER=(completion console destroy doctor foot-link help list logs stop up)
 
 instance_name() { printf '%s-%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME"; }
 
@@ -165,6 +166,20 @@ WantedBy=default.target
 EOF
 }
 
+wait_for_foot_link_socket() {
+  local -a probe_opts=(-o StrictHostKeyChecking=accept-new
+                       -o UserKnownHostsFile=/dev/null
+                       -o LogLevel=ERROR)
+  local target="${SSH_USER}@$(instance_fqdn)" attempt
+  for attempt in $(seq 1 20); do
+    ssh "${probe_opts[@]}" "$target" \
+      "test -S $FOOT_LINK_BUS_SOCKET && test -S $FOOT_LINK_PULSE_SOCKET" >/dev/null 2>&1 \
+      && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
 ensure_foot_link() {
   foot_link_enabled || return 0
   local instance unit unit_path rendered
@@ -202,19 +217,14 @@ ensure_foot_link() {
       || printf 'foot-link: unable to start %s\n' "$unit" >&2
   fi
 
-  # Bounded probe: wait for the reverse socket on the instance so the first
+  # Bounded probe: wait for the reverse sockets on the instance so the first
   # console does not race ahead of the carrier (the unit's `ssh -N` binds the
   # forward asynchronously, after `systemctl start` has returned).
-  local -a probe_opts=(-o StrictHostKeyChecking=accept-new
-                       -o UserKnownHostsFile=/dev/null
-                       -o LogLevel=ERROR)
-  local target="${SSH_USER}@$(instance_fqdn)" attempt
-  for attempt in $(seq 1 20); do
-    ssh "${probe_opts[@]}" "$target" "test -S $FOOT_LINK_BUS_SOCKET" >/dev/null 2>&1 && return 0
-    sleep 0.25
-  done
-  printf 'foot-link: %s did not appear yet (carrier may still be connecting)\n' "$FOOT_LINK_BUS_SOCKET" >&2
-  return 0
+  if wait_for_foot_link_socket; then
+    return 0
+  fi
+  printf 'foot-link: reverse sockets did not appear yet (carrier may still be connecting)\n' >&2
+  return 1
 }
 
 prune_foot_links() {
@@ -327,6 +337,12 @@ usage_extra_console() {
   printf '%s\n' '--no-link or SKLEIN_DEVBOX_FOOT_LINK=0.'
 }
 
+usage_extra_foot_link() {
+  printf '\nEnsures the remote-desktop link (session bus + audio) for every running\n'
+  printf 'sklein-devbox instance: creates, repairs or restarts each per-instance\n'
+  printf 'systemd user unit without opening foot. Stopped instances are skipped.\n'
+}
+
 cmd_console() {
   local instance
   instance="$(instance_name)"
@@ -373,8 +389,47 @@ cmd_console() {
       die "console: unknown terminal '$transport' (expected: ssh, mosh, auto)"
       ;;
   esac
-  ensure_foot_link
+  ensure_foot_link || true
   run foot "${args[@]}"
+}
+
+cmd_foot_link() {
+  local name short state rc=0
+
+  foot_link_enabled \
+    || die "remote-desktop link disabled (--no-link or SKLEIN_DEVBOX_FOOT_LINK=0)"
+
+  have incus || die "incus not found in PATH"
+
+  if (( DRY_RUN )); then
+    while IFS=, read -r name state; do
+      [ -n "$name" ] || continue
+      INSTANCE_NAME="${name#${INSTANCE_PREFIX}-}"
+      ensure_foot_link
+    done < <(incus list "${INSTANCE_PREFIX}-" -c n,s --format csv 2>/dev/null)
+    return 0
+  fi
+
+  systemd_user_available || die "no systemd user manager; cannot manage the remote-desktop link"
+
+  prune_foot_links
+
+  while IFS=, read -r name state; do
+    [ -n "$name" ] || continue
+    if [ "$state" != "RUNNING" ]; then
+      printf '%s: skipped (instance is %s)\n' "$name" "${state:-unknown}" >&2
+      continue
+    fi
+    INSTANCE_NAME="${name#${INSTANCE_PREFIX}-}"
+    if ensure_foot_link; then
+      printf '%s: link up\n' "$name"
+    else
+      printf '%s: link NOT up\n' "$name" >&2
+      rc=1
+    fi
+  done < <(incus list "${INSTANCE_PREFIX}-" -c n,s --format csv 2>/dev/null)
+
+  return "$rc"
 }
 
 cmd_doctor() {
@@ -410,7 +465,7 @@ cmd_doctor() {
       printf '  %-9s %s\n' state "$(systemctl --user is-active "$unit" 2>/dev/null || true)"
       printf '  %-9s %s\n' enabled "$(systemctl --user is-enabled "$unit" 2>/dev/null || true)"
     else
-      printf '  %-9s %s\n' unit "$unit (not installed; run: $PROG_NAME console)"
+      printf '  %-9s %s\n' unit "$unit (not installed; run: $PROG_NAME foot-link)"
     fi
     prune_foot_links
   else
@@ -877,7 +932,7 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--dry-run --help --name --version --terminal"
+  flags="--dry-run --help --name --no-link --version --terminal"
 
   case "$prev" in
     -n|--name)
@@ -930,6 +985,7 @@ names=( ${(f)"$(incus list @PREFIX@- -c n --format csv 2>/dev/null | sed -n 's/^
 _arguments -C \
   '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
   '--dry-run[print commands without executing]' \
+  '--no-link[do not manage the remote-desktop link]' \
   '--terminal[terminal transport]:transport:(ssh mosh auto)' \
   '(-h --help)'{-h,--help}'[help]' \
   '(-v --version)'{-v,--version}'[version]' \
@@ -962,6 +1018,7 @@ for sub in @CMDS@
 end
 complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
+complete -c $prog -f -l no-link -d 'do not manage the remote-desktop link'
 complete -c $prog -f -l terminal -x -a 'ssh mosh auto' -d 'terminal transport'
 complete -c $prog -f -s h -l help -d 'help'
 complete -c $prog -f -s v -l version -d 'version'

@@ -54,6 +54,7 @@ Available Commands:
   console     Open a tmux session in the devbox instance with a terminal emulator
   destroy     Destroy the sklein-devbox instance and all its data
   doctor      Check that the required commands are installed
+  foot-link   Ensure the remote-desktop links (session bus + audio) to all instances
   help        Help about any command
   list        List all sklein-devbox instances
   logs        Show cloud-init and bootstrap logs of the instance
@@ -131,7 +132,8 @@ its content changes (opening a second console does not flap it); it is stopped
 by `stop` and removed by `destroy`. Orphan units (instance deleted by other
 means) are pruned by `console` and `doctor`. Disable with `--no-link` or
 `SKLEIN_DEVBOX_FOOT_LINK=0`; a missing systemd user manager is a non-fatal
-warning.
+warning. The same link can be created, repaired or restarted on its own with
+`foot-link`.
 
 ```sh
 $ sklein-devbox console
@@ -139,6 +141,24 @@ $ sklein-devbox console --terminal=mosh
 $ sklein-devbox --no-link console
 $ sklein-devbox --name dev2 console
 $ sklein-devbox --dry-run console
+```
+
+### `foot-link`
+
+Ensures the remote-desktop link (the `ssh -N` reverse-forwarding the foot host
+session bus and audio server into the instance) for **every running**
+`sklein-devbox-*` instance: creates, repairs or restarts each per-instance
+systemd **user** unit, **without opening foot**. Stopped instances are skipped
+and `--name` is ignored. A disabled link (`--no-link` /
+`SKLEIN_DEVBOX_FOOT_LINK=0`) or a missing systemd user manager fails with an
+explicit message. The exit status is non-zero when at least one running
+instance's link did not come up.
+
+```sh
+$ sklein-devbox foot-link
+sklein-devbox-dev: link up
+sklein-devbox-dev2: link up
+sklein-devbox-dev3: skipped (instance is STOPPED)
 ```
 
 ### `doctor`
@@ -290,7 +310,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
 | `SKLEIN_DEVBOX_TERMINAL` | `auto` | `console` transport: `ssh`, `mosh` or `auto` |
-| `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console` manages the reverse link (`0`/`--no-link` to disable) |
+| `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console`/`foot-link` manage the reverse link (`0`/`--no-link` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |

@@ -300,8 +300,8 @@ EOF
 usage_for() {
   local cmd="$1"
   printf '%s\n\nUsage:\n  %s %s\n' "${CMD_DESC[$cmd]}" "$PROG_NAME" "$cmd"
-  if declare -F "usage_extra_$cmd" >/dev/null; then
-    "usage_extra_$cmd"
+  if declare -F "usage_extra_${cmd//-/_}" >/dev/null; then
+    "usage_extra_${cmd//-/_}"
   fi
 }
 
@@ -1035,7 +1035,7 @@ usage_extra_completion() {
 
 cmd_help() {
   local cmd="${1:-}"
-  if [ -n "$cmd" ] && declare -F "cmd_$cmd" >/dev/null; then
+  if [ -n "$cmd" ] && declare -F "cmd_${cmd//-/_}" >/dev/null; then
     usage_for "$cmd"
   else
     usage
@@ -1048,7 +1048,7 @@ main() {
   local cmd="${POSITIONAL[0]:-}"
 
   if (( HELP_REQUESTED )) && [ -n "$cmd" ]; then
-    if declare -F "cmd_$cmd" >/dev/null; then usage_for "$cmd"; else usage; fi
+    if declare -F "cmd_${cmd//-/_}" >/dev/null; then usage_for "$cmd"; else usage; fi
     return 0
   fi
 
@@ -1057,8 +1057,9 @@ main() {
     return 0
   fi
 
-  declare -F "cmd_$cmd" >/dev/null || die "unknown command \"$cmd\" for \"$PROG_NAME\""
-  "cmd_$cmd" "${POSITIONAL[@]:1}"
+  local fn="cmd_${cmd//-/_}"
+  declare -F "$fn" >/dev/null || die "unknown command \"$cmd\" for \"$PROG_NAME\""
+  "$fn" "${POSITIONAL[@]:1}"
 }
 
 main "$@"

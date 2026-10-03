@@ -179,6 +179,24 @@ This repository provides the **instance side** of the link:
 - `files/sshd-foot-link.conf` (`StreamLocalBindUnlink yes`) — lets a restarted
   carrier re-bind the reverse socket over a stale one.
 
+## Instance doctor
+
+`dotfiles/bin/sklein-devbox-doctor` is deployed to `~/bin/sklein-devbox-doctor`
+(that directory is not on `PATH`, so invoke it by path). Run it from a console
+inside the instance to exercise the instance side of the link end to end:
+
+- it first runs `mise doctor`;
+- then it walks through the link capabilities, asking after each whether you
+  perceived the effect — a desktop notification (`notify-send`), a sound
+  (`paplay`, default `~/.local/share/sklein-devbox/sounds/door-bell.ogg`) and a
+  URL (`xdg-open`).
+
+A transport failure (missing socket, unreachable bus) is reported separately
+from a perception failure, and the exit status is non-zero when a check fails.
+When both `/tmp/foot-host-bus` and `/tmp/foot-host-pulse` are missing it exits 2
+and points at `sklein-devbox foot-link` to run on the foot host. The default
+sound is CC0; see `files/sounds/README.md`.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.

@@ -198,6 +198,7 @@ starship = "1.26.0"
 "~/bin/install-or-update-neovim.sh" = { mode ="copy", permissions = "0700" }
 "~/bin/switch-opencode-auth-1.sh"   = { mode ="copy", permissions = "0700" }
 "~/bin/switch-opencode-auth-2.sh"   = { mode ="copy", permissions = "0700" }
+"~/bin/sklein-devbox-doctor"        = { mode ="copy", permissions = "0755" }
 
 [bootstrap.directories."~/.kube/"]
 mode = "0700"
@@ -240,6 +241,12 @@ source = "./files/xdg-open"
 owner = "root"
 group = "root"
 mode = "0755"
+
+# Default sound for the audio check of `~/bin/sklein-devbox-doctor` (CC0, see
+# files/sounds/README.md).
+[bootstrap.files."~/.local/share/sklein-devbox/sounds/door-bell.ogg"]
+source = "./files/sounds/door-bell.ogg"
+mode = "0644"
 
 [bootstrap.files."/etc/ssh/sshd_config.d/20-tmux-force.conf"]
 source = "./files/sshd-tmux-force.conf"

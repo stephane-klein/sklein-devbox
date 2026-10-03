@@ -57,6 +57,12 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 "dnf:libnotify" = "latest"
 "dnf:pulseaudio-utils" = "latest"
 
+# Wayland clipboard: wl-copy/wl-paste reach the foot host's compositor socket,
+# reverse-forwarded into the instance (sklein-devbox-foot-link-<instance>.service).
+# Neovim uses the "wl-copy" clipboard provider, so both directions go through
+# the host clipboard instead of the tmux buffer / OSC 52.
+"dnf:wl-clipboard" = "latest"
+
 [bootstrap.user]
 login_shell = "/bin/zsh"
 

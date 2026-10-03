@@ -27,8 +27,26 @@ TERMINAL_MODE="${SKLEIN_DEVBOX_TERMINAL:-}"
 TMUX_LOGIN_COMMAND="/usr/local/bin/ssh-tmux-login"
 FOOT_LOG_LEVEL="${SKLEIN_DEVBOX_FOOT_LOG_LEVEL:-error}"
 FOOT_LINK="${SKLEIN_DEVBOX_FOOT_LINK:-1}"
+# Wayland link (host compositor socket reverse-forwarded into the instance) is
+# optional and on by default; disable with --no-wayland or
+# SKLEIN_DEVBOX_FOOT_LINK_WAYLAND=0.
+FOOT_LINK_WAYLAND="${SKLEIN_DEVBOX_FOOT_LINK_WAYLAND:-1}"
 FOOT_LINK_BUS_SOCKET="/tmp/foot-host-bus"
 FOOT_LINK_PULSE_SOCKET="/tmp/foot-host-pulse"
+# Wayland socket reverse-forwarded into the instance (wl-clipboard, wayland
+# clients). The instance points XDG_RUNTIME_DIR at the socket's parent and
+# WAYLAND_DISPLAY at its base name.
+FOOT_LINK_WAYLAND_SOCKET="/tmp/foot-host-wayland"
+# Absolute path of the host compositor's Wayland socket. WAYLAND_DISPLAY is a
+# base name relative to XDG_RUNTIME_DIR in the common case, but some sessions
+# (e.g. this workstation's foot/Sway setup) export an absolute path already.
+wayland_socket_path() {
+  local display="${WAYLAND_DISPLAY:-wayland-0}"
+  case "$display" in
+    /*) printf '%s' "$display" ;;
+    *)  printf '%s/%s' "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" "$display" ;;
+  esac
+}
 
 DRY_RUN=0
 HELP_REQUESTED=0
@@ -89,7 +107,7 @@ declare -Ar CMD_DESC=(
   [console]="Open a tmux session in the devbox instance with a terminal emulator"
   [destroy]="Destroy the sklein-devbox instance and all its data"
   [doctor]="Check that the required commands are installed"
-  [foot-link]="Ensure the remote-desktop links (session bus + audio) to all instances"
+  [foot-link]="Ensure the remote-desktop links (session bus + audio + wayland) to all instances"
   [help]="Help about any command"
   [list]="List all sklein-devbox instances"
   [logs]="Show cloud-init and bootstrap logs of the instance"
@@ -122,9 +140,10 @@ foot_config() {
 
 # --- Remote-desktop link (foot host -> instance reverse carrier) -------------
 # A dedicated `ssh -N` (systemd user unit, one per instance) reverse-forwards the
-# foot host's session bus and audio server into the instance as the unix sockets
-# /tmp/foot-host-bus and /tmp/foot-host-pulse. ssh-tmux-login exports them, so
-# notify-send, xdg-open and paplay reach the local desktop. See the POC
+# foot host's session bus, audio server and Wayland compositor into the instance
+# as the unix sockets /tmp/foot-host-bus, /tmp/foot-host-pulse and
+# /tmp/foot-host-wayland. ssh-tmux-login exports them, so notify-send, xdg-open,
+# paplay and wl-clipboard reach the local desktop. See the POC
 # stephane-klein/foot-incus-ssh-tmux-osc52-poc.
 
 foot_link_unit_name() { printf '%s-foot-link-%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME"; }
@@ -146,16 +165,31 @@ foot_link_enabled() {
   esac
 }
 
+foot_link_wayland_enabled() {
+  case "$FOOT_LINK_WAYLAND" in
+    ""|0|false|no|off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 foot_link_unit_content() {
-  local instance="$1" ssh_bin
+  local instance="$1" ssh_bin wayland_forward="" wayland_desc="" wayland_socket
   ssh_bin="$(command -v ssh || printf /usr/bin/ssh)"
+  wayland_socket="$(wayland_socket_path)"
+  # Only add the Wayland forward when enabled and the host has a running
+  # compositor socket; otherwise `ssh -R` would fail to bind and
+  # ExitOnForwardFailure would kill the carrier (dbus + audio) too.
+  if foot_link_wayland_enabled && [ -S "$wayland_socket" ]; then
+    wayland_forward=" -R ${FOOT_LINK_WAYLAND_SOCKET}:${wayland_socket}"
+    wayland_desc=" + wayland"
+  fi
   cat <<EOF
 [Unit]
-Description=sklein-devbox foot host -> ${instance} reverse link (session dbus + audio)
+Description=sklein-devbox foot host -> ${instance} reverse link (session dbus + audio${wayland_desc})
 
 [Service]
 Type=simple
-ExecStart=${ssh_bin} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -R ${FOOT_LINK_BUS_SOCKET}:%t/bus -R ${FOOT_LINK_PULSE_SOCKET}:%t/pulse/native ${SSH_USER}@$(instance_fqdn)
+ExecStart=${ssh_bin} -N -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -R ${FOOT_LINK_BUS_SOCKET}:%t/bus -R ${FOOT_LINK_PULSE_SOCKET}:%t/pulse/native${wayland_forward} ${SSH_USER}@$(instance_fqdn)
 Restart=on-failure
 RestartSec=5
 StartLimitIntervalSec=300
@@ -170,10 +204,14 @@ wait_for_foot_link_socket() {
   local -a probe_opts=(-o StrictHostKeyChecking=accept-new
                        -o UserKnownHostsFile=/dev/null
                        -o LogLevel=ERROR)
-  local target="${SSH_USER}@$(instance_fqdn)" attempt
+  local target="${SSH_USER}@$(instance_fqdn)" attempt requirement
+  requirement="test -S $FOOT_LINK_BUS_SOCKET && test -S $FOOT_LINK_PULSE_SOCKET"
+  # Only require the Wayland socket when the forward was actually added.
+  if foot_link_wayland_enabled && [ -S "$(wayland_socket_path)" ]; then
+    requirement="$requirement && test -S $FOOT_LINK_WAYLAND_SOCKET"
+  fi
   for attempt in $(seq 1 20); do
-    ssh "${probe_opts[@]}" "$target" \
-      "test -S $FOOT_LINK_BUS_SOCKET && test -S $FOOT_LINK_PULSE_SOCKET" >/dev/null 2>&1 \
+    ssh "${probe_opts[@]}" "$target" "$requirement" >/dev/null 2>&1 \
       && return 0
     sleep 0.25
   done
@@ -274,6 +312,7 @@ parse_global_flags() {
       --terminal)   TERMINAL_MODE="${2:?--terminal requires a value}"; shift 2 ;;
       --terminal=*) TERMINAL_MODE="${1#*=}"; shift ;;
       --no-link)    FOOT_LINK=0; shift ;;
+      --no-wayland) FOOT_LINK_WAYLAND=0; shift ;;
       -v|--version) printf '%s version %s\n' "$PROG_NAME" "$VERSION"; exit 0 ;;
       -h|--help)    HELP_REQUESTED=1; shift ;;
       --)           shift; POSITIONAL+=("$@"); break ;;
@@ -300,6 +339,7 @@ Flags:
   -h, --help         help for $PROG_NAME
   -n, --name string  Instance name (default "$INSTANCE_NAME")
       --no-link      Do not manage the foot host -> instance reverse link
+      --no-wayland   Do not forward the host Wayland socket in the reverse link
       --terminal string  Terminal transport: ssh, mosh or auto (default "auto")
   -v, --version      version for $PROG_NAME
 
@@ -331,16 +371,19 @@ usage_extra_console() {
   printf '\nFlags:\n'
   printf '  %-17s  %s\n' --terminal "Terminal transport: ssh, mosh or auto (default \"auto\")"
   printf '  %-17s  %s\n' --no-link "Do not manage the foot host -> instance reverse link"
+  printf '  %-17s  %s\n' --no-wayland "Do not forward the host Wayland socket (wl-clipboard)"
   printf '\nBefore opening foot, console (re)starts a per-instance systemd user\n'
-  printf 'unit that reverse-forwards the foot host session bus and audio server\n'
-  printf 'into the instance (notify-send, xdg-open, paplay). Disable with\n'
-  printf '%s\n' '--no-link or SKLEIN_DEVBOX_FOOT_LINK=0.'
+  printf 'unit that reverse-forwards the foot host session bus, audio server and\n'
+  printf 'Wayland compositor into the instance (notify-send, xdg-open, paplay,\n'
+  printf 'wl-clipboard). Disable the whole link with --no-link, only its Wayland\n'
+  printf 'part with --no-wayland (or SKLEIN_DEVBOX_FOOT_LINK[_WAYLAND]=0).\n'
 }
 
 usage_extra_foot_link() {
-  printf '\nEnsures the remote-desktop link (session bus + audio) for every running\n'
-  printf 'sklein-devbox instance: creates, repairs or restarts each per-instance\n'
-  printf 'systemd user unit without opening foot. Stopped instances are skipped.\n'
+  printf '\nEnsures the remote-desktop link (session bus + audio + wayland) for every\n'
+  printf 'running sklein-devbox instance: creates, repairs or restarts each\n'
+  printf 'per-instance systemd user unit without opening foot. Stopped instances\n'
+  printf 'are skipped.\n'
 }
 
 cmd_console() {
@@ -452,6 +495,17 @@ cmd_doctor() {
   printf '  %-9s %s\n' terminal "${TERMINAL_MODE:-auto}"
   printf '  %-9s %s\n' foot.ini "${cfg:-(foot defaults)}"
   printf '  %-9s %s\n' foot-log "$FOOT_LOG_LEVEL"
+  local ws
+  ws="$(wayland_socket_path)"
+  if foot_link_wayland_enabled; then
+    if [ -S "$ws" ]; then
+      printf '  %-9s %s\n' wayland "enabled ($ws)"
+    else
+      printf '  %-9s %s\n' wayland "enabled (no host socket at $ws)"
+    fi
+  else
+    printf '  %-9s %s\n' wayland "disabled (--no-wayland or SKLEIN_DEVBOX_FOOT_LINK_WAYLAND=0)"
+  fi
 
   printf '\n==> Remote-desktop link\n'
   if systemd_user_available; then
@@ -464,6 +518,13 @@ cmd_doctor() {
       printf '  %-9s %s\n' path "$unit_path"
       printf '  %-9s %s\n' state "$(systemctl --user is-active "$unit" 2>/dev/null || true)"
       printf '  %-9s %s\n' enabled "$(systemctl --user is-enabled "$unit" 2>/dev/null || true)"
+      if foot_link_wayland_enabled && [ -S "$ws" ]; then
+        if grep -q -- "foot-host-wayland" "$unit_path" 2>/dev/null; then
+          printf '  %-9s %s\n' wayland-fwd "present"
+        else
+          printf '  %-9s %s\n' wayland-fwd "missing (stale unit; run: $PROG_NAME foot-link)"
+        fi
+      fi
     else
       printf '  %-9s %s\n' unit "$unit (not installed; run: $PROG_NAME foot-link)"
     fi
@@ -932,7 +993,7 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--dry-run --help --name --no-link --version --terminal"
+  flags="--dry-run --help --name --no-link --no-wayland --version --terminal"
 
   case "$prev" in
     -n|--name)
@@ -986,6 +1047,7 @@ _arguments -C \
   '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
   '--dry-run[print commands without executing]' \
   '--no-link[do not manage the remote-desktop link]' \
+  '--no-wayland[do not forward the host Wayland socket]' \
   '--terminal[terminal transport]:transport:(ssh mosh auto)' \
   '(-h --help)'{-h,--help}'[help]' \
   '(-v --version)'{-v,--version}'[version]' \
@@ -1019,6 +1081,7 @@ end
 complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
 complete -c $prog -f -l no-link -d 'do not manage the remote-desktop link'
+complete -c $prog -f -l no-wayland -d 'do not forward the host Wayland socket'
 complete -c $prog -f -l terminal -x -a 'ssh mosh auto' -d 'terminal transport'
 complete -c $prog -f -s h -l help -d 'help'
 complete -c $prog -f -s v -l version -d 'version'

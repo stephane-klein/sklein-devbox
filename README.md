@@ -141,8 +141,13 @@ $ mise run foot
 
 foot is used for what a plain terminal cannot do over the SSH + tmux chain:
 
-- **bidirectional OSC 52 clipboard** — copy/paste between the local desktop and
-  the container, including through tmux;
+- **bidirectional host clipboard** — the foot host reverse-forwards its Wayland
+  compositor socket into the container (`/tmp/foot-host-wayland`, same carrier
+  as the session bus and audio), so `wl-copy`/`wl-paste` and Neovim's `wl-copy`
+  provider copy/paste against the real desktop clipboard, in both directions
+  and over ssh or mosh. This part of the link is optional: disable it with
+  `--no-wayland` (or `SKLEIN_DEVBOX_FOOT_LINK_WAYLAND=0`), in which case Neovim
+  falls back to the tmux clipboard provider;
 - **SIXEL image rendering** — `chafa`, `img2sixel`, and Neovim's `image.nvim`
   display images inline;
 - **tmux auto-start** — `ssh -t` forces a tty and the login is routed through
@@ -259,3 +264,26 @@ reflects the current gopass values. The `REGISTRY_TOKEN` value comes from the
 by `mise run //apps/forgejo:container-registry-token` in the homelab repository;
 `MISE_GITHUB_TOKEN` comes from `github/mise-ci-readonly` (create the fine-grained
 token in the GitHub UI first).
+
+## FAQ
+
+### Pourquoi le presse-papier passe-t-il par un socket Wayland, et pas par waypipe ?
+
+Le presse-papier repose aujourd'hui sur le **socket Wayland reverse-forwardé**
+(`/tmp/foot-host-wayland`, sur le même transport que le bus de session et
+l'audio de la `foot-link`). C'est minimal et suffisant : `wl-copy`/`wl-paste`
+— donc Neovim, qui sélectionne son provider `wl-copy`, et tout client Wayland —
+parlent directement au compositeur de l'hôte, dans les deux sens, en ssh comme
+en mosh.
+
+Une **évolution future** consisterait à utiliser
+[waypipe](https://gitlab.freedesktop.org/mstoeckl/waypipe) pour **proxifier** le
+protocole Wayland à travers ssh, au lieu de partager le socket du compositeur.
+Le principal intérêt serait d'**afficher des applications graphiques Wayland du
+conteneur sur le bureau de l'hôte** — et plus généralement de ne pas exposer
+directement le socket du compositeur. Ce n'est **pas implémenté** à ce stade.
+
+Pour le seul presse-papier, le socket reste le chemin le plus court et le plus
+simple à diagnostiquer : waypipe ajoute une couche de rendu/dmabuf et un wrapper
+`waypipe ssh` aux deux extrémités, justifié seulement si l'affichage GUI du
+conteneur devient un besoin.

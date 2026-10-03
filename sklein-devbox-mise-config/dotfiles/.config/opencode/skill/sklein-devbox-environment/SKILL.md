@@ -26,8 +26,11 @@ machine and not in a virtual machine.
 - Base OS: **Fedora** (Container Image variant).
 - The kernel is **shared with the host machine** — an LXC container has no kernel
   of its own.
-- **Headless**: no graphical environment (no X, no Wayland); access is terminal-only
-  (SSH / foot / tmux).
+- **Headless**: no graphical environment of its own; access is terminal-only
+  (SSH / foot / tmux). A Wayland compositor is **not** present inside the
+  container, but the foot host reverse-forwards its compositor socket into the
+  instance (`/tmp/foot-host-wayland`), so `wl-copy`/`wl-paste` and Wayland
+  clients reach the host desktop clipboard (see `ssh-tmux-login`).
 - **SELinux is disabled** inside the container.
 - User **`devbox`** (uid 1000), with passwordless `sudo`.
 - Package manager: **`dnf`** (dnf5).

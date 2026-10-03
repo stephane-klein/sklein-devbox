@@ -54,7 +54,7 @@ Available Commands:
   console     Open a tmux session in the devbox instance with a terminal emulator
   destroy     Destroy the sklein-devbox instance and all its data
   doctor      Check that the required commands are installed
-  foot-link   Ensure the remote-desktop links (session bus + audio) to all instances
+  foot-link   Ensure the remote-desktop links (session bus + audio + wayland) to all instances
   help        Help about any command
   list        List all sklein-devbox instances
   logs        Show cloud-init and bootstrap logs of the instance
@@ -124,21 +124,27 @@ Wayland compositor and the COLRv1 emoji font). Override with
 Before opening foot, `console` ensures a dedicated **remote-desktop link**: a
 per-instance [systemd](https://systemd.io) **user** unit
 (`sklein-devbox-foot-link-<instance>.service`) running an `ssh -N` that
-reverse-forwards the foot host's session bus and audio server into the instance
-as the unix sockets `/tmp/foot-host-bus` and `/tmp/foot-host-pulse`.
-`ssh-tmux-login` exports them, so `notify-send`, `xdg-open` and `paplay` in the
-instance reach the local desktop. The unit is `enable`d and restarted only when
-its content changes (opening a second console does not flap it); it is stopped
-by `stop` and removed by `destroy`. Orphan units (instance deleted by other
-means) are pruned by `console` and `doctor`. Disable with `--no-link` or
-`SKLEIN_DEVBOX_FOOT_LINK=0`; a missing systemd user manager is a non-fatal
-warning. The same link can be created, repaired or restarted on its own with
-`foot-link`.
+reverse-forwards the foot host's session bus, audio server and Wayland
+compositor into the instance as the unix sockets `/tmp/foot-host-bus`,
+`/tmp/foot-host-pulse` and `/tmp/foot-host-wayland` (the Wayland forward is
+added only when the host has a running compositor socket and Wayland is not
+disabled).
+`ssh-tmux-login` exports them, so `notify-send`, `xdg-open`, `paplay` and
+`wl-copy`/`wl-paste` in the instance reach the local desktop. The unit is
+`enable`d and restarted only when its content changes (opening a second console
+does not flap it); it is stopped by `stop` and removed by `destroy`. Orphan
+units (instance deleted by other means) are pruned by `console` and `doctor`.
+Disable the whole link with `--no-link` or `SKLEIN_DEVBOX_FOOT_LINK=0`; disable
+only its Wayland part with `--no-wayland` or
+`SKLEIN_DEVBOX_FOOT_LINK_WAYLAND=0`. A missing systemd user manager is a
+non-fatal warning. The same link can be created, repaired or restarted on its
+own with `foot-link`.
 
 ```sh
 $ sklein-devbox console
 $ sklein-devbox console --terminal=mosh
 $ sklein-devbox --no-link console
+$ sklein-devbox --no-wayland console
 $ sklein-devbox --name dev2 console
 $ sklein-devbox --dry-run console
 ```
@@ -146,10 +152,10 @@ $ sklein-devbox --dry-run console
 ### `foot-link`
 
 Ensures the remote-desktop link (the `ssh -N` reverse-forwarding the foot host
-session bus and audio server into the instance) for **every running**
-`sklein-devbox-*` instance: creates, repairs or restarts each per-instance
-systemd **user** unit, **without opening foot**. Stopped instances are skipped
-and `--name` is ignored. A disabled link (`--no-link` /
+session bus, audio server and Wayland compositor into the instance) for **every
+running** `sklein-devbox-*` instance: creates, repairs or restarts each
+per-instance systemd **user** unit, **without opening foot**. Stopped instances
+are skipped and `--name` is ignored. A disabled link (`--no-link` /
 `SKLEIN_DEVBOX_FOOT_LINK=0`) or a missing systemd user manager fails with an
 explicit message. The exit status is non-zero when at least one running
 instance's link did not come up.
@@ -311,6 +317,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
 | `SKLEIN_DEVBOX_TERMINAL` | `auto` | `console` transport: `ssh`, `mosh` or `auto` |
 | `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console`/`foot-link` manage the reverse link (`0`/`--no-link` to disable) |
+| `SKLEIN_DEVBOX_FOOT_LINK_WAYLAND` | `1` | reverse-forward the host Wayland socket (`0`/`--no-wayland` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |

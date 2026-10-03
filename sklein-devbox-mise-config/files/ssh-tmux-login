@@ -32,11 +32,11 @@ export LANG=C.UTF-8
 PATH="$HOME/.local/share/mise/shims:$PATH"
 export PATH
 
-# Remote-desktop link: the foot host forwards its session bus and audio server
-# into the instance over two reverse-unix-socket ssh forwards (created by the
-# sklein-devbox CLI `console` subcommand). Export the sockets only when the
-# carrier actually created them: a missing carrier (instance just booted,
-# carrier down) must not leave the variables dangling, since a dead
+# Remote-desktop link: the foot host forwards its session bus, audio server and
+# Wayland compositor into the instance over reverse-unix-socket ssh forwards
+# (created by the sklein-devbox CLI `console` subcommand). Export the sockets
+# only when the carrier actually created them: a missing carrier (instance just
+# booted, carrier down) must not leave the variables dangling, since a dead
 # DBUS_SESSION_BUS_ADDRESS breaks podman's cgroup-manager detection and makes
 # notify-send/xdg-open/paplay fail.
 if [ -S /tmp/foot-host-bus ]; then
@@ -50,6 +50,18 @@ if [ -S /tmp/foot-host-pulse ]; then
   export PULSE_SERVER
 else
   unset PULSE_SERVER
+fi
+
+# Wayland link: the foot host reverse-forwards its compositor socket to
+# /tmp/foot-host-wayland (same carrier as the bus/audio). Point wl-clipboard
+# (and any Wayland client) at it: XDG_RUNTIME_DIR is the socket's parent and
+# WAYLAND_DISPLAY its base name, the two variables libwayland-client expects.
+if [ -S /tmp/foot-host-wayland ]; then
+  XDG_RUNTIME_DIR=/tmp
+  WAYLAND_DISPLAY=foot-host-wayland
+  export XDG_RUNTIME_DIR WAYLAND_DISPLAY
+else
+  unset XDG_RUNTIME_DIR WAYLAND_DISPLAY
 fi
 
 # Propagate the two variables into a tmux environment target (global with `-g`,
@@ -67,6 +79,13 @@ sync_tmux_link_env() {
     tmux set-environment "$@" PULSE_SERVER "$PULSE_SERVER" 2>/dev/null || true
   else
     tmux set-environment "$@" -u PULSE_SERVER 2>/dev/null || true
+  fi
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    tmux set-environment "$@" XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR" 2>/dev/null || true
+    tmux set-environment "$@" WAYLAND_DISPLAY "$WAYLAND_DISPLAY" 2>/dev/null || true
+  else
+    tmux set-environment "$@" -u XDG_RUNTIME_DIR 2>/dev/null || true
+    tmux set-environment "$@" -u WAYLAND_DISPLAY 2>/dev/null || true
   fi
 }
 

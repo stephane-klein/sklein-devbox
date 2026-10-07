@@ -96,13 +96,17 @@ otherwise `console` fails with an explicit message.
 
 The transport is selected with `--terminal` (or `SKLEIN_DEVBOX_TERMINAL`):
 
-- `auto` (default): [mosh](https://mosh.org) when the `mosh` client is installed
-  on this machine, `ssh` otherwise;
-- `ssh`: `ssh -t` against the instance (equivalent to `mise run ssh`);
-- `mosh`: `mosh` against the instance. The ssh bootstrap reuses the same
-  `StrictHostKeyChecking`, `UserKnownHostsFile` and `LogLevel` options, and mosh
-  launches `env -u SSH_ORIGINAL_COMMAND /usr/local/bin/ssh-tmux-login`, so the
-  shared tmux workspace is preserved.
+- `ssh` (default): `ssh -t` against the instance, equivalent to `mise run ssh`;
+- `mosh`: `mosh` against the instance — opt-in. The ssh bootstrap reuses the
+  same `StrictHostKeyChecking`, `UserKnownHostsFile` and `LogLevel` options, and
+  mosh launches `env -u SSH_ORIGINAL_COMMAND /usr/local/bin/ssh-tmux-login`, so
+  the shared tmux workspace is preserved.
+
+  **Clipboard caveat**: mosh 1.4.0 only implements OSC 52 in the *write*
+  direction, so it can never *read* the host clipboard — pasting from the host
+  does not work (copying out of the instance does). `ssh` is required to read
+  the host clipboard (and is the default); `console` prints a warning when mosh
+  is selected.
 
   `SSH_ORIGINAL_COMMAND` must be cleared: `mosh-server` forwards it to the
   command it launches, and `ssh-tmux-login` (the sshd `ForceCommand`) uses it to
@@ -113,9 +117,8 @@ The transport is selected with `--terminal` (or `SKLEIN_DEVBOX_TERMINAL`):
   which mosh's own option parser would otherwise consume.
 
 `mosh` is an **optional** dependency: the client only needs to be present where
-the CLI runs (the `mosh-server` side is installed inside the instance). Without
-it, `console` falls back to `ssh`. Forcing `--terminal=mosh` without the client
-fails with an explicit message.
+the CLI runs (the `mosh-server` side is installed inside the instance). Forcing
+`--terminal=mosh` without the client fails with an explicit message.
 
 foot is invoked with `--log-level=error` to silence benign warnings (the
 Wayland compositor and the COLRv1 emoji font). Override with
@@ -190,7 +193,7 @@ $ sklein-devbox doctor
   instance  sklein-devbox-dev1
   fqdn      sklein-devbox-dev1.homelab.stephane-klein.info
   user      devbox
-  terminal  auto
+  terminal  ssh
   foot.ini  /home/sklein/.config/sklein-devbox/foot.ini
 
 ==> Remote-desktop link
@@ -309,7 +312,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_CONFIG_DIR` | `~/.config/sklein-devbox` | `foot.ini` directory |
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
-| `SKLEIN_DEVBOX_TERMINAL` | `auto` | `console` transport: `ssh`, `mosh` or `auto` |
+| `SKLEIN_DEVBOX_TERMINAL` | `ssh` | `console` transport: `ssh` or `mosh` |
 | `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console`/`foot-link` manage the reverse link (`0`/`--no-link` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |

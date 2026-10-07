@@ -2,9 +2,10 @@
 # sklein-devbox-doctor - end-to-end check of the instance side of the
 # remote-desktop link (the foot host -> instance reverse carrier).
 #
-# Runs `mise doctor`, then walks through the three capabilities the link
-# provides: a desktop notification, audio playback and URL opening. For each it
-# runs the command and asks whether the effect was perceived, so a transport
+# Runs `mise doctor`, then walks through the capabilities the link provides: a
+# desktop notification, audio playback and URL opening -- plus a transport-aware
+# clipboard (OSC 52) check, which does not depend on the link carrier. For each
+# it runs the command and asks whether the effect was perceived, so a transport
 # failure (missing socket, no carrier) is reported apart from a perception one.
 #
 # See sklein-devbox-mise-config/README.md and the foot-link systemd user unit
@@ -39,9 +40,9 @@ usage() {
   cat <<EOF
 $PROG - check the sklein-devbox remote-desktop link from inside the instance.
 
-Runs \`mise doctor\`, then guides you through three checks - a desktop
-notification, an audio playback and opening a URL - asking after each whether
-you perceived the effect on the foot host.
+Runs \`mise doctor\`, then guides you through the link checks (a desktop
+notification, an audio playback and opening a URL) and a clipboard (OSC 52)
+check, asking after each whether you perceived the effect on the foot host.
 
 Usage:
   $PROG [options]
@@ -55,6 +56,7 @@ Options:
       --only-notification Run only the notification check
       --only-sound        Run only the sound check
       --only-url          Run only the opening-URL check
+      --only-clipboard    Run only the clipboard (OSC 52) checks
 EOF
 }
 
@@ -81,6 +83,51 @@ require_tty() {
 
 # want CHECK -> true when running every check, or only the named one
 want() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+
+# --- clipboard (OSC 52) ------------------------------------------------------
+NVIM_OPTIONS="${XDG_CONFIG_HOME:-$HOME/.config}/nvim/lua/config/options.lua"
+ZSHRC="$HOME/.zshrc"
+
+tok() { printf 'skd-%s-%s-%s' "$1" "$RANDOM" "$$"; }
+
+# ssh vs mosh: the tmux client TERM (foot = ssh, xterm-256color = mosh),
+# falling back to the presence of a mosh-server process.
+detect_transport() {
+  local term=""
+  if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    term="$(tmux display-message -p '#{client_termname}' 2>/dev/null || true)"
+  fi
+  case "$term" in
+    foot*) printf ssh; return ;;
+    "") ;;
+    *) printf mosh; return ;;
+  esac
+  if command -v pgrep >/dev/null 2>&1 && pgrep -x mosh-server >/dev/null 2>&1; then
+    printf mosh
+  else
+    printf ssh
+  fi
+}
+
+clip_opt() { tmux show-options -gqv "$1" 2>/dev/null || true; }
+nvim_provider() {
+  grep -oE 'vim\.g\.clipboard = "[^"]+"' "$NVIM_OPTIONS" 2>/dev/null \
+    | head -1 | sed -E 's/.*"([^"]+)".*/\1/'
+}
+opencode_alias() { grep -q "alias opencode='TMUX=" "$ZSHRC" 2>/dev/null && printf yes || printf no; }
+
+# Guided check: "expected" is ok (both transports) or mosh-only-fail (host ->
+# app clipboard read, which mosh cannot relay).
+check() {
+  local label="$1" expected="${2:-ok}"
+  if ask "$label"; then
+    record_pass "$label"
+  elif [ "$expected" = mosh-only-fail ]; then
+    record_skip "$label (expected: mosh cannot read the host clipboard)"
+  else
+    record_fail "$label"
+  fi
+}
 
 run_mise_doctor() {
   step "mise doctor"
@@ -182,6 +229,53 @@ test_url() {
   fi
 }
 
+test_clipboard() {
+  step "clipboard (OSC 52)"
+  local transport t
+  transport="$(detect_transport)"
+  printf '   transport      %s\n' "$transport"
+  printf '   set-clipboard  %s\n' "$(clip_opt set-clipboard)"
+  printf '   get-clipboard  %s\n' "$(clip_opt get-clipboard)"
+  printf '   neovim         %s\n' "$(nvim_provider)"
+  printf '   opencode       %s\n' "$(opencode_alias)"
+  if [ "$transport" = mosh ]; then
+    printf '   note           mosh relays OSC 52 writes only: host -> instance paste fails\n'
+  fi
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    record_skip "tmux not found (run from the tmux console)"
+    return
+  fi
+
+  step "clipboard 1/6 tmux -> host (copy)"
+  t="$(tok t2h)"; printf '   token: %s\n' "$t"
+  check "copy $t in tmux (copy-mode) and paste it on the host"
+
+  step "clipboard 2/6 nvim -> host (copy)"
+  t="$(tok n2h)"; printf '   token: %s\n' "$t"
+  check "type $t in nvim, yank it with \"+y, then paste it on the host"
+
+  step "clipboard 3/6 opencode -> host (copy)"
+  t="$(tok o2h)"; printf '   token: %s\n' "$t"
+  check "copy $t in opencode, then paste it on the host"
+
+  step "clipboard 4/6 host -> tmux (terminal paste)"
+  t="$(tok h2t)"; printf '   copy %s on the host, then Ctrl+Shift+V into a tmux pane\n' "$t"
+  check "paste $t into a tmux pane with Ctrl+Shift+V"
+
+  step "clipboard 5/6 host -> nvim (\"+p)"
+  t="$(tok h2n)"; printf '   copy %s on the host, then press \"+p in nvim\n' "$t"
+  if [ "$transport" = mosh ]; then
+    check "paste $t in nvim with \"+p" mosh-only-fail
+  else
+    check "paste $t in nvim with \"+p"
+  fi
+
+  step "clipboard 6/6 host -> opencode (terminal paste)"
+  t="$(tok h2o)"; printf '   copy %s on the host, then Ctrl+Shift+V in opencode\n' "$t"
+  check "paste $t into opencode with Ctrl+Shift+V"
+}
+
 main() {
   printf '%s - remote-desktop link check\n' "$PROG"
 
@@ -198,6 +292,9 @@ main() {
 
   if want mise && (( RUN_MISE_DOCTOR )); then
     run_mise_doctor
+  fi
+  if want clipboard; then
+    test_clipboard
   fi
   if (( need_link )); then
     env_summary
@@ -229,6 +326,7 @@ while (( $# )); do
     --only-notification) ONLY=notification; shift ;;
     --only-sound) ONLY=sound; shift ;;
     --only-url) ONLY=url; shift ;;
+    --only-clipboard) ONLY=clipboard; shift ;;
     *) die "unknown option '$1'" ;;
   esac
 done

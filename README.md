@@ -20,7 +20,7 @@ This project was developed using:
 ## Tech stack
 
 - [Incus LXC](https://linuxcontainers.org/incus/)
-- [Mosh](https://github.com/mobile-shell/mosh)
+- [Mosh](https://github.com/mobile-shell/mosh) — optional, `ssh` is the default transport
 - [Mise bootstrap](https://mise.jdx.dev/bootstrap.html)
 - [mutagen](https://github.com/mutagen-io/mutagen) — optional, workstation-synced mode only
 
@@ -141,8 +141,12 @@ $ mise run foot
 
 foot is used for what a plain terminal cannot do over the SSH + tmux chain:
 
-- **bidirectional OSC 52 clipboard** — copy/paste between the local desktop and
-  the container, including through tmux;
+- **OSC 52 clipboard** — bidirectional between the instance and the local
+  desktop, through tmux: copies out (tmux copy-mode, Neovim, opencode) and
+  reads in (Neovim `"+p` pastes the real host clipboard). Reading the host
+  clipboard needs the terminal to answer an OSC 52 query, which `foot` does but
+  mosh does not relay — so the transport defaults to `ssh`, and `mosh` is opt-in
+  for roaming with clipboard *write* only (see the FAQ);
 - **SIXEL image rendering** — `chafa`, `img2sixel`, and Neovim's `image.nvim`
   display images inline;
 - **tmux auto-start** — `ssh -t` forces a tty and the login is routed through
@@ -259,3 +263,24 @@ reflects the current gopass values. The `REGISTRY_TOKEN` value comes from the
 by `mise run //apps/forgejo:container-registry-token` in the homelab repository;
 `MISE_GITHUB_TOKEN` comes from `github/mise-ci-readonly` (create the fine-grained
 token in the GitHub UI first).
+
+## FAQ
+
+### Why does `console` default to `ssh`, not mosh?
+
+For the clipboard. mosh 1.4.0 only implements OSC 52 in the *write* direction:
+copying from the instance to the host clipboard works, but mosh can never *read*
+the host clipboard — it does not relay the `52;c;?` query that tmux sends to the
+terminal. `ssh` can, so `console` defaults to it. mosh is still available with
+`--terminal=mosh` (or `SKLEIN_DEVBOX_TERMINAL=mosh`) for roaming on unstable
+networks, accepting that limitation; `console` prints a warning in that case.
+
+### How does pasting from the host into Neovim work?
+
+tmux is configured with `get-clipboard both`: an application's clipboard read
+request (`"+p`) is forwarded to the terminal, which answers with the real
+clipboard; tmux creates a buffer from that answer and returns it to the app. On
+the `foot` side, OSC 52 reads are allowed (`security.osc52=enabled`). This works
+over **ssh**; over **mosh** the query is not relayed and pasting from the host
+fails — then use `Ctrl+Shift+V` (the terminal's raw paste), which does not go
+through OSC 52.

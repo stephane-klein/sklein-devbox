@@ -172,6 +172,15 @@ Renders `templates/cloud-init.yaml.jinja` with the real values from `fnox`,
 validates it and prints the result. The rendered user-data is never written to
 disk.
 
+### Disk size
+
+The root disk is created at `250GiB` on an LVM **thin** pool: the declared size
+is virtual and reserves no physical space — only written blocks are consumed
+(`incus storage info default` reports the real usage). Override the size at
+creation with `SKLEIN_DEVBOX_DISK_SIZE=300GiB mise run incus-start-lxc`, and grow
+an existing instance with the CLI:
+`sklein-devbox -n dev resize --size 250GiB`.
+
 ### Destroy the container
 
 At the end of the process, you can destroy the container with:

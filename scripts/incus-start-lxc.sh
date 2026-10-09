@@ -15,6 +15,11 @@ if [ -n "${SKLEIN_DEVBOX_GIT_CLONE:-}" ]; then
   export SKLEIN_DEVBOX_GIT_BRANCH="${SKLEIN_DEVBOX_GIT_BRANCH:-poc-reboot-to-incus-lxc-and-mise-bootstrap}"
 fi
 
+# Root disk size declared on the instance at creation. The storage pool is an
+# LVM thin pool, so this is a virtual size: it reserves no physical space, only
+# written blocks are consumed. Override with SKLEIN_DEVBOX_DISK_SIZE.
+export SKLEIN_DEVBOX_DISK_SIZE="${SKLEIN_DEVBOX_DISK_SIZE:-250GiB}"
+
 if incus info sklein-devbox-dev >/dev/null 2>&1; then
   # cloud-init only runs on first boot: a clone cannot happen on an existing
   # instance. Fail loudly rather than silently skip the bootstrap.
@@ -51,6 +56,7 @@ else
   incus create sklein:sklein-devbox-dev sklein-devbox-dev \
     --profile default \
     --config security.nesting=true \
+    --device "root,size=${SKLEIN_DEVBOX_DISK_SIZE}" \
     --config cloud-init.user-data="$cloud_init"
 fi
 

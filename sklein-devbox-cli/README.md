@@ -58,6 +58,7 @@ Available Commands:
   help        Help about any command
   list        List all sklein-devbox instances
   logs        Show cloud-init and bootstrap logs of the instance
+  resize      Resize the root disk of the sklein-devbox instance
   stop        Stop the sklein-devbox instance
   up          Start the sklein-devbox instance
 
@@ -65,6 +66,9 @@ Flags:
       --dry-run      Print commands without executing
   -h, --help         help for sklein-devbox
   -n, --name string  Instance name (default "dev1")
+      --no-link      Do not manage the foot host -> instance reverse link
+      --size string  Root disk size (default "250GiB")
+      --terminal string  Terminal transport: ssh or mosh (default "ssh")
   -v, --version      version for sklein-devbox
 
 Use "sklein-devbox [command] --help" for more information about a command.
@@ -208,7 +212,9 @@ $ sklein-devbox doctor
 
 Creates (if needed) and starts the instance, then bootstraps it from git.
 Equivalent to `mise run incus-start-lxc-with-bootstrap`. The clone and the
-Mise bootstrap always run (no toggle); mutagen is never used.
+Mise bootstrap always run (no toggle); mutagen is never used. New instances get
+a `250GiB` thin root disk (`--size` / `SKLEIN_DEVBOX_DISK_SIZE`); an existing
+instance is left untouched and must be grown explicitly with `resize`.
 
 ```sh
 $ sklein-devbox up
@@ -256,6 +262,23 @@ Prints the cloud-init state of the instance for post-mortem inspection:
 $ sklein-devbox logs           # status --long, errors, runcmd, output tail
 $ sklein-devbox logs output    # full /var/log/cloud-init-output.log
 ```
+
+### `resize`
+
+Grows the **root disk** of the instance by overriding its root device size.
+The storage pool is an LVM **thin** pool, so the declared size is virtual: it
+reserves no physical space — only written blocks are consumed. Growth happens
+online, with no stop needed.
+
+```sh
+$ sklein-devbox resize                  # grow to 250GiB (default)
+$ sklein-devbox resize --size 300GiB
+$ sklein-devbox -n dev resize
+$ sklein-devbox --dry-run resize
+```
+
+Shrinking is refused: the command exits non-zero if the target is smaller than
+the current size. Use `--size` or `SKLEIN_DEVBOX_DISK_SIZE` to set the target.
 
 ### `list`
 
@@ -315,6 +338,7 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_TERMINAL` | `ssh` | `console` transport: `ssh` or `mosh` |
 | `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console`/`foot-link` manage the reverse link (`0`/`--no-link` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
+| `SKLEIN_DEVBOX_DISK_SIZE` | `250GiB` | root disk size set at creation by `up`, and by `resize` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |
 

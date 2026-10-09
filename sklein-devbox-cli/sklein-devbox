@@ -29,6 +29,7 @@ FOOT_LOG_LEVEL="${SKLEIN_DEVBOX_FOOT_LOG_LEVEL:-error}"
 FOOT_LINK="${SKLEIN_DEVBOX_FOOT_LINK:-1}"
 FOOT_LINK_BUS_SOCKET="/tmp/foot-host-bus"
 FOOT_LINK_PULSE_SOCKET="/tmp/foot-host-pulse"
+DISK_SIZE="${SKLEIN_DEVBOX_DISK_SIZE:-250GiB}"
 
 DRY_RUN=0
 HELP_REQUESTED=0
@@ -93,10 +94,11 @@ declare -Ar CMD_DESC=(
   [help]="Help about any command"
   [list]="List all sklein-devbox instances"
   [logs]="Show cloud-init and bootstrap logs of the instance"
+  [resize]="Resize the root disk of the sklein-devbox instance"
   [stop]="Stop the sklein-devbox instance"
   [up]="Start the sklein-devbox instance"
 )
-declare -ar CMD_ORDER=(completion console destroy doctor foot-link help list logs stop up)
+declare -ar CMD_ORDER=(completion console destroy doctor foot-link help list logs resize stop up)
 
 instance_name() { printf '%s-%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME"; }
 
@@ -274,6 +276,8 @@ parse_global_flags() {
       --terminal)   TERMINAL_MODE="${2:?--terminal requires a value}"; shift 2 ;;
       --terminal=*) TERMINAL_MODE="${1#*=}"; shift ;;
       --no-link)    FOOT_LINK=0; shift ;;
+      --size)       DISK_SIZE="${2:?--size requires a value}"; shift 2 ;;
+      --size=*)     DISK_SIZE="${1#*=}"; shift ;;
       -v|--version) printf '%s version %s\n' "$PROG_NAME" "$VERSION"; exit 0 ;;
       -h|--help)    HELP_REQUESTED=1; shift ;;
       --)           shift; POSITIONAL+=("$@"); break ;;
@@ -300,6 +304,7 @@ Flags:
   -h, --help         help for $PROG_NAME
   -n, --name string  Instance name (default "$INSTANCE_NAME")
       --no-link      Do not manage the foot host -> instance reverse link
+      --size string  Root disk size (default "$DISK_SIZE")
       --terminal string  Terminal transport: ssh or mosh (default "ssh")
   -v, --version      version for $PROG_NAME
 
@@ -341,6 +346,14 @@ usage_extra_foot_link() {
   printf '\nEnsures the remote-desktop link (session bus + audio) for every running\n'
   printf 'sklein-devbox instance: creates, repairs or restarts each per-instance\n'
   printf 'systemd user unit without opening foot. Stopped instances are skipped.\n'
+}
+
+usage_extra_resize() {
+  printf '\nFlags:\n'
+  printf '  %-17s  %s\n' --size "Target root disk size (default \"$DISK_SIZE\")"
+  printf '\nGrow only. The root disk is an LVM thin volume: declaring a larger size\n'
+  printf 'does not reserve that space physically — only written blocks are consumed\n'
+  printf 'from the storage pool.\n'
 }
 
 cmd_console() {
@@ -769,6 +782,7 @@ cmd_up() {
     run incus create "$IMAGE" "$instance" \
       --profile default \
       --config security.nesting=true \
+      --device "root,size=$DISK_SIZE" \
       --config cloud-init.user-data="$cloud_init_arg"
 
     if (( DRY_RUN )); then
@@ -810,6 +824,53 @@ cmd_logs() {
       die "logs: unknown target '$what' (expected: all, output)"
       ;;
   esac
+}
+
+disk_size_bytes() {
+  local v="$1"
+  v="${v//[[:space:]]/}"
+  v="${v%[Bb]}"
+  have numfmt || { printf '0'; return 0; }
+  numfmt --from=auto "$v" 2>/dev/null || printf '0'
+}
+
+cmd_resize() {
+  local instance target current cur_b target_b
+  instance="$(instance_name)"
+  target="$DISK_SIZE"
+
+  have incus || die "incus not found in PATH"
+
+  if (( ! DRY_RUN )); then
+    incus info "$instance" >/dev/null 2>&1 \
+      || die "instance '$instance' does not exist; create it with: $PROG_NAME up --name $INSTANCE_NAME"
+
+    current="$(incus config device get "$instance" root size 2>/dev/null || true)"
+    if [ -z "$current" ] \
+       && [ "$(incus list "$instance" -c s --format csv 2>/dev/null)" = "RUNNING" ]; then
+      current="$(incus exec "$instance" -- df -B1 --output=size / 2>/dev/null | tail -n1 || true)"
+      current="$(numfmt --to=iec-i "${current:-0}" 2>/dev/null || printf '%s' "$current")"
+    fi
+    cur_b="$(disk_size_bytes "${current:-0}")"
+    target_b="$(disk_size_bytes "$target")"
+    if [ "$cur_b" != "0" ] && [ "$target_b" != "0" ] && [ "$target_b" -lt "$cur_b" ]; then
+      die "refusing to shrink '$instance' root disk from ${current:-?} to $target (grow only)"
+    fi
+  fi
+
+  if incus config device show "$instance" 2>/dev/null | grep -q '^root:'; then
+    run incus config device set "$instance" root size="$target"
+  else
+    run incus config device override "$instance" root size="$target"
+  fi
+
+  if (( DRY_RUN )); then
+    return 0
+  fi
+  printf "Root disk of '%s' set to %s.\n" "$instance" "$target" >&2
+  if [ "$(incus list "$instance" -c s --format csv 2>/dev/null)" = "RUNNING" ]; then
+    incus exec "$instance" -- df -h / >&2 || true
+  fi
 }
 
 cmd_stop() {
@@ -933,7 +994,7 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--dry-run --help --name --no-link --version --terminal"
+  flags="--dry-run --help --name --no-link --size --version --terminal"
 
   case "$prev" in
     -n|--name)
@@ -987,6 +1048,7 @@ _arguments -C \
   '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
   '--dry-run[print commands without executing]' \
   '--no-link[do not manage the remote-desktop link]' \
+  '--size[root disk size]:size:' \
   '--terminal[terminal transport]:transport:(ssh mosh)' \
   '(-h --help)'{-h,--help}'[help]' \
   '(-v --version)'{-v,--version}'[version]' \
@@ -1020,6 +1082,7 @@ end
 complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
 complete -c $prog -f -l no-link -d 'do not manage the remote-desktop link'
+complete -c $prog -f -l size -x -d 'root disk size'
 complete -c $prog -f -l terminal -x -a 'ssh mosh' -d 'terminal transport'
 complete -c $prog -f -s h -l help -d 'help'
 complete -c $prog -f -s v -l version -d 'version'

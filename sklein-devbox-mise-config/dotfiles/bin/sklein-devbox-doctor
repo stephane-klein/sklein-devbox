@@ -19,6 +19,8 @@ URL_DEFAULT="https://github.com/stephane-klein/sklein-devbox"
 SOUND="$SOUND_DEFAULT"
 URL="$URL_DEFAULT"
 RUN_MISE_DOCTOR=1
+# Empty runs every check; otherwise the name of the single check to run.
+ONLY=""
 
 BUS_SOCKET=/tmp/foot-host-bus
 PULSE_SOCKET=/tmp/foot-host-pulse
@@ -45,10 +47,14 @@ Usage:
   $PROG [options]
 
 Options:
-  -h, --help        Show this help
-      --url URL     URL to open (default: $URL_DEFAULT)
-      --sound FILE  Audio file to play (default: $SOUND_DEFAULT)
-      --skip-mise   Do not run \`mise doctor\` first
+  -h, --help              Show this help
+      --url URL           URL to open (default: $URL_DEFAULT)
+      --sound FILE        Audio file to play (default: $SOUND_DEFAULT)
+      --skip-mise         Do not run \`mise doctor\`
+      --only-mise         Run only \`mise doctor\`
+      --only-notification Run only the notification check
+      --only-sound        Run only the sound check
+      --only-url          Run only the opening-URL check
 EOF
 }
 
@@ -72,6 +78,9 @@ ask() { # ask "question" -> success on yes
 require_tty() {
   [ -t 0 ] || die "run this from an interactive session (e.g. the tmux console, or: ssh -t <instance> $PROG)"
 }
+
+# want CHECK -> true when running every check, or only the named one
+want() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
 
 run_mise_doctor() {
   step "mise doctor"
@@ -177,14 +186,26 @@ main() {
   printf '%s - remote-desktop link check\n' "$PROG"
 
   require_tty
-  if (( RUN_MISE_DOCTOR )); then
+
+  local need_link=0
+  if [ -z "$ONLY" ]; then
+    need_link=1
+  else
+    case "$ONLY" in
+      notification|sound|url) need_link=1 ;;
+    esac
+  fi
+
+  if want mise && (( RUN_MISE_DOCTOR )); then
     run_mise_doctor
   fi
-  env_summary
+  if (( need_link )); then
+    env_summary
+  fi
 
-  test_notification
-  test_sound
-  test_url
+  if want notification; then test_notification; fi
+  if want sound; then test_sound; fi
+  if want url; then test_url; fi
 
   step "summary"
   printf '   %d ok, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
@@ -204,6 +225,10 @@ while (( $# )); do
     --sound) SOUND="${2:?--sound requires a value}"; shift 2 ;;
     --sound=*) SOUND="${1#*=}"; shift ;;
     --skip-mise) RUN_MISE_DOCTOR=0; shift ;;
+    --only-mise) ONLY=mise; shift ;;
+    --only-notification) ONLY=notification; shift ;;
+    --only-sound) ONLY=sound; shift ;;
+    --only-url) ONLY=url; shift ;;
     *) die "unknown option '$1'" ;;
   esac
 done

@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# sklein-devbox-mise-upgrade - interactively bump the global mise tools of the
+# sklein-devbox instance and re-apply the dotfiles.
+#
+# Walks `mise outdated --bump`, asks tool by tool whether to take the bump,
+# writes the accepted versions into the driver's *source* global config
+# (dotfiles/.config/mise/config.toml) with `mise use --path`, then runs the
+# driver's `dot apply` task (fnox-wrapped) so the change lands in
+# ~/.config/mise/config.toml and the tools are installed.
+#
+# The workstation-synced (mutagen) driver is assumed by default; override the
+# location with --driver or SKLEIN_DEVBOX_DRIVER. In git-bootstrapped mode
+# (no mutagen) the edit is local to the container clone and must be committed
+# from the workstation to persist.
+#
+# See sklein-devbox-mise-config/README.md.
+
+set -u
+
+PROG="${0##*/}"
+
+DRIVER="${SKLEIN_DEVBOX_DRIVER:-$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config}"
+GLOBAL_CONFIG="$HOME/.config/mise/config.toml"
+
+ASSUME_YES=0
+DRY_RUN=0
+DO_APPLY=1
+
+if [ -t 1 ]; then
+  C_DIM=$'\033[2m'; C_OK=$'\033[32m'; C_WARN=$'\033[33m'; C_OFF=$'\033[0m'
+else
+  C_DIM=; C_OK=; C_WARN=; C_OFF=
+fi
+
+usage() {
+  cat <<EOF
+$PROG - bump the global mise tools of sklein-devbox, then re-apply.
+
+Runs \`mise outdated --bump\`, asks tool by tool whether to take the bump,
+writes the accepted versions into the driver source config
+(dotfiles/.config/mise/config.toml), then runs the driver's \`dot apply\`.
+
+Usage:
+  $PROG [options]
+
+Options:
+  -h, --help        Show this help
+  -n, --dry-run     Only show the tools that could be bumped; change nothing
+  -y, --yes         Take every bump without prompting
+      --no-apply    Update the config but do not run \`dot apply\`
+      --driver DIR  Driver directory (default: \$SKLEIN_DEVBOX_DRIVER, or
+                    $HOME/.local/share/sklein-devbox/sklein-devbox-mise-config)
+EOF
+}
+
+die() { printf '%s: error: %s\n' "$PROG" "$*" >&2; exit 2; }
+
+ask() { # ask "question" -> success on yes
+  local answer
+  printf '   %s [y/N] ' "$1"
+  IFS= read -r answer || return 1
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+while (( $# )); do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -n|--dry-run) DRY_RUN=1; shift ;;
+    -y|--yes) ASSUME_YES=1; shift ;;
+    --no-apply) DO_APPLY=0; shift ;;
+    --driver) DRIVER="${2:?--driver requires a value}"; shift 2 ;;
+    --driver=*) DRIVER="${1#*=}"; shift ;;
+    *) die "unknown option '$1'" ;;
+  esac
+done
+
+SRC_CONFIG="$DRIVER/dotfiles/.config/mise/config.toml"
+
+command -v mise >/dev/null 2>&1 || die "mise not found in PATH"
+command -v jq >/dev/null 2>&1 || die "jq not found in PATH"
+[ -f "$SRC_CONFIG" ] || die "source config not found: $SRC_CONFIG"
+
+if (( ! ASSUME_YES && ! DRY_RUN )) && [ ! -t 0 ]; then
+  die "run this from an interactive session, or pass --yes"
+fi
+
+printf '%s - bump the global mise tools\n' "$PROG"
+printf '%s   source: %s%s\n' "$C_DIM" "$SRC_CONFIG" "$C_OFF"
+
+outdated_json="$(mise -C "$HOME" outdated --bump --json 2>/dev/null)"
+[ -n "$outdated_json" ] || outdated_json='{}'
+
+# Global tools with a newer version: name <TAB> current <TAB> bump <TAB> url.
+rows=()
+while IFS=$'\t' read -r name current bump url; do
+  [ -n "$name" ] || continue
+  rows+=("$name"$'\t'"$current"$'\t'"$bump"$'\t'"$url")
+done < <(
+  jq -r --arg g "$GLOBAL_CONFIG" '
+    to_entries[]
+    | select(.value.source.path == $g)
+    | [.key, .value.current, (.value.bump // ""), (.value.release_url // "")] | @tsv' \
+    <<<"$outdated_json"
+)
+
+# Tools declared in another config file: reported, never touched here.
+ignored="$(jq -r --arg g "$GLOBAL_CONFIG" '
+  to_entries[]
+  | select(.value.source.path != $g)
+  | "\(.key) (\(.value.source.path))"' <<<"$outdated_json")"
+if [ -n "$ignored" ]; then
+  printf '   %signoring tools from other config files:%s\n' "$C_WARN" "$C_OFF"
+  printf '     %s\n' "$ignored"
+fi
+
+if (( ${#rows[@]} == 0 )); then
+  printf '   %sall tools up to date%s\n' "$C_OK" "$C_OFF"
+  exit 0
+fi
+
+if (( DRY_RUN )); then
+  printf '\n   %d tool(s) could be bumped:\n\n' "${#rows[@]}"
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r name current bump url <<<"$row"
+    printf '   %-32s %s -> %s\n' "$name" "$current" "$bump"
+  done
+  exit 0
+fi
+
+printf '\n   %d tool(s) can be bumped:\n\n' "${#rows[@]}"
+
+accepted=()
+for row in "${rows[@]}"; do
+  IFS=$'\t' read -r name current bump url <<<"$row"
+  printf '   %-32s %s -> %s\n' "$name" "$current" "$bump"
+  if [ -n "$url" ]; then
+    printf '   %s%s%s\n' "$C_DIM" "$url" "$C_OFF"
+  fi
+  if (( ASSUME_YES )) || ask "Update $name to $bump ?"; then
+    if mise use --yes --path "$SRC_CONFIG" "$name@$bump"; then
+      accepted+=("$name")
+    else
+      printf '   %sfailed to update %s%s\n' "$C_WARN" "$name" "$C_OFF" >&2
+    fi
+  fi
+  printf '\n'
+done
+
+if (( ${#accepted[@]} == 0 )); then
+  printf '   nothing accepted\n'
+  exit 0
+fi
+
+printf '   updated in %s:\n     %s\n' "$SRC_CONFIG" "${accepted[*]}"
+
+if (( DO_APPLY )); then
+  printf '\n== mise -C %s run dot apply\n' "$DRIVER"
+  if ! mise -C "$DRIVER" run dot apply; then
+    printf '%s: dot apply failed\n' "$PROG" >&2
+    exit 1
+  fi
+else
+  printf '\n   --no-apply: apply yourself with:\n'
+  printf '     mise -C %s run dot apply\n' "$DRIVER"
+fi
+
+printf '\n   %sdone%s\n' "$C_OK" "$C_OFF"

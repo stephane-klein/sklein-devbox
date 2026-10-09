@@ -197,6 +197,30 @@ When both `/tmp/foot-host-bus` and `/tmp/foot-host-pulse` are missing it exits 2
 and points at `sklein-devbox foot-link` to run on the foot host. The default
 sound is CC0; see `files/sounds/README.md`.
 
+## Updating the global tools
+
+`dotfiles/bin/sklein-devbox-mise-upgrade` is deployed to
+`~/bin/sklein-devbox-mise-upgrade`. It walks `mise outdated --bump`, asks tool
+by tool whether to take the bump, writes the accepted versions into the driver
+**source** (`dotfiles/.config/mise/config.toml`) with `mise use --path`, then
+runs the fnox-wrapped `mise -C <driver> run dot apply` so the change lands in
+`~/.config/mise/config.toml` and the tools are installed:
+
+```sh
+~/bin/sklein-devbox-mise-upgrade
+```
+
+Options: `-n`/`--dry-run` (list the bumps, change nothing), `-y`/`--yes` (take
+every bump without prompting), `--no-apply` (update the config but skip
+`dot apply`), `--driver DIR`.
+
+Only tools sourced from `~/.config/mise/config.toml` are considered; tools
+declared in another config file are listed and skipped. The script never edits
+the deployed `~/.config/mise/config.toml` directly: it writes the driver source,
+which mutagen syncs back to the workstation. In git-bootstrapped mode (no
+mutagen) the edit stays in the container clone and must be committed from the
+workstation to persist.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.

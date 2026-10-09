@@ -36,19 +36,19 @@ uvx = false
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = "1.35.3"
+fnox = "1.39.0"
 tmux = "3.7c"
 fzf = "0.74.4"
-atuin = "18.22.0"
-pitchfork = "2.27.0"
+atuin = "18.23.0"
+pitchfork = "2.30.1"
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/.zshrc.
 # Supported completers: https://carapace-sh.github.io/carapace-bin/completers.html
 carapace = "1.8.0"
 
-jujutsu = "0.45.1"
-jjui = "0.10.10"
+jujutsu = "0.46.0"
+jjui = "0.10.11"
 
 starship = "1.26.0"
 "github:dmmulroy/jj-starship" = {
@@ -60,10 +60,10 @@ starship = "1.26.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.17.6"
+pipx = "1.17.12"
 "pipx:petname" = "2.9"
 
-opencode = "1.18.32"
+opencode = "1.18.35"
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.4"
@@ -72,47 +72,47 @@ ripgrep = "15.2.0"
 fd = "10.5.0"
 node = "24.14.1"
 go = "latest"
-neovim = "0.12.5"
-tree-sitter = "0.27.0"
-usage = "6.10.0"
-delta = "0.19.2"
-rtk = "0.49.0"
-github-cli = "2.101.0"
+neovim = "0.12.6"
+tree-sitter = "0.27.1"
+usage = "6.12.1"
+delta = "0.20.1"
+rtk = "0.51.0"
+github-cli = "2.102.0"
 
-claude-code = "2.1.278"
+claude-code = "2.1.295"
 
 # Forgejo CLI (fj) + extension Actions (fj-ex)
 "forgejo:forgejo-contrib/forgejo-cli" = "0.6.0"
-"github:JKamsker/forgejo-cli-ex" = "0.1.7"
+"github:JKamsker/forgejo-cli-ex" = "0.1.12"
 
 zoxide = "0.10.0"
 jq = "1.8.2"
-yq = "4.53.6"
+yq = "4.54.1"
 yazi = "26.9.1"
 lsd = "1.2.0"
 "pipx:copier" = "9.18.2"
 "github:tassiovirginio/try-rs" = "1.7.11"
-"github:11happy/cpx" = "0.1.4"
+"github:11happy/cpx" = "0.2.1"
 "github:mitsuhiko/minijinja" = "2.24.0"
 "github:laulauland/jj-hunk" = "0.5.1"
 "github:newren/git-filter-repo" = "2.47.0"
 
 # Incus client
-"github:lxc/incus" = { version = "6.23", bin = "incus" }
+"github:lxc/incus" = { version = "7.5", bin = "incus" }
 
 # Tooling for OpenCode
-"npm:@upstash/context7-mcp" = "4.1.1"
+"npm:@upstash/context7-mcp" = "4.2.0"
 "pipx:mcp-server-fetch" = "2026.8.18"
 "npm:tavily-mcp" = "0.2.22"
-"npm:exa-mcp-server" = "3.4.1"
-"npm:cc-safety-net" = "2.4.5"
-"npm:@playwright/mcp" = "0.0.82"
+"npm:exa-mcp-server" = "3.4.2"
+"npm:cc-safety-net" = "2.6.1"
+"npm:@playwright/mcp" = "0.0.83"
 "npm:@openchamber/web" = "1.24.2"
 
 # Kubernetes
-kubectl = "1.37.0"
+kubectl = "1.37.1"
 helm = "4.3.0"
 kubectx = "0.11.0"
 kubens = "0.11.0"
-helmfile = "1.8.0"
+helmfile = "1.8.1"
 k9s = "0.51.0"

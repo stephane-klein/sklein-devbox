@@ -56,6 +56,7 @@ Available Commands:
   destroy     Destroy the sklein-devbox instance and all its data
   doctor      Check that the required commands are installed
   foot-link   Ensure the remote-desktop links (session bus + audio) to all instances
+  generate-mutagen  Generate an example mutagen.yml for host/container sync and port forwarding
   help        Help about any command
   list        List all sklein-devbox instances
   logs        Show cloud-init and bootstrap logs of the instance
@@ -168,6 +169,22 @@ $ sklein-devbox foot-link
 sklein-devbox-dev: link up
 sklein-devbox-dev2: link up
 sklein-devbox-dev3: skipped (instance is STOPPED)
+```
+
+### `generate-mutagen`
+
+Emits a ready-to-use but **fully commented** [`mutagen.yml`](https://mutagen.io/documentation/orchestration/projects)
+skeleton for a project: a `sync:` section (workstation directory ↔ devbox
+directory) and a `forward:` section (expose a devbox port on the workstation).
+Every session is disabled until uncommented, so `mutagen project start` on the
+generated file is a no-op. The instance user and FQDN are interpolated from the
+resolved configuration, so `--name` is honored. The output goes to stdout by
+default, or to a `FILE` argument (never overwriting an existing file):
+
+```sh
+$ sklein-devbox generate-mutagen                 # print to stdout
+$ sklein-devbox generate-mutagen mutagen.yml     # write to mutagen.yml
+$ sklein-devbox -n dev2 generate-mutagen         # target sklein-devbox-dev2
 ```
 
 ### `doctor`

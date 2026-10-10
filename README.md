@@ -35,8 +35,9 @@ usage.
 $ curl -fsSL https://raw.githubusercontent.com/stephane-klein/sklein-devbox/poc-reboot-to-incus-lxc-and-mise-bootstrap/sklein-devbox-cli/install.sh | bash
 ```
 
-This is an early version: only the `console` subcommand (equivalent to
-`mise run foot`) is implemented.
+The CLI exposes `completion`, `console`, `destroy`, `doctor`, `foot-link`,
+`generate-mutagen`, `help`, `list`, `logs`, `resize`, `stop` and `up` — see its
+[README](./sklein-devbox-cli/README.md).
 
 ## Getting started
 

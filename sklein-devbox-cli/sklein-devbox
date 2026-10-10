@@ -1,6 +1,105 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+die() { printf '%s: error: %s\n' "${PROG_NAME:-${0##*/}}" "$*" >&2; exit 1; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# --- Configuration file -------------------------------------------------------
+# Optional YAML file resolved before the environment-derived defaults below, so
+# a key only lands in the environment when the variable is not already set. That
+# yields the precedence: CLI flag > environment > config file > built-in default.
+# Parsed with mikefarah yq, which is only required when a file is found.
+
+CONFIG_FILE=""
+CONFIG_ORIGIN=""
+CONFIG_ERROR=""
+
+declare -Ar CONFIG_KEYS=(
+  [name]=SKLEIN_DEVBOX_NAME
+  [fqdn_suffix]=SKLEIN_DEVBOX_FQDN_SUFFIX
+  [terminal]=SKLEIN_DEVBOX_TERMINAL
+  [disk_size]=SKLEIN_DEVBOX_DISK_SIZE
+  [git_branch]=SKLEIN_DEVBOX_GIT_BRANCH
+)
+
+config_dir() {
+  printf '%s' "${SKLEIN_DEVBOX_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/sklein-devbox}"
+}
+
+explicit_config_flag() {
+  local prev="" arg
+  for arg in "$@"; do
+    if [ -n "$prev" ]; then printf '%s' "$arg"; return 0; fi
+    case "$arg" in
+      -c|--config) prev=1 ;;
+      --config=*)  printf '%s' "${arg#*=}"; return 0 ;;
+    esac
+  done
+  return 0
+}
+
+resolve_config_file() {
+  local flag path dir
+  flag="$(explicit_config_flag "$@")"
+  if [ -n "$flag" ]; then
+    CONFIG_ORIGIN="explicit"; CONFIG_FILE="$flag"; return 0
+  fi
+  if [ -n "${SKLEIN_DEVBOX_CONFIG:-}" ]; then
+    CONFIG_ORIGIN="env"; CONFIG_FILE="$SKLEIN_DEVBOX_CONFIG"; return 0
+  fi
+  for path in "$PWD/.sklein-devbox.yaml" "$PWD/.sklein-devbox.yml"; do
+    if [ -f "$path" ]; then CONFIG_ORIGIN="cwd"; CONFIG_FILE="$path"; return 0; fi
+  done
+  dir="$(config_dir)"
+  for path in "$dir/config.yaml" "$dir/config.yml"; do
+    if [ -f "$path" ]; then CONFIG_ORIGIN="xdg"; CONFIG_FILE="$path"; return 0; fi
+  done
+  return 0
+}
+
+yq_is_mikefarah() {
+  local v
+  v="$(yq --version 2>/dev/null || true)"
+  case "$v" in *mikefarah*|"yq 4"*) return 0 ;; esac
+  return 1
+}
+
+load_config_file() {
+  local key env val
+  resolve_config_file "$@"
+  [ -n "$CONFIG_FILE" ] || return 0
+  case "$CONFIG_ORIGIN" in
+    explicit|env)
+      [ -f "$CONFIG_FILE" ] \
+        || { CONFIG_ERROR="config file '$CONFIG_FILE' (from $CONFIG_ORIGIN) not found"; return 0; }
+      ;;
+  esac
+  have yq \
+    || { CONFIG_ERROR="yq is required to read '$CONFIG_FILE' but was not found in PATH"; return 0; }
+  yq_is_mikefarah \
+    || { CONFIG_ERROR="the 'yq' in PATH is not mikefarah yq v4, required to read '$CONFIG_FILE'"; return 0; }
+  for key in "${!CONFIG_KEYS[@]}"; do
+    env="${CONFIG_KEYS[$key]}"
+    val="$(yq -r ".$key" "$CONFIG_FILE" 2>/dev/null)" \
+      || { CONFIG_ERROR="failed to parse '$CONFIG_FILE' with yq"; return 0; }
+    [ "$val" = "null" ] && continue
+    [ -n "$val" ] || continue
+    [ -v "$env" ] || export "$env=$val"
+  done
+  return 0
+}
+
+config_display() {
+  if [ -n "$CONFIG_FILE" ]; then
+    printf '%s (%s)' "$CONFIG_FILE" "$CONFIG_ORIGIN"
+  else
+    printf '(none)'
+  fi
+}
+
+load_config_file "$@"
+
 readonly VERSION="dev"
 readonly INSTANCE_PREFIX="sklein-devbox"
 readonly REQUIRED_COMMANDS=(foot incus ssh)
@@ -34,10 +133,6 @@ DISK_SIZE="${SKLEIN_DEVBOX_DISK_SIZE:-250GiB}"
 DRY_RUN=0
 HELP_REQUESTED=0
 declare -a POSITIONAL=()
-
-die() { printf '%s: error: %s\n' "$PROG_NAME" "$*" >&2; exit 1; }
-
-have() { command -v "$1" >/dev/null 2>&1; }
 
 yaml_squote() { printf "'%s'" "${1//\'/\'\'}"; }
 
@@ -272,6 +367,8 @@ parse_global_flags() {
     case "$1" in
       -n|--name)    INSTANCE_NAME="${2:?--name requires a value}"; shift 2 ;;
       --name=*)     INSTANCE_NAME="${1#*=}"; shift ;;
+      -c|--config)  : "${2:?--config requires a value}"; shift 2 ;;
+      --config=*)   shift ;;
       --dry-run)    DRY_RUN=1; shift ;;
       --terminal)   TERMINAL_MODE="${2:?--terminal requires a value}"; shift 2 ;;
       --terminal=*) TERMINAL_MODE="${1#*=}"; shift ;;
@@ -300,6 +397,7 @@ usage() {
   cat <<EOF
 
 Flags:
+  -c, --config string  Configuration file (default: auto)
       --dry-run      Print commands without executing
   -h, --help         help for $PROG_NAME
   -n, --name string  Instance name (default "$INSTANCE_NAME")
@@ -452,20 +550,27 @@ cmd_doctor() {
   check_commands "${UP_REQUIRED_COMMANDS[@]}" || rc=1
 
   printf '\n==> Optional commands\n'
-  check_optional_commands mosh
+  check_optional_commands mosh yq
   if have mosh; then
     printf '  %-9s %s\n' note "mosh cannot read the host clipboard; ssh is the default transport"
   fi
 
   cfg="$(foot_config)"
   printf '\n==> Configuration\n'
-  printf '  %-9s %s\n' version "$VERSION"
-  printf '  %-9s %s\n' instance "$(instance_name)"
-  printf '  %-9s %s\n' fqdn "$(instance_fqdn)"
-  printf '  %-9s %s\n' user "$SSH_USER"
-  printf '  %-9s %s\n' terminal "${TERMINAL_MODE:-ssh}"
-  printf '  %-9s %s\n' foot.ini "${cfg:-(foot defaults)}"
-  printf '  %-9s %s\n' foot-log "$FOOT_LOG_LEVEL"
+  printf '  %-10s %s\n' version "$VERSION"
+  printf '  %-10s %s\n' instance "$(instance_name)"
+  printf '  %-10s %s\n' fqdn "$(instance_fqdn)"
+  printf '  %-10s %s\n' user "$SSH_USER"
+  printf '  %-10s %s\n' terminal "${TERMINAL_MODE:-ssh}"
+  printf '  %-10s %s\n' size "$DISK_SIZE"
+  printf '  %-10s %s\n' git-branch "$GIT_BRANCH"
+  printf '  %-10s %s\n' config "$(config_display)"
+  printf '  %-10s %s\n' foot.ini "${cfg:-(foot defaults)}"
+  printf '  %-10s %s\n' foot-log "$FOOT_LOG_LEVEL"
+  if [ -n "$CONFIG_ERROR" ]; then
+    printf '  %-10s %s\n' error "$CONFIG_ERROR"
+    rc=1
+  fi
 
   printf '\n==> Remote-desktop link\n'
   if systemd_user_available; then
@@ -994,11 +1099,15 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--dry-run --help --name --no-link --size --version --terminal"
+  flags="--config --dry-run --help --name --no-link --size --version --terminal"
 
   case "$prev" in
     -n|--name)
       COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "$cur") )
+      return
+      ;;
+    -c|--config)
+      COMPREPLY=( $(compgen -f -- "$cur") )
       return
       ;;
     --terminal)
@@ -1010,6 +1119,10 @@ _@FUNC@_complete() {
   case "$cur" in
     --name=*)
       COMPREPLY=( $(compgen -W "$(__names_@FUNC@)" -- "${cur#--name=}") )
+      return
+      ;;
+    --config=*)
+      COMPREPLY=( $(compgen -f -- "${cur#--config=}") )
       return
       ;;
     --terminal=*)
@@ -1046,6 +1159,7 @@ cmds=(@CMDS@)
 names=( ${(f)"$(incus list @PREFIX@- -c n --format csv 2>/dev/null | sed -n 's/^@PREFIX@-//p')"} )
 _arguments -C \
   '(-n --name)'{-n,--name}'[instance name]:instance:(${names[@]})' \
+  '(-c --config)'{-c,--config}'[configuration file]:config file:_files' \
   '--dry-run[print commands without executing]' \
   '--no-link[do not manage the remote-desktop link]' \
   '--size[root disk size]:size:' \
@@ -1080,6 +1194,7 @@ for sub in @CMDS@
     complete -c $prog -f -n "__fish_use_subcommand" -a "$sub"
 end
 complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv 2>/dev/null | string replace -r '^@PREFIX@-' '')" -d 'instance name'
+complete -c $prog -s c -l config -r -F -d 'configuration file'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
 complete -c $prog -f -l no-link -d 'do not manage the remote-desktop link'
 complete -c $prog -f -l size -x -d 'root disk size'
@@ -1180,6 +1295,12 @@ main() {
 
   local fn="cmd_${cmd//-/_}"
   declare -F "$fn" >/dev/null || die "unknown command \"$cmd\" for \"$PROG_NAME\""
+  if [ -n "$CONFIG_ERROR" ]; then
+    case "$cmd" in
+      doctor|help|completion) ;;
+      *) die "$CONFIG_ERROR" ;;
+    esac
+  fi
   "$fn" "${POSITIONAL[@]:1}"
 }
 

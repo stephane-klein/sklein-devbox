@@ -6,7 +6,8 @@ script that launches and drives the Incus-based development environment.
 The script has no build step. Installation needs `bash` and `curl`; `console`
 needs `foot` and `ssh`, and optionally `mosh`; `up` additionally needs `incus`,
 `ssh-keygen`, `ssh-keyscan` and `getent` (plus `gopass` when
-`NETBIRD_SETUP_KEY` is not already exported).
+`NETBIRD_SETUP_KEY` is not already exported). Reading a configuration file
+additionally needs `yq` (mikefarah v4).
 
 ## Install
 
@@ -63,6 +64,7 @@ Available Commands:
   up          Start the sklein-devbox instance
 
 Flags:
+  -c, --config string  Configuration file (default: auto)
       --dry-run      Print commands without executing
   -h, --help         help for sklein-devbox
   -n, --name string  Instance name (default "dev1")
@@ -190,15 +192,20 @@ $ sklein-devbox doctor
   ok    getent      /usr/bin/getent
 
 ==> Optional commands
-  opt   mosh        not found (optional)
+  opt   mosh      not found (optional)
+  ok    yq        /usr/bin/yq
 
 ==> Configuration
-  version   dev
-  instance  sklein-devbox-dev1
-  fqdn      sklein-devbox-dev1.homelab.stephane-klein.info
-  user      devbox
-  terminal  ssh
-  foot.ini  /home/sklein/.config/sklein-devbox/foot.ini
+  version    dev
+  instance   sklein-devbox-dev1
+  fqdn       sklein-devbox-dev1.homelab.stephane-klein.info
+  user       devbox
+  terminal   ssh
+  size       250GiB
+  git-branch poc-reboot-to-incus-lxc-and-mise-bootstrap
+  config     (none)
+  foot.ini   /home/sklein/.config/sklein-devbox/foot.ini
+  foot-log   error
 
 ==> Remote-desktop link
   systemd   available
@@ -332,7 +339,8 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_NAME` | `dev1` | instance name → `sklein-devbox-dev1` |
 | `SKLEIN_DEVBOX_FQDN_SUFFIX` | `homelab.stephane-klein.info` | instance domain |
 | `SKLEIN_DEVBOX_SSH_USER` | `devbox` | SSH user |
-| `SKLEIN_DEVBOX_CONFIG_DIR` | `~/.config/sklein-devbox` | `foot.ini` directory |
+| `SKLEIN_DEVBOX_CONFIG_DIR` | `~/.config/sklein-devbox` | configuration directory (`foot.ini`, `config.yaml`) |
+| `SKLEIN_DEVBOX_CONFIG` | — | forced configuration file path |
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
 | `SKLEIN_DEVBOX_TERMINAL` | `ssh` | `console` transport: `ssh` or `mosh` |
@@ -341,6 +349,42 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_DISK_SIZE` | `250GiB` | root disk size set at creation by `up`, and by `resize` |
 | `SKLEIN_DEVBOX_SSH_CONFIG` | built-in | overrides the devbox `.ssh/config` content |
 | `SKLEIN_DEVBOX_VERBOSE` | — | `set -x` trace inside `up` |
+
+### Configuration file
+
+Optional YAML file that sets a few defaults. It is resolved once, before the
+built-in defaults, and read with [mikefarah
+`yq`](https://github.com/mikefarah/yq) — the latter is only required when a file
+is actually found. Search order, first match wins:
+
+1. `-c FILE` / `--config FILE` (or `SKLEIN_DEVBOX_CONFIG`), used verbatim —
+   a missing explicit file is an error;
+2. `./.sklein-devbox.yaml` or `./.sklein-devbox.yml` in the current directory
+   (development from the repository);
+3. `$SKLEIN_DEVBOX_CONFIG_DIR/config.yaml` or `config.yml`, defaulting to
+   `~/.config/sklein-devbox/`.
+
+Precedence of values: **CLI flag > environment variable > config file > built-in
+default**.
+
+```yaml
+name: dev2
+fqdn_suffix: homelab.stephane-klein.info
+terminal: ssh
+disk_size: 300GiB
+git_branch: poc-reboot-to-incus-lxc-and-mise-bootstrap
+```
+
+| Key | Variable | Default |
+| --- | --- | --- |
+| `name` | `SKLEIN_DEVBOX_NAME` | `dev1` |
+| `fqdn_suffix` | `SKLEIN_DEVBOX_FQDN_SUFFIX` | `homelab.stephane-klein.info` |
+| `terminal` | `SKLEIN_DEVBOX_TERMINAL` | `ssh` |
+| `disk_size` | `SKLEIN_DEVBOX_DISK_SIZE` | `250GiB` |
+| `git_branch` | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` |
+
+`doctor` prints the resolved path and its origin (`explicit`, `env`, `cwd` or
+`xdg`), reports a `yq` problem as an error, and exits non-zero in that case.
 
 ### `foot.ini`
 

@@ -799,10 +799,12 @@ refresh_host_keys() {
   for _ in $(seq 1 30); do
     if keys="$(ssh-keyscan -t rsa,ecdsa,ed25519 "$fqdn" 2>/dev/null)" && [ -n "$keys" ]; then
       printf '%s\n' "$keys" >> ~/.ssh/known_hosts
-      break
+      return 0
     fi
     sleep 2
   done
+  printf 'refresh_host_keys: no host key added for %s after 30 ssh-keyscan attempts; SSH and Mutagen will prompt for the fingerprint\n' "$fqdn" >&2
+  return 0
 }
 
 show_cloud_init_state() {
@@ -915,8 +917,8 @@ cmd_up() {
   fi
 
   wait_for_dns "$instance"
-  refresh_host_keys
   wait_for_cloud_init "$instance"
+  refresh_host_keys
 
   printf '\n✓ %s is ready — enter it with: %s console\n' "$instance" "$PROG_NAME" >&2
 }

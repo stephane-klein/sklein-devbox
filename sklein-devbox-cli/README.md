@@ -258,8 +258,10 @@ as-is:
 | `GOPASS_AGE_PASSWORD` | single line |
 
 `up` walks through: image cache purge, `incus create` with the rendered
-cloud-init, `incus start`, NetBird DNS wait, SSH host key refresh, then
-`cloud-init status --wait`.
+cloud-init, `incus start`, NetBird DNS wait, `cloud-init status --wait`, then
+an SSH host key refresh (`ssh-keygen -R` followed by
+`ssh-keyscan -t rsa,ecdsa,ed25519 … >> ~/.ssh/known_hosts`, retried up to
+30×2s), so that SSH and Mutagen connect without a fingerprint prompt.
 
 If cloud-init fails, `up` prints a diagnostic block: `cloud-init status
 --long`, the warnings/errors from `/var/log/cloud-init.log`, the `runcmd`

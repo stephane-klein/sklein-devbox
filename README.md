@@ -211,6 +211,7 @@ incus-destroy-lxc                                Delete the NetBird peer and the
 incus-list-images                                List the images available on the sklein Incus remote
 incus-start-lxc                                  Create (if needed) and start the container, workstation-synced mode
 incus-start-lxc-with-bootstrap                   Create the container, clone the repo and run the mise bootstrap (mutagen disabled)
+lint                                             Run shellcheck on every shell script of the repository
 mutagen-start                                    Start the mutagen two-way sync
 mutagen-stop                                     Stop the mutagen two-way sync
 ssh                                              Open an SSH session as devbox

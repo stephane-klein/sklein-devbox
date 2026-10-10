@@ -268,8 +268,11 @@ wait_for_foot_link_socket() {
   local -a probe_opts=(-o StrictHostKeyChecking=accept-new
                        -o UserKnownHostsFile=/dev/null
                        -o LogLevel=ERROR)
-  local target="${SSH_USER}@$(instance_fqdn)" attempt
-  for attempt in $(seq 1 20); do
+  local target
+  target="${SSH_USER}@$(instance_fqdn)"
+  for _ in $(seq 1 20); do
+    # The unescaped expansions are intentional: the socket paths resolve here.
+    # shellcheck disable=SC2029
     ssh "${probe_opts[@]}" "$target" \
       "test -S $FOOT_LINK_BUS_SOCKET && test -S $FOOT_LINK_PULSE_SOCKET" >/dev/null 2>&1 \
       && return 0
@@ -332,7 +335,7 @@ prune_foot_links() {
   dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   while read -r unit; do
     [ -n "$unit" ] || continue
-    short="${unit#${INSTANCE_PREFIX}-foot-link-}"
+    short="${unit#"${INSTANCE_PREFIX}"-foot-link-}"
     short="${short%.service}"
     inst="${INSTANCE_PREFIX}-${short}"
     instance_exists "$inst" && continue
@@ -476,7 +479,8 @@ cmd_console() {
                      -o UserKnownHostsFile=/dev/null
                      -o LogLevel=ERROR)
   local transport="${TERMINAL_MODE:-ssh}"
-  local target="${SSH_USER}@$(instance_fqdn)"
+  local target
+  target="${SSH_USER}@$(instance_fqdn)"
   case "$transport" in
     ssh)
       args+=(-e ssh -t "${ssh_opts[@]}" "$target")
@@ -514,7 +518,7 @@ cmd_foot_link() {
   if (( DRY_RUN )); then
     while IFS=, read -r name state; do
       [ -n "$name" ] || continue
-      INSTANCE_NAME="${name#${INSTANCE_PREFIX}-}"
+      INSTANCE_NAME="${name#"${INSTANCE_PREFIX}"-}"
       ensure_foot_link
     done < <(incus list "${INSTANCE_PREFIX}-" -c n,s --format csv 2>/dev/null)
     return 0
@@ -530,7 +534,7 @@ cmd_foot_link() {
       printf '%s: skipped (instance is %s)\n' "$name" "${state:-unknown}" >&2
       continue
     fi
-    INSTANCE_NAME="${name#${INSTANCE_PREFIX}-}"
+    INSTANCE_NAME="${name#"${INSTANCE_PREFIX}"-}"
     if ensure_foot_link; then
       printf '%s: link up\n' "$name"
     else
@@ -615,7 +619,7 @@ prompt_var() {
       ;;
   esac
   printf -v "$var" '%s' "$val"
-  export "$var"
+  export "${var?}"
 }
 
 require_tools() {
@@ -641,7 +645,7 @@ normalize_multiline_secret() {
     *'\n'*)
       case "$val" in
         *$'\n'*) ;;
-        *) printf -v "$var" '%b' "$val"; export "$var" ;;
+        *) printf -v "$var" '%b' "$val"; export "${var?}" ;;
       esac
       ;;
   esac
@@ -750,6 +754,8 @@ render_cloud_init() {
   printf 'runcmd:\n'
   printf '  - [bash, /usr/local/sbin/enroll-netbird.sh, /tmp/netbird-setup-key, /tmp/netbird-api-token]\n'
   printf '  - [su, devbox, -c, "mkdir -p ~/.local/share && git clone --branch %s --single-branch https://github.com/stephane-klein/sklein-devbox.git ~/.local/share/sklein-devbox"]\n' "$GIT_BRANCH"
+  # $HOME must stay literal: it is expanded by the shell inside the instance.
+  # shellcheck disable=SC2016
   printf '  - [su, devbox, -c, "bash $HOME/.local/share/sklein-devbox/bootstrap-sklein-devbox.sh"]\n'
   printf 'users:\n'
   printf '  - name: devbox\n'
@@ -1238,6 +1244,8 @@ completion_install() {
       completion_zsh_fpath > "$file"
       chmod 0644 "$file"
       printf 'Installed zsh completion: %s\n' "$file" >&2
+      # $fpath must stay literal: this is a hint printed for the user to paste.
+      # shellcheck disable=SC2016
       printf 'Ensure ~/.zsh/completions is in fpath, e.g. in ~/.zshrc:\n  fpath=(~/.zsh/completions $fpath)\n  autoload -Uz compinit && compinit\n' >&2
       ;;
     fish)

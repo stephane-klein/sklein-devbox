@@ -11,6 +11,8 @@ fi
 
 echo "Setting up jj publish alias..."
 
+# $(jj root) must stay literal: it is expanded by jj when the alias runs.
+# shellcheck disable=SC2016
 jj config set --repo aliases.publish '["util", "exec", "--", "bash", "-c", "jj bookmark set main -r @- && cd \"$(jj root)\" && scripts/gitleaks-check-push.sh && jj git push"]'
 
 echo "  -> jj publish alias written to $JJ_REPO_CONFIG"

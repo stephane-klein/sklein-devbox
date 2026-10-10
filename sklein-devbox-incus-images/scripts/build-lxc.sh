@@ -34,5 +34,5 @@ fi
 
 # distrobuilder runs as root on a workstation: hand the output back to the
 # current user. Nothing to do in CI where the job already runs as the owner.
-sudo chown -R $USER:$USER dist/sklein-devbox-dev 2>/dev/null || true
+sudo chown -R "$USER:$USER" dist/sklein-devbox-dev 2>/dev/null || true
 ls -lha dist/sklein-devbox-dev

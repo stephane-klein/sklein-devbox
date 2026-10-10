@@ -39,7 +39,8 @@ else
     incus image delete "$fingerprint"
   done
 
-  export NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group)"
+  NETBIRD_SETUP_KEY="$(gopass show -o netbird/setup-keys/incus-auto-group)"
+  export NETBIRD_SETUP_KEY
   export NETBIRD_PAT="${NETBIRD_PAT:-$(fnox get NETBIRD_PAT)}"
 
   # Optional gopass access material, injected into cloud-init by
@@ -47,7 +48,8 @@ else
   # secrets themselves come from `fnox exec` (see the incus-start-lxc task).
   # The age keyring is already base64-encoded in fnox.
   export SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64="${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-}"
-  export DEVBOX_SSH_CONFIG="$(cat sklein-devbox-mise-config/dotfiles/.ssh/config)"
+  DEVBOX_SSH_CONFIG="$(cat sklein-devbox-mise-config/dotfiles/.ssh/config)"
+  export DEVBOX_SSH_CONFIG
 
   # The rendered user-data is kept in a shell variable only: it is never
   # written to disk.

@@ -8,7 +8,8 @@ CONFIG_DIR="${SKLEIN_DEVBOX_CONFIG_DIR:-$HOME/.local/share/sklein-devbox/sklein-
 # Load the gopass age passphrase (file dropped by cloud-init or by
 # upload-gopass-access-keys.sh), then remove the file.
 if [ -z "${GOPASS_AGE_PASSWORD:-}" ] && [ -f /tmp/sklein-devbox-gopass-age-password ]; then
-  export GOPASS_AGE_PASSWORD="$(cat /tmp/sklein-devbox-gopass-age-password)"
+  GOPASS_AGE_PASSWORD="$(cat /tmp/sklein-devbox-gopass-age-password)"
+  export GOPASS_AGE_PASSWORD
 fi
 rm -f /tmp/sklein-devbox-gopass-age-password
 

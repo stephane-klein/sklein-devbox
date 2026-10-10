@@ -23,7 +23,8 @@ export NETBIRD_PAT="${NETBIRD_PAT:-$(fnox get NETBIRD_PAT)}"
 export GOPASS_AGE_PASSWORD="${GOPASS_AGE_PASSWORD:-$(fnox get GOPASS_AGE_PASSWORD)}"
 export SSH_STEPHANE_KLEIN_DEVBOX="${SSH_STEPHANE_KLEIN_DEVBOX:-$(fnox get SSH_STEPHANE_KLEIN_DEVBOX)}"
 export SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64="${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_B64:-${SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64:-$(fnox get SKLEIN_DEVBOX_SECRETS_AGE_KEYRING_BASE64)}}"
-export DEVBOX_SSH_CONFIG="$(cat sklein-devbox-mise-config/dotfiles/.ssh/config)"
+DEVBOX_SSH_CONFIG="$(cat sklein-devbox-mise-config/dotfiles/.ssh/config)"
+export DEVBOX_SSH_CONFIG
 
 # Exercise the git bootstrap block of the template.
 export SKLEIN_DEVBOX_GIT_CLONE=1

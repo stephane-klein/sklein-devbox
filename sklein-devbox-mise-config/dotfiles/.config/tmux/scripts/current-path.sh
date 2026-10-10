@@ -16,7 +16,7 @@ SHORT=$(echo "$FULL_PATH" | awk -F/ -v n="$LEVELS" '{
 }')
 
 # Truncate if too long
-if [ ${#SHORT} -gt $MAX_LEN ]; then
+if [ "${#SHORT}" -gt "$MAX_LEN" ]; then
   echo "…${SHORT: -$((MAX_LEN - 1))}"
 else
   echo "$SHORT"

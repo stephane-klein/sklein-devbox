@@ -33,8 +33,7 @@ PANE=$(echo "$TARGET" | awk '{print $1}')
 
 if [[ "$KEY" == "ctrl-c" ]]; then
   CURRENT_PATH=$(tmux display-message -p '#{pane_current_path}')
-  name=$(gum input --placeholder 'window name...')
-  [[ $? -ne 0 ]] && exit 0
+  if ! name=$(gum input --placeholder 'window name...'); then exit 0; fi
   [[ -z "$name" ]] && name=$(mise exec --cd / -- petname)
   tmux new-window -a -c "$CURRENT_PATH" -n "$name"
   exit 0
@@ -42,8 +41,7 @@ fi
 
 if [[ "$KEY" == "ctrl-r" ]]; then
   CURRENT_NAME=$(echo "$TARGET" | awk '{print $2}')
-  NEW_NAME=$(gum input --placeholder 'window name...' --value "$CURRENT_NAME")
-  [[ $? -ne 0 ]] && exit 0
+  if ! NEW_NAME=$(gum input --placeholder 'window name...' --value "$CURRENT_NAME"); then exit 0; fi
   [[ -z "$NEW_NAME" ]] && exit 0
   tmux rename-window -t "$PANE" "$NEW_NAME"
   exit 0

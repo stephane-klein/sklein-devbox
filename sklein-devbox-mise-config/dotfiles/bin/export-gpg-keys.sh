@@ -33,7 +33,7 @@ PUBLIC_FINGERPRINTS=$(gpg --list-keys --with-colons --fingerprint \
 
 for KEY_ID in $PUBLIC_FINGERPRINTS; do
     echo "  -> $KEY_ID"
-    gpg --armor --export "$KEY_ID" > ~/.local/share/gopass/stores/root/gpg/pubkeys/${KEY_ID}.asc
+    gpg --armor --export "$KEY_ID" > "$HOME/.local/share/gopass/stores/root/gpg/pubkeys/${KEY_ID}.asc"
 done
 
 echo ""

@@ -32,19 +32,20 @@ export LANG=C.UTF-8
 PATH="$HOME/.local/share/mise/shims:$PATH"
 export PATH
 
-# Remote-desktop link: the foot host forwards its session bus and audio server
-# into the instance over two reverse-unix-socket ssh forwards (created by the
-# sklein-devbox CLI `console` subcommand). Export the sockets only when the
-# carrier actually created them: a missing carrier (instance just booted,
-# carrier down) must not leave the variables dangling, since a dead
-# DBUS_SESSION_BUS_ADDRESS breaks podman's cgroup-manager detection and makes
-# notify-send/xdg-open/paplay fail.
-if [ -S /tmp/foot-host-bus ]; then
-  DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/foot-host-bus
-  export DBUS_SESSION_BUS_ADDRESS
-else
-  unset DBUS_SESSION_BUS_ADDRESS
-fi
+# Remote-desktop link: the foot host forwards its audio server into the instance
+# over a reverse-unix-socket ssh forward (created by the sklein-devbox CLI
+# `console` subcommand). Export the socket only when the carrier actually
+# created it: a missing carrier (instance just booted, carrier down) must not
+# leave the variable dangling, since a dead PULSE_SERVER makes paplay/pactl
+# fail.
+#
+# The host session bus (/tmp/foot-host-bus) is deliberately NOT exported here.
+# podman reads DBUS_SESSION_BUS_ADDRESS to locate the systemd user bus for its
+# sandbox cgroup; a foreign (host) bus makes it fail with "Failed to add podman
+# to systemd sandbox cgroup ... No such process", which breaks `podman run` and
+# `podman compose` (both the pod cgroup and the container cgroup). The tools
+# that need the host bus (xdg-open, notify-send) set it themselves, for that
+# tool only.
 if [ -S /tmp/foot-host-pulse ]; then
   PULSE_SERVER=unix:/tmp/foot-host-pulse
   export PULSE_SERVER
@@ -52,17 +53,16 @@ else
   unset PULSE_SERVER
 fi
 
-# Propagate the two variables into a tmux environment target (global with `-g`,
+# Propagate the link variable into a tmux environment target (global with `-g`,
 # or a given session with `-t <name>`): set when present, unset when not. The
 # wrapper's own environment only seeds the tmux server at its creation, and the
-# default update-environment list does not include these variables, so an
-# already running server would otherwise keep a stale (or absent) value.
+# default update-environment list does not include this variable, so an already
+# running server would otherwise keep a stale (or absent) value.
 sync_tmux_link_env() {
-  if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-    tmux set-environment "$@" DBUS_SESSION_BUS_ADDRESS "$DBUS_SESSION_BUS_ADDRESS" 2>/dev/null || true
-  else
-    tmux set-environment "$@" -u DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
-  fi
+  # Always clear DBUS_SESSION_BUS_ADDRESS: it must never leak into the instance
+  # environment (see above). This also purges a stale value left by an earlier
+  # login in an already-running tmux server.
+  tmux set-environment "$@" -u DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
   if [ -n "${PULSE_SERVER:-}" ]; then
     tmux set-environment "$@" PULSE_SERVER "$PULSE_SERVER" 2>/dev/null || true
   else

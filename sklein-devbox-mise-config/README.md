@@ -165,17 +165,20 @@ This repository provides the **instance side** of the link:
 
 - `[bootstrap.packages]` — `libnotify` (`notify-send`) and `pulseaudio-utils`
   (`paplay`, `pactl`).
-- `files/xdg-open` deployed to `/usr/local/bin/xdg-open` — the system
-  `xdg-open` fails on the headless instance; this wrapper calls the foot host's
-  desktop portal (`org.freedesktop.portal.OpenURI`) over the forwarded session
-  bus.
-- `files/ssh-tmux-login` — exports `DBUS_SESSION_BUS_ADDRESS` and
-  `PULSE_SERVER` **only when** `/tmp/foot-host-bus` / `/tmp/foot-host-pulse`
-  exist (so a missing carrier does not leave the variables dangling, which
-  breaks podman's cgroup-manager detection), and mirrors them into the tmux
-  server/session environment (the wrapper's own environment only seeds the tmux
-  server at its creation, and `update-environment` does not list these
-  variables).
+- `files/xdg-open` and `files/notify-send` deployed to `/usr/local/bin/` — the
+  system tools fail on the headless instance; these wrappers reach the foot
+  host's desktop portal (`org.freedesktop.portal.OpenURI`) and notification
+  daemon over the forwarded session bus, setting `DBUS_SESSION_BUS_ADDRESS` for
+  that invocation only.
+- `files/ssh-tmux-login` — exports `PULSE_SERVER` **only when**
+  `/tmp/foot-host-pulse` exists (so a missing carrier does not leave the
+  variable dangling), and mirrors it into the tmux server/session environment
+  (the wrapper's own environment only seeds the tmux server at its creation, and
+  `update-environment` does not list it). It deliberately does **not** export
+  `DBUS_SESSION_BUS_ADDRESS`: podman reads it to locate the systemd user bus for
+  its sandbox cgroup, and a foreign (host) bus makes `podman run` / `podman
+  compose` fail with `Failed to add podman to systemd sandbox cgroup ...
+  No such process`. The host bus is set per tool instead (above).
 - `files/sshd-foot-link.conf` (`StreamLocalBindUnlink yes`) — lets a restarted
   carrier re-bind the reverse socket over a stale one.
 

@@ -243,6 +243,16 @@ owner = "root"
 group = "root"
 mode = "0755"
 
+# Remote-desktop link: notify-send must reach the foot host's notification
+# daemon over the session bus reverse-forwarded to /tmp/foot-host-bus. The bus
+# is not exported globally (a foreign DBUS_SESSION_BUS_ADDRESS breaks podman's
+# systemd sandbox cgroup), so this wrapper sets it for notify-send only.
+[bootstrap.files."/usr/local/bin/notify-send"]
+source = "./files/notify-send"
+owner = "root"
+group = "root"
+mode = "0755"
+
 # Default sound for the audio check of `~/bin/sklein-devbox-doctor` (CC0, see
 # files/sounds/README.md).
 [bootstrap.files."~/.local/share/sklein-devbox/sounds/door-bell.ogg"]

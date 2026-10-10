@@ -147,6 +147,11 @@ env_summary() {
   local missing=0
   if [ -S "$BUS_SOCKET" ]; then
     printf '   bus socket    %s\n' "$BUS_SOCKET"
+    # The host bus is no longer in the ambient environment (a foreign
+    # DBUS_SESSION_BUS_ADDRESS breaks podman's systemd sandbox cgroup; see
+    # files/ssh-tmux-login). Set it for the link checks below.
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$BUS_SOCKET"
+    export DBUS_SESSION_BUS_ADDRESS
   else
     printf '   bus socket    %s (missing)\n' "$BUS_SOCKET"
     missing=$((missing + 1))
@@ -157,7 +162,7 @@ env_summary() {
     printf '   pulse socket  %s (missing)\n' "$PULSE_SOCKET"
     missing=$((missing + 1))
   fi
-  printf '   DBUS_SESSION_BUS_ADDRESS=%s\n' "${DBUS_SESSION_BUS_ADDRESS:-(unset)}"
+  printf '   host bus env  %s (not exported to podman)\n' "${DBUS_SESSION_BUS_ADDRESS:-(unset)}"
   printf '   PULSE_SERVER=%s\n' "${PULSE_SERVER:-(unset)}"
   if (( missing == 2 )); then
     printf '\n   The remote-desktop link is not up. On the foot host run:\n' >&2

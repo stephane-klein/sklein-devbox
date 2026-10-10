@@ -1,0 +1,13 @@
+#!/bin/sh
+# Remote-desktop link: notify-send must reach the foot host's notification
+# daemon over the session bus reverse-forwarded to /tmp/foot-host-bus by the
+# CLI's `console` (sklein-devbox-foot-link-<instance>.service).
+#
+# The bus is not exported globally (a foreign DBUS_SESSION_BUS_ADDRESS breaks
+# podman's systemd sandbox cgroup -- see files/ssh-tmux-login), so point this
+# tool at the host bus here, for this invocation only.
+if [ -S /tmp/foot-host-bus ]; then
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/foot-host-bus"
+  export DBUS_SESSION_BUS_ADDRESS
+fi
+exec /usr/bin/notify-send "$@"

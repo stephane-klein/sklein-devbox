@@ -93,8 +93,9 @@ The global config defines shortcuts so you never have to type the driver path:
 
 ```toml
 [shell_alias]
-devbox-cd  = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
-devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
+devbox-cd        = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
+devbox-dot       = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
+devbox-bootstrap = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run bootstrap-all"
 ```
 
 `mise activate` sets these aliases in interactive bash/zsh/fish shells. They are
@@ -103,6 +104,12 @@ current shell's directory; `devbox-dot apply` is shorthand for
 `mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run dot apply`,
 which in turn runs the dotfiles under `fnox exec` (see
 [Bootstrap secrets and fnox](#bootstrap-secrets-and-fnox)).
+
+`devbox-bootstrap` is shorthand for `mise run bootstrap-all` and converges the
+whole instance — `[bootstrap.packages]`, `[bootstrap.files]`, services, then the
+dotfiles and `[tools]`. Use it whenever a change touches any `[bootstrap.*]`
+section: `devbox-dot apply` applies only the `[dotfiles]` entries (and installs
+`[tools]`), never `[bootstrap.packages]`.
 
 ## Shell completions
 
@@ -232,6 +239,10 @@ workstation to persist.
 - `mise dot` and `mise bootstrap` need `[bootstrap.secrets]` in the environment:
   go through `mise run dot` / `mise run bootstrap-all` (or `fnox exec`) rather
   than a bare `mise dot` / `mise bootstrap`.
+- `devbox-dot apply` (= `mise dot apply`) applies only the `[dotfiles]`; it never
+  installs `[bootstrap.packages]`. Adding or changing a package means
+  `devbox-bootstrap` (= `mise run bootstrap-all`), which also applies the
+  dotfiles — `mise dot apply` is a phase of `mise bootstrap`.
 - A `copy` entry overwrites its target on apply; replacing a real file with a
   `symlink` entry needs `mise bootstrap --force-dotfiles` (or `mise dot apply --force`).
 - mise reads configs at process start: the driver's `post-dotfiles` hook runs

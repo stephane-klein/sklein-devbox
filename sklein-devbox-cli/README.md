@@ -51,6 +51,7 @@ Usage:
   sklein-devbox [command]
 
 Available Commands:
+  check-latency  Measure the SSH round-trip latency and judge if it is comfortable for tmux/nvim
   completion  Generate the autocompletion script for the specified shell
   console     Open a tmux session in the devbox instance with a terminal emulator
   destroy     Destroy the sklein-devbox instance and all its data
@@ -75,6 +76,30 @@ Flags:
   -v, --version      version for sklein-devbox
 
 Use "sklein-devbox [command] --help" for more information about a command.
+```
+
+### `check-latency`
+
+Tells whether the network link to the instance is good enough for comfortable
+interactive use (`tmux`, `nvim`). It measures the **SSH round-trip** of an
+established connection — the delay every keystroke and screen redraw waits for —
+over a single multiplexed connection (`ControlMaster`), plus the cost of a fresh
+connection (what opening a new terminal/tab costs). Ten round-trips and three
+fresh connections are sampled automatically: the command takes no argument
+(`--name` is honored, `--dry-run` prints the `ssh` invocations).
+
+The verdict follows the average round-trip: `< 30 ms` excellent, `< 80 ms`
+comfortable, `< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful,
+`>= 200 ms` unusable. From 120 ms up it suggests the `mosh` transport
+(predictive local echo), which tolerates latency far better than plain `ssh`.
+
+```sh
+$ sklein-devbox check-latency
+devbox@sklein-devbox-dev1.homelab.stephane-klein.info
+RTT 127 ms (jitter 29 ms) · fresh connect 1936 ms
+
+Verdict: painful — every keystroke waits for the round trip
+Tip: try the mosh transport (predictive local echo): sklein-devbox console --terminal=mosh
 ```
 
 ### `completion`

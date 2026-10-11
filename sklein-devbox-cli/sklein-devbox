@@ -181,6 +181,7 @@ run() {
 }
 
 declare -Ar CMD_DESC=(
+  [check-latency]="Measure the SSH round-trip latency and judge if it is comfortable for tmux/nvim"
   [completion]="Generate the autocompletion script for the specified shell"
   [console]="Open a tmux session in the devbox instance with a terminal emulator"
   [destroy]="Destroy the sklein-devbox instance and all its data"
@@ -194,7 +195,7 @@ declare -Ar CMD_DESC=(
   [stop]="Stop the sklein-devbox instance"
   [up]="Start the sklein-devbox instance"
 )
-declare -ar CMD_ORDER=(completion console destroy doctor foot-link generate-mutagen help list logs resize stop up)
+declare -ar CMD_ORDER=(check-latency completion console destroy doctor foot-link generate-mutagen help list logs resize stop up)
 
 instance_name() { printf '%s-%s' "$INSTANCE_PREFIX" "$INSTANCE_NAME"; }
 
@@ -458,6 +459,12 @@ usage_extra_resize() {
   printf 'from the storage pool.\n'
 }
 
+usage_extra_check_latency() {
+  printf '\nTakes no argument: everything is automatic. Measures the SSH round-trip\n'
+  printf 'to the instance, then prints a verdict on whether interactive tools\n'
+  printf '(tmux, nvim) will feel comfortable. The --name flag is honored.\n'
+}
+
 cmd_console() {
   local instance
   instance="$(instance_name)"
@@ -600,6 +607,90 @@ cmd_doctor() {
     return 1
   fi
   return 0
+}
+
+# --- SSH latency check --------------------------------------------------------
+# Answers "is my network good enough for tmux/nvim?" without any argument. The
+# number that matters for typing is the round-trip of a warm connection: every
+# keystroke and every screen redraw waits for it. It is measured over a single
+# multiplexed connection (ControlMaster) so that per-call ssh startup does not
+# pollute the samples. A fresh-connection time is reported too: it is what a new
+# terminal/tab costs.
+
+latency_stats() {
+  awk '
+    { n++; s += $1; v[n] = $1
+      if (n == 1 || $1 < min) min = $1
+      if (n == 1 || $1 > max) max = $1 }
+    END {
+      if (n == 0) { print "0 0 0 0"; exit }
+      avg = s / n
+      for (i = 1; i <= n; i++) { d = v[i] - avg; ss += d * d }
+      printf "%.0f %.0f %d %d\n", avg, sqrt(ss / n), min, max
+    }'
+}
+
+cmd_check_latency() {
+  [ $# -eq 0 ] || die "check-latency: takes no argument"
+  have ssh || die "ssh not found in PATH"
+
+  local target
+  target="${SSH_USER}@$(instance_fqdn)"
+  local -a ssh_opts=(-o StrictHostKeyChecking=accept-new
+                     -o UserKnownHostsFile=/dev/null
+                     -o LogLevel=ERROR
+                     -o BatchMode=yes
+                     -o ConnectTimeout=10)
+
+  if (( DRY_RUN )); then
+    printf '+ ssh %s %q true   # fresh-connect sample\n' "${ssh_opts[*]}" "$target" >&2
+    printf '+ ssh %s -o ControlMaster=yes -o ControlPath=<tmp> %q true\n' "${ssh_opts[*]}" "$target" >&2
+    printf '+ ssh -o ControlPath=<tmp> %q true   # round-trip samples\n' "$target" >&2
+    return 0
+  fi
+
+  local ctl="/tmp/sklein-devbox-latency.$$.sock"
+  local t0 t1 connect_ms i
+  local -a samples=()
+
+  t0="$(date +%s%N)"
+  ssh "${ssh_opts[@]}" "$target" true 2>/dev/null \
+    || die "cannot reach $target over SSH"
+  t1="$(date +%s%N)"
+  connect_ms=$(( (t1 - t0) / 1000000 ))
+
+  ssh "${ssh_opts[@]}" -o ControlMaster=yes -o ControlPath="$ctl" -o ControlPersist=60 \
+    "$target" true 2>/dev/null \
+    || die "cannot open a multiplexed SSH connection to $target"
+  # The single quotes must expand here: the trap runs at exit, outside this
+  # function's local scope.
+  # shellcheck disable=SC2064
+  trap "ssh -O exit -o ControlPath='$ctl' '$target' >/dev/null 2>&1 || true; rm -f '$ctl'" EXIT
+
+  for i in $(seq 1 10); do
+    t0="$(date +%s%N)"
+    ssh -o ControlPath="$ctl" "$target" true 2>/dev/null
+    t1="$(date +%s%N)"
+    samples+=( $(( (t1 - t0) / 1000000 )) )
+  done
+
+  local avg jitter _min _max
+  read -r avg jitter _min _max < <(printf '%s\n' "${samples[@]}" | latency_stats)
+
+  printf '%s\n' "$target"
+  printf 'RTT %s ms (jitter %s ms) · fresh connect %s ms\n\n' "$avg" "$jitter" "$connect_ms"
+
+  local verdict
+  if   (( avg < 30 ));  then verdict="excellent — feels almost local"
+  elif (( avg < 80 ));  then verdict="comfortable — nvim/tmux feel fluid"
+  elif (( avg < 120 )); then verdict="fair — perceptible lag while typing"
+  elif (( avg < 200 )); then verdict="painful — every keystroke waits for the round trip"
+  else                       verdict="unusable — too slow for an interactive shell"
+  fi
+  printf 'Verdict: %s\n' "$verdict"
+  if (( avg >= 120 )); then
+    printf 'Tip: try the mosh transport (predictive local echo): %s console --terminal=mosh\n' "$PROG_NAME"
+  fi
 }
 
 prompt_var() {

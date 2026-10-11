@@ -201,6 +201,16 @@ starship = "1.26.0"
 "~/bin/sklein-devbox-doctor"        = { mode ="copy", permissions = "0755" }
 "~/bin/sklein-devbox-mise-upgrade"  = { mode ="copy", permissions = "0755" }
 
+# Default sound for the audio check of `~/bin/sklein-devbox-doctor` (CC0, see
+# files/sounds/README.md). A dotfiles `copy` entry rather than a
+# `[bootstrap.files]` one: mise reads `[bootstrap.files].source` as UTF-8 text,
+# which rejects a binary file such as this Ogg Vorbis asset.
+"~/.local/share/sklein-devbox/sounds/door-bell.ogg" = {
+  source = "files/sounds/door-bell.ogg",
+  mode = "copy",
+  permissions = "0644",
+}
+
 [bootstrap.directories."~/.kube/"]
 mode = "0700"
 
@@ -252,12 +262,6 @@ source = "./files/notify-send"
 owner = "root"
 group = "root"
 mode = "0755"
-
-# Default sound for the audio check of `~/bin/sklein-devbox-doctor` (CC0, see
-# files/sounds/README.md).
-[bootstrap.files."~/.local/share/sklein-devbox/sounds/door-bell.ogg"]
-source = "./files/sounds/door-bell.ogg"
-mode = "0644"
 
 [bootstrap.files."/etc/ssh/sshd_config.d/20-tmux-force.conf"]
 source = "./files/sshd-tmux-force.conf"

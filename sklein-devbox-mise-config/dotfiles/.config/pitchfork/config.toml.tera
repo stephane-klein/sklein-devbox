@@ -16,9 +16,11 @@ export OPENCODE_SKIP_START=true
 export OPENCODE_PORT=4096
 OPENCHAMBER_UI_PASSWORD={{ secret(name="OPENCHAMBER_UI_PASSWORD") }}
 export OPENCHAMBER_UI_PASSWORD
-exec mise exec -- openchamber --lan --port 3000
+exec mise exec -- openchamber --lan --port 3000 --foreground
 """
 retry = true
+depends = ["opencode-server"]
+port = 3000
 
 # --- sklein-devbox-ingress ---------------------------------------------------
 # Wildcard subdomains over NetBird + a per-hostname TLS reverse proxy in front

@@ -81,59 +81,63 @@ Use "sklein-devbox [command] --help" for more information about a command.
 ### `check-latency`
 
 Tells whether the network link to the instance is good enough for comfortable
-interactive use (`tmux`, `nvim`). It measures the **SSH round-trip** of an
-established connection — the delay every keystroke and screen redraw waits for —
-over a single multiplexed connection (`ControlMaster`), plus the cost of a fresh
-connection (what opening a new terminal/tab costs). Ten round-trips and three
-fresh connections are sampled automatically: the command takes no argument
-(`--name` is honored, `--dry-run` prints the commands).
+interactive use (`tmux`, `nvim`).
 
-It then **decomposes the delay** layer by layer (`dns` / `local` / `tunnel` /
-`remote` / `ssh`) and adds the `access` and `egress` probes, so the culprit can
-be named:
+The value the **verdict** is based on is the **typing RTT**: one network round
+trip on the tunnel, which is what a keystroke in an **established** session
+waits for (measured with a bare TCP connect to the devbox sshd on the NetBird
+address: no DNS, no remote command). The `ssh` figures below are *per-connection*
+costs that a keystroke never pays — don't read them as typing latency.
+
+It decomposes everything so the culprit can be named:
 
 - `dns` — resolving the instance FQDN. NetBird serves it from the devbox
   dnsmasq **over the tunnel**, so it is not a local lookup (timed on the first,
-  cold resolution);
+  cold resolution, both address families);
+- `startup` — what **every** `ssh` pays before connecting: parse the config
+  (including any `Match exec`, e.g. NetBird's `netbird ssh detect`) and resolve
+  the name, via `ssh -G`;
 - `local` — one `ssh` invocation against the master (`ssh -O check`): client
   process startup + control socket, with no remote command;
-- `tunnel` — a bare TCP connect to the devbox sshd on the NetBird address, with
-  no DNS and no remote command: what the network itself contributes (shown as
-  `med` with `min`/`max`, annotated with the NetBird type `direct (P2P)`/relayed);
+- `typing` — the bare TCP connect described above (`med` with `min`/`max`,
+  annotated with the NetBird type `direct (P2P)`/relayed): **the keystroke
+  latency indicator**;
 - `remote` — the devbox login shell that `sshd`'s `ForceCommand` starts per
-  command, timed in the remote probe;
-- `ssh` — the ControlMaster samples, i.e. `local` + ~3 tunnel round trips +
-  `remote` (+ `dns` on the first). The leftover over that expectation is shown
-  as `(+N ms over local + ~3 tunnel RTT + remote)`.
+  command;
+- `ssh` — the ControlMaster samples, i.e. `local` + ~3 typing round trips +
+  `remote` (+ `dns` on the first); the leftover over that expectation is shown;
+- `access` / `egress` — the same TCP-connect probe to a public anycast from the
+  workstation and from the devbox (WiFi/5G access, homelab uplink).
 
-An `Attribution:` line interprets it (slow DNS, slow remote exec, slow access
-network, relayed NetBird link, slow homelab uplink, intermittent tunnel spikes,
-or an established SSH flow slower than its fresh-connect tunnel probes — the
-signature of spikes/loss on the tunnel, not local overhead). Parts that cannot
-be measured (no `netbird`, no `/dev/tcp`, no IPv4) are reported as `n/a`.
+An `Attribution:` line interprets it (slow ssh config/startup — the NetBird
+`Match exec` trap and its `NB_DISABLE_SSH_CONFIG=true` fix —, slow DNS, slow
+remote exec, slow access network, relayed link, typing spikes, or an established
+SSH flow slower than its typing probes). Parts that cannot be measured (no
+`netbird`, no `/dev/tcp`, no IPv4) are reported as `n/a`.
 
-The verdict follows the **median** round-trip (robust to a few mobile spikes;
-`min`/`max` are shown too): `< 30 ms` excellent, `< 80 ms` comfortable,
-`< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful, `>= 200 ms`
-unusable. From 120 ms up it suggests the `mosh` transport (predictive local
-echo), which tolerates latency far better than plain `ssh`.
+The verdict thresholds apply to the **typing** median (robust to a few mobile
+spikes; `min`/`max` shown): `< 30 ms` excellent, `< 80 ms` comfortable,
+`< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful,
+`>= 200 ms` unusable. From 120 ms up it suggests the `mosh` transport
+(predictive local echo).
 
 ```sh
 $ sklein-devbox check-latency
 devbox@sklein-devbox-dev.homelab.stephane-klein.info (100.91.177.168)
-SSH RTT 52 ms (min 50 / med 51 / max 54) · fresh connect 312 ms
+Typing RTT 14 ms (min 14 / max 16) · ssh command 53 ms · fresh connect 333 ms
 
 ==> breakdown
-  dns     resolve fqdn               5 ms
-  local   ssh client (mux)           6 ms
-  tunnel  workstation -> devbox     14 ms (min 13 / max 15)   netbird: direct (P2P)
-  remote  devbox login shell         4 ms
-  ssh     workstation -> devbox     51 ms   (local + ~3 tunnel RTT + remote)
-  access  workstation -> 9.9.9.9    11 ms   (WiFi + 5G + ISP)
-  egress  devbox      -> 9.9.9.9     6 ms   (homelab uplink)
+  dns      resolve fqdn                4 ms
+  startup  ssh client (config)         7 ms   (per connection)
+  local    ssh client (mux)            7 ms   (per connection)
+  typing   workstation -> devbox      14 ms (min 14 / max 16)   netbird: direct (P2P)   [keystroke latency]
+  remote   devbox login shell          5 ms   (per connection)
+  ssh      workstation -> devbox      53 ms   (connection: local + ~3 typing RTT + remote)
+  access   workstation -> 9.9.9.9    12 ms   (WiFi + 5G + ISP)
+  egress   devbox      -> 9.9.9.9     6 ms   (homelab uplink)
 
-Verdict: comfortable — nvim/tmux feel fluid
-Attribution: latency is just the SSH round trips over the tunnel (~3 × 14 ms); local and remote overhead are small
+Verdict: excellent — feels almost local (typing 14 ms)
+Attribution: typing is just one tunnel round trip (~14 ms); connection costs are small
 ```
 
 ### `completion`

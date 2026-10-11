@@ -460,12 +460,11 @@ usage_extra_resize() {
 }
 
 usage_extra_check_latency() {
-  printf '\nTakes no argument: everything is automatic. Measures the SSH round-trip\n'
-  printf 'to the instance, then prints a verdict (on the median) on whether\n'
-  printf 'interactive tools (tmux, nvim) will feel comfortable. The delay is\n'
-  printf 'split into dns / local / tunnel / remote / ssh, plus the access\n'
-  printf 'network and homelab uplink, to point at the culprit. The --name flag\n'
-  printf 'is honored.\n'
+  printf '\nTakes no argument: everything is automatic. Prints the typing RTT (one\n'
+  printf 'network round trip on the tunnel = keystroke latency in an established\n'
+  printf 'tmux/nvim session) and bases the verdict on it. Every other line is a\n'
+  printf 'per-connection or context cost (dns, startup, local, remote, ssh,\n'
+  printf 'access, egress) so the culprit can be named. The --name flag is honored.\n'
 }
 
 cmd_console() {
@@ -613,28 +612,32 @@ cmd_doctor() {
 }
 
 # --- SSH latency check --------------------------------------------------------
-# Answers "is my network good enough for tmux/nvim?" without any argument. The
-# number that matters for typing is the round-trip of a warm connection: every
-# keystroke and every screen redraw waits for it. It is measured over a single
-# multiplexed connection (ControlMaster) so that per-call ssh startup does not
-# pollute the samples. A fresh-connection time is reported too: it is what a new
-# terminal/tab costs.
+# Answers "is my network good enough for tmux/nvim?" without any argument.
 #
-# The delay is then decomposed so each layer is named:
-#   * dns    - resolving the FQDN (NetBird points it at the devbox dnsmasq, over
-#              the tunnel, so it is not a local lookup);
-#   * local  - one ssh invocation against the master (ssh -O check): process
-#              startup + control socket, no remote command;
-#   * tunnel - a bare TCP connect to the devbox sshd on the NetBird address, no
-#              DNS and no remote command: what the network itself contributes;
-#   * remote - the devbox login shell sshd's ForceCommand starts per command;
-#   * ssh    - the ControlMaster samples, i.e. local + ~3 tunnel round trips +
-#              remote (+ dns on the first); the leftover over that expectation is
-#              reported instead of being blamed on a layer.
+# The value that matters for typing is the *typing RTT*: one network round trip
+# on the tunnel, which is what a keystroke in an already-established tmux/nvim
+# session waits for. It is measured with a bare TCP connect to the devbox sshd
+# on the NetBird address (no DNS, no remote command), and the verdict is based
+# on it -- not on the ssh figures, which pay per-connection costs that a
+# keystroke never pays.
+#
+# Every other line is a per-connection or context cost, shown so the culprit can
+# be named when something is slow:
+#   * dns     - resolving the FQDN (NetBird points it at the devbox dnsmasq over
+#               the tunnel, so it is not a local lookup), both address families;
+#   * startup - what every ssh pays before connecting: parse the config
+#               (including any `Match exec`, e.g. NetBird's `netbird ssh
+#               detect`) and resolve the name, via `ssh -G`;
+#   * local   - one ssh invocation against the master (ssh -O check): process
+#               startup + control socket, no remote command;
+#   * remote  - the devbox login shell sshd's ForceCommand starts per command;
+#   * ssh     - the ControlMaster samples, i.e. local + ~3 typing round trips +
+#               remote (+ dns on the first); the leftover over that expectation
+#               is reported;
+#   * access / egress - the same TCP-connect probe to a public anycast from the
+#               workstation and from the devbox (WiFi/5G access, homelab uplink).
 # A median (not the average) drives the verdict, so a few mobile spikes do not
-# dominate. The same TCP-connect probe also runs from the devbox and the NetBird
-# link type is read from `netbird status`, to place the access network (WiFi/5G)
-# and the homelab uplink. No ICMP (no portable ping) and no extra dependency.
+# dominate. No ICMP (no portable ping) and no extra dependency.
 
 # Prints "min med avg max jitter" for the integers read on stdin (all rounded
 # to whole milliseconds). The median is what the verdict is based on: unlike the
@@ -677,14 +680,6 @@ sample_tcp_rtt() {
     ms="$(tcp_connect_ms "$host" "$port")"
     [ -n "$ms" ] && printf '%s\n' "$ms"
   done
-  return 0
-}
-
-# First IPv4 address of a hostname, through the system resolver. For the devbox
-# FQDN that resolver is NetBird's, pointing at the devbox dnsmasq over the
-# tunnel, so this is not a local lookup. Empty when the name does not resolve.
-resolve_ip() {
-  getent ahostsv4 "$1" 2>/dev/null | awk 'NR==1 { print $1 }'
   return 0
 }
 
@@ -760,12 +755,13 @@ cmd_check_latency() {
                      -o ConnectTimeout=10)
 
   if (( DRY_RUN )); then
-    printf '+ getent ahostsv4 %q   # DNS resolution over the tunnel\n' "$fqdn" >&2
-    printf '+ bash /dev/tcp/<resolved-ip>/22   # tunnel-only RTT samples\n' >&2
+    printf '+ getent hosts %q   # DNS resolution over the tunnel\n' "$fqdn" >&2
+    printf '+ bash /dev/tcp/<resolved-ip>/22   # typing RTT samples (keystroke latency)\n' >&2
     printf '+ ssh %s %q true   # fresh-connect sample\n' "${ssh_opts[*]}" "$target" >&2
+    printf '+ ssh -G %q   # ssh client config/startup cost (no connection)\n' "$fqdn" >&2
     printf '+ ssh %s -o ControlMaster=yes -o ControlPath=<tmp> %q true\n' "${ssh_opts[*]}" "$target" >&2
     printf '+ ssh -o ControlPath=<tmp> -O check %q   # local ssh client cost\n' "$target" >&2
-    printf '+ ssh -o ControlPath=<tmp> %q true   # round-trip samples\n' "$target" >&2
+    printf '+ ssh -o ControlPath=<tmp> %q true   # connection round-trip samples\n' "$target" >&2
     printf '+ ssh -o ControlPath=<tmp> %q bash -c %q   # SSH_CLIENT + netbird + remote RTT + login shell\n' \
       "$target" "$(remote_latency_probe)" >&2
     printf '+ bash /dev/tcp/{9.9.9.9,1.1.1.1}/443   # local access RTT samples\n' >&2
@@ -774,12 +770,14 @@ cmd_check_latency() {
 
   # DNS: the devbox FQDN is served by NetBird's resolver (the devbox dnsmasq
   # over the tunnel), so resolving it costs a tunnel round-trip, not a local
-  # lookup. Timed on this first (cold) resolution, which also yields the address
-  # reused for the tunnel-only probe below.
+  # lookup. Timed on this first (cold) getaddrinfo for both address families
+  # (`getent hosts`), so a slow AAAA is visible; the IPv4 is fetched separately
+  # for the tunnel probe below (`getent hosts` only returns the IPv6 here).
   local t0 t1 resolved_ip="" dns_ms=""
   t0="$(date +%s%N)"
-  resolved_ip="$(resolve_ip "$fqdn")"
+  getent hosts "$fqdn" >/dev/null 2>&1 || true
   t1="$(date +%s%N)"
+  resolved_ip="$(getent ahostsv4 "$fqdn" 2>/dev/null | awk 'NR==1 { print $1 }' || true)"
   if [ -n "$resolved_ip" ]; then
     dns_ms=$(( (t1 - t0) / 1000000 ))
   fi
@@ -805,13 +803,25 @@ cmd_check_latency() {
   # Local cost of one ssh invocation against the master: client startup plus the
   # control-socket round trip, with no remote command. It is the per-sample
   # overhead that is neither the network nor the devbox.
-  local local_ms="" _li _lt0 _lt1 _lms
-  for _li in 1 2 3; do
+  local local_ms="" startup_ms="" _li _lt0 _lt1 _lms
+  for _li in 1 2 3 4 5; do
     _lt0="$(date +%s%N)"
     ssh -o ControlPath="$ctl" -O check "$target" >/dev/null 2>&1 || true
     _lt1="$(date +%s%N)"
     _lms=$(( (_lt1 - _lt0) / 1000000 ))
     if [ -z "$local_ms" ] || (( _lms < local_ms )); then local_ms="$_lms"; fi
+  done
+
+  # What every ssh pays before it connects: parse the config (including any
+  # `Match exec`, e.g. NetBird's `netbird ssh detect`) and resolve the name.
+  # `ssh -G` does exactly that without opening a connection. A large value is a
+  # per-connection cost, not keystroke latency.
+  for _li in 1 2 3; do
+    _lt0="$(date +%s%N)"
+    ssh -G "$fqdn" >/dev/null 2>&1 || true
+    _lt1="$(date +%s%N)"
+    _lms=$(( (_lt1 - _lt0) / 1000000 ))
+    if [ -z "$startup_ms" ] || (( _lms < startup_ms )); then startup_ms="$_lms"; fi
   done
 
   for i in $(seq 1 10); do
@@ -821,13 +831,14 @@ cmd_check_latency() {
     samples+=( $(( (t1 - t0) / 1000000 )) )
   done
 
-  local ssh_min ssh_med ssh_avg ssh_max ssh_jit
-  read -r ssh_min ssh_med ssh_avg ssh_max ssh_jit \
+  local _ssh_min ssh_med _ssh_avg _ssh_max ssh_jit
+  read -r _ssh_min ssh_med _ssh_avg _ssh_max ssh_jit \
     < <(printf '%s\n' "${samples[@]}" | latency_stats)
 
-  # Tunnel-only RTT: a bare TCP connect to the devbox sshd on the NetBird
-  # address, with no DNS and no remote command. It is what the network itself
-  # contributes; the SSH figure above is tunnel + DNS + remote exec.
+  # Typing RTT: a bare TCP connect to the devbox sshd on the NetBird address,
+  # with no DNS and no remote command -- one network round trip, which is what a
+  # keystroke in an established tmux/nvim session waits for. The ssh figures are
+  # connection costs (client startup + ~3 of these round trips + remote exec).
   local _tun_min="" tun_med="" _tun_avg="" tun_max="" _tun_jit="" tun_vals=""
   if [ -n "$resolved_ip" ]; then
     tun_vals="$(sample_tcp_rtt "$resolved_ip" 22 10)"
@@ -894,19 +905,39 @@ cmd_check_latency() {
   else
     printf '%s\n' "$target"
   fi
-  printf 'SSH RTT %s ms (min %s / med %s / max %s) · fresh connect %s ms\n' \
-    "$ssh_avg" "$ssh_min" "$ssh_med" "$ssh_max" "$connect_ms"
+  # typing_ms is the value the verdict is based on: the network round trip a
+  # keystroke waits for in an established session. Fall back to the ssh figure
+  # minus its per-connection client cost when no IPv4 (no tunnel probe) exists.
+  local typing_ms=""
+  if [ -n "$tun_med" ]; then
+    typing_ms="$tun_med"
+  else
+    typing_ms=$(( ssh_med - ${startup_ms:-0} ))
+    (( typing_ms > 0 )) || typing_ms="$ssh_med"
+  fi
+  if [ -n "$tun_med" ]; then
+    printf 'Typing RTT %s ms (min %s / max %s) · ssh command %s ms · fresh connect %s ms\n' \
+      "$typing_ms" "$_tun_min" "$tun_max" "$ssh_med" "$connect_ms"
+  else
+    printf 'Typing RTT %s ms · ssh command %s ms · fresh connect %s ms\n' \
+      "$typing_ms" "$ssh_med" "$connect_ms"
+  fi
 
   printf '\n==> breakdown\n'
   if [ -n "$dns_ms" ]; then
-    printf '  dns     resolve fqdn            %4s ms\n' "$dns_ms"
+    printf '  dns      resolve fqdn             %4s ms\n' "$dns_ms"
   else
-    printf '  dns     resolve fqdn               n/a\n'
+    printf '  dns      resolve fqdn                n/a\n'
+  fi
+  if [ -n "$startup_ms" ]; then
+    printf '  startup  ssh client (config)      %4s ms   (per connection)\n' "$startup_ms"
+  else
+    printf '  startup  ssh client (config)         n/a\n'
   fi
   if [ -n "$local_ms" ]; then
-    printf '  local   ssh client (mux)        %4s ms\n' "$local_ms"
+    printf '  local    ssh client (mux)         %4s ms   (per connection)\n' "$local_ms"
   else
-    printf '  local   ssh client (mux)           n/a\n'
+    printf '  local    ssh client (mux)            n/a\n'
   fi
 
   local tun_note=""
@@ -917,16 +948,16 @@ cmd_check_latency() {
     *)   tun_note="   netbird: $peer_type" ;;
   esac
   if [ -n "$tun_med" ]; then
-    printf '  tunnel  workstation -> devbox   %4s ms (min %s / max %s)%s\n' \
+    printf '  typing   workstation -> devbox    %4s ms (min %s / max %s)%s   [keystroke latency]\n' \
       "$tun_med" "$_tun_min" "$tun_max" "$tun_note"
   else
-    printf '  tunnel  workstation -> devbox      n/a%s\n' "$tun_note"
+    printf '  typing   workstation -> devbox       n/a%s\n' "$tun_note"
   fi
 
   if [ -n "$remote_ms" ]; then
-    printf '  remote  devbox login shell      %4s ms\n' "$remote_ms"
+    printf '  remote   devbox login shell       %4s ms   (per connection)\n' "$remote_ms"
   else
-    printf '  remote  devbox login shell         n/a\n'
+    printf '  remote   devbox login shell          n/a\n'
   fi
 
   # A bare `ssh host true` costs the local client + ~3 tunnel round trips
@@ -938,47 +969,51 @@ cmd_check_latency() {
   local slack=$(( ssh_med - expected ))
   (( slack > 0 )) || slack=0
   if (( slack >= 30 )); then
-    printf '  ssh     workstation -> devbox   %4s ms   (+%s ms over local + ~3 tunnel RTT + remote)\n' \
+    printf '  ssh      workstation -> devbox    %4s ms   (connection: local + ~3 typing RTT + remote; +%s)\n' \
       "$ssh_med" "$slack"
   else
-    printf '  ssh     workstation -> devbox   %4s ms   (local + ~3 tunnel RTT + remote)\n' "$ssh_med"
+    printf '  ssh      workstation -> devbox    %4s ms   (connection: local + ~3 typing RTT + remote)\n' "$ssh_med"
   fi
 
   if [ -n "$access_avg" ]; then
-    printf '  access  workstation -> %-8s %4s ms   (WiFi + 5G + ISP)\n' "$access_host" "$access_avg"
+    printf '  access   workstation -> %-8s %4s ms   (WiFi + 5G + ISP)\n' "$access_host" "$access_avg"
   else
-    printf '  access  workstation -> public anycast   n/a\n'
+    printf '  access   workstation -> public anycast   n/a\n'
   fi
   if [ -n "$egress_avg" ]; then
-    printf '  egress  devbox      -> %-8s %4s ms   (homelab uplink)\n' "$egress_host" "$egress_avg"
+    printf '  egress   devbox      -> %-8s %4s ms   (homelab uplink)\n' "$egress_host" "$egress_avg"
   else
-    printf '  egress  devbox      -> public anycast   n/a\n'
+    printf '  egress   devbox      -> public anycast   n/a\n'
   fi
 
   local verdict
-  if   (( ssh_med < 30 ));  then verdict="excellent — feels almost local"
-  elif (( ssh_med < 80 ));  then verdict="comfortable — nvim/tmux feel fluid"
-  elif (( ssh_med < 120 )); then verdict="fair — perceptible lag while typing"
-  elif (( ssh_med < 200 )); then verdict="painful — every keystroke waits for the round trip"
-  else                           verdict="unusable — too slow for an interactive shell"
+  if   (( typing_ms < 30 ));  then verdict="excellent — feels almost local"
+  elif (( typing_ms < 80 ));  then verdict="comfortable — nvim/tmux feel fluid"
+  elif (( typing_ms < 120 )); then verdict="fair — perceptible lag while typing"
+  elif (( typing_ms < 200 )); then verdict="painful — every keystroke waits for the round trip"
+  else                             verdict="unusable — too slow for an interactive shell"
   fi
-  printf '\nVerdict: %s\n' "$verdict"
+  printf '\nVerdict: %s (typing %s ms)\n' "$verdict" "$typing_ms"
 
   local attribution=""
-  if [ -n "$dns_ms" ] && (( dns_ms >= 40 )); then
-    attribution="DNS resolution over the tunnel is slow (~${dns_ms} ms)"
+  if [ -n "$startup_ms" ] && (( startup_ms >= 30 )); then
+    attribution="each ssh pays ${startup_ms} ms before the tunnel (ssh config / name resolution, per connection) -- keystroke latency is unaffected; if NetBird: netbird service reconfigure --service-env NB_DISABLE_SSH_CONFIG=true"
+  elif [ -n "$local_ms" ] && (( local_ms >= 30 )); then
+    attribution="the local ssh client/master costs ${local_ms} ms per connection, not per keystroke"
+  elif [ -n "$dns_ms" ] && (( dns_ms >= 40 )); then
+    attribution="DNS resolution over the tunnel is slow (~${dns_ms} ms, per connection)"
   elif [ -n "$remote_ms" ] && (( remote_ms >= 30 )); then
-    attribution="remote command execution on the devbox is slow (~${remote_ms} ms)"
+    attribution="remote command execution on the devbox is slow (~${remote_ms} ms, per connection)"
   elif [ -n "$access_avg" ] && (( access_avg >= 150 )); then
     attribution="the access network (WiFi/5G) is the bottleneck (~${access_avg} ms to ${access_host})"
   elif [ "$peer_type" = "Relay" ] || [ "$peer_type" = "Relayed" ]; then
     attribution="the NetBird link is relayed; the relay detour adds latency"
   elif [ -n "$tun_med" ] && (( tun_max - tun_med >= 100 )); then
-    attribution="intermittent spikes on the tunnel (fresh connects: max ${tun_max} ms vs med ${tun_med} ms)"
+    attribution="intermittent spikes on the typing path (max ${tun_max} ms vs med ${tun_med} ms)"
   elif [ -n "$tun_med" ] && (( slack >= 30 )); then
-    attribution="the tunnel is fast on fresh connects (~${tun_med} ms) but the established SSH flow is ${slack} ms slower: spikes/loss on the tunnel, not local overhead"
+    attribution="typing is fast (~${tun_med} ms) but the established SSH flow is ${slack} ms slower: spikes/loss on the tunnel"
   elif [ -n "$tun_med" ]; then
-    attribution="latency is just the SSH round trips over the tunnel (~3 × ${tun_med} ms); local and remote overhead are small"
+    attribution="typing is just one tunnel round trip (~${tun_med} ms); connection costs are small"
   elif [ -n "$access_avg" ]; then
     attribution="access (~${access_avg} ms) and homelab are fast; the delay is the path between the access network and the homelab"
   fi
@@ -992,7 +1027,7 @@ cmd_check_latency() {
     printf 'Attribution: %s\n' "$attribution"
   fi
 
-  if (( ssh_med >= 120 )); then
+  if (( typing_ms >= 120 )); then
     printf 'Tip: try the mosh transport (predictive local echo): %s console --terminal=mosh\n' "$PROG_NAME"
   fi
 }

@@ -86,7 +86,22 @@ established connection — the delay every keystroke and screen redraw waits for
 over a single multiplexed connection (`ControlMaster`), plus the cost of a fresh
 connection (what opening a new terminal/tab costs). Ten round-trips and three
 fresh connections are sampled automatically: the command takes no argument
-(`--name` is honored, `--dry-run` prints the `ssh` invocations).
+(`--name` is honored, `--dry-run` prints the commands).
+
+It then **decomposes the delay** to point at the culprit, using a TCP connect
+(single RTT, no ICMP and no extra dependency) run from both ends, plus the
+NetBird link type:
+
+- `access` — workstation → `9.9.9.9` / `1.1.1.1` (the fastest of the two), i.e.
+  the WiFi/5G access network and its internet egress;
+- `egress` — the same probe run **inside** the devbox, i.e. the homelab uplink;
+- `overlay` — workstation → devbox end-to-end, annotated with the NetBird
+  connection type (`direct (P2P)` or relayed).
+
+An `Attribution:` line interprets them (slow access network, relayed NetBird
+link, slow homelab uplink, high mobile jitter, or a fast access network whose
+extra latency sits in the internet path to the homelab). Parts that cannot be
+measured (no `netbird`, no `/dev/tcp`) are reported as `n/a` and skipped.
 
 The verdict follows the average round-trip: `< 30 ms` excellent, `< 80 ms`
 comfortable, `< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful,
@@ -96,9 +111,15 @@ comfortable, `< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful,
 ```sh
 $ sklein-devbox check-latency
 devbox@sklein-devbox-dev1.homelab.stephane-klein.info
-RTT 127 ms (jitter 29 ms) · fresh connect 1936 ms
+Overlay RTT 193 ms (jitter 86 ms) · fresh connect 950 ms
+
+==> breakdown
+  access  workstation -> 1.1.1.1          65 ms   (WiFi + 5G + ISP)
+  egress  devbox      -> 9.9.9.9           7 ms   (homelab uplink)
+  overlay workstation -> devbox          193 ms   netbird: direct (P2P)
 
 Verdict: painful — every keystroke waits for the round trip
+Attribution: access (~65 ms) and homelab are fast; the delay is the internet path between the access network and the homelab; high jitter (86 ms) typical of a mobile link
 Tip: try the mosh transport (predictive local echo): sklein-devbox console --terminal=mosh
 ```
 

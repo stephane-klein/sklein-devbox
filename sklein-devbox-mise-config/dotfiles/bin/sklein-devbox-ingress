@@ -200,6 +200,18 @@ cmd_up() {
   info "wt0 address: $ip"
 
   info "starting the pitchfork supervisor"
+  # The supervisor hands its environment to every daemon it spawns. A foreign
+  # XDG_RUNTIME_DIR (seen: /tmp, leaked from the foot host's ssh client) makes
+  # rootless podman resolve its runroot under /tmp and netavark fail to create
+  # /run/user/<uid>/containers/networks/aardvark-dns, breaking `podman compose up`.
+  # A foreign DBUS_SESSION_BUS_ADDRESS (/tmp/foot-host-bus) breaks podman's
+  # systemd sandbox cgroup. Pin a sane environment before (re)starting it.
+  if [ -d "/run/user/$(id -u)" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  else
+    unset XDG_RUNTIME_DIR
+  fi
+  unset DBUS_SESSION_BUS_ADDRESS
   pitchfork supervisor start --force
 
   info "configuring the pitchfork proxy system bits (bind :443, trust CA; sudo)"

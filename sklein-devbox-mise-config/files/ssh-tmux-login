@@ -53,6 +53,22 @@ else
   unset PULSE_SERVER
 fi
 
+# XDG_RUNTIME_DIR must point at the logind per-user runtime directory. A foreign
+# value (seen: /tmp, leaked from the foot host's ssh client) makes rootless
+# podman resolve its runroot, crun's pid files and netavark's sockets under
+# /tmp; netavark then fails to create
+# /run/user/<uid>/containers/networks/aardvark-dns and `podman compose up`
+# aborts (this is why pitchfork-managed `podman compose up` failed while the
+# same command in a plain shell worked). Pin it to the canonical path, or unset
+# it when that path is unavailable so podman falls back to it on its own.
+runtime_dir="/run/user/$(id -u)"
+if [ -d "$runtime_dir" ]; then
+  XDG_RUNTIME_DIR="$runtime_dir"
+  export XDG_RUNTIME_DIR
+else
+  unset XDG_RUNTIME_DIR
+fi
+
 # Propagate the link variable into a tmux environment target (global with `-g`,
 # or a given session with `-t <name>`): set when present, unset when not. The
 # wrapper's own environment only seeds the tmux server at its creation, and the
@@ -63,6 +79,14 @@ sync_tmux_link_env() {
   # environment (see above). This also purges a stale value left by an earlier
   # login in an already-running tmux server.
   tmux set-environment "$@" -u DBUS_SESSION_BUS_ADDRESS 2>/dev/null || true
+  # Propagate XDG_RUNTIME_DIR the same way: a stale /tmp value must not survive a
+  # login in an already-running tmux server, and a normalised value must reach
+  # the panes (see above).
+  if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    tmux set-environment "$@" XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR" 2>/dev/null || true
+  else
+    tmux set-environment "$@" -u XDG_RUNTIME_DIR 2>/dev/null || true
+  fi
   if [ -n "${PULSE_SERVER:-}" ]; then
     tmux set-environment "$@" PULSE_SERVER "$PULSE_SERVER" 2>/dev/null || true
   else

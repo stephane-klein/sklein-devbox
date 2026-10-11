@@ -88,25 +88,28 @@ connection (what opening a new terminal/tab costs). Ten round-trips and three
 fresh connections are sampled automatically: the command takes no argument
 (`--name` is honored, `--dry-run` prints the commands).
 
-It then **decomposes the delay** into `dns` / `tunnel` / `ssh`, and adds the
-`access` and `egress` probes, so the culprit can be named:
+It then **decomposes the delay** layer by layer (`dns` / `local` / `tunnel` /
+`remote` / `ssh`) and adds the `access` and `egress` probes, so the culprit can
+be named:
 
 - `dns` — resolving the instance FQDN. NetBird serves it from the devbox
   dnsmasq **over the tunnel**, so it is not a local lookup (timed on the first,
   cold resolution);
+- `local` — one `ssh` invocation against the master (`ssh -O check`): client
+  process startup + control socket, with no remote command;
 - `tunnel` — a bare TCP connect to the devbox sshd on the NetBird address, with
-  no DNS and no remote command: what the network itself contributes;
-- `ssh` — the ControlMaster samples above, i.e. tunnel + DNS + remote-command
-  execution (`sshd ForceCommand` → login shell `-c true`); the leftover over the
-  tunnel is shown as `(+N ms over tunnel: dns + remote exec)`;
-- `access` — workstation → `9.9.9.9` / `1.1.1.1` (the fastest of the two), i.e.
-  the WiFi/5G access network and its internet egress;
-- `egress` — the same probe run **inside** the devbox, i.e. the homelab uplink.
+  no DNS and no remote command: what the network itself contributes (shown as
+  `med` with `min`/`max`, annotated with the NetBird type `direct (P2P)`/relayed);
+- `remote` — the devbox login shell that `sshd`'s `ForceCommand` starts per
+  command, timed in the remote probe;
+- `ssh` — the ControlMaster samples, i.e. `local` + ~3 tunnel round trips +
+  `remote` (+ `dns` on the first). The leftover over that expectation is shown
+  as `(+N ms over local + ~3 tunnel RTT + remote)`.
 
-The `tunnel` line is annotated with the NetBird connection type (`direct (P2P)`
-or relayed). An `Attribution:` line interprets all of it (slow access network,
-relayed NetBird link, slow homelab uplink, intermittent tunnel spikes, or a fast
-tunnel whose extra latency is DNS + remote-command overhead). Parts that cannot
+An `Attribution:` line interprets it (slow DNS, slow remote exec, slow access
+network, relayed NetBird link, slow homelab uplink, intermittent tunnel spikes,
+or an established SSH flow slower than its fresh-connect tunnel probes — the
+signature of spikes/loss on the tunnel, not local overhead). Parts that cannot
 be measured (no `netbird`, no `/dev/tcp`, no IPv4) are reported as `n/a`.
 
 The verdict follows the **median** round-trip (robust to a few mobile spikes;
@@ -118,17 +121,19 @@ echo), which tolerates latency far better than plain `ssh`.
 ```sh
 $ sklein-devbox check-latency
 devbox@sklein-devbox-dev.homelab.stephane-klein.info (100.91.177.168)
-SSH RTT 54 ms (min 49 / med 54 / max 57) · fresh connect 315 ms
+SSH RTT 52 ms (min 50 / med 51 / max 54) · fresh connect 312 ms
 
 ==> breakdown
-  dns     resolve fqdn               6 ms
-  tunnel  workstation -> devbox     14 ms   netbird: direct (P2P)
-  ssh     workstation -> devbox     54 ms   (+34 ms over tunnel: dns + remote exec)
-  access  workstation -> 1.1.1.1    12 ms   (WiFi + 5G + ISP)
+  dns     resolve fqdn               5 ms
+  local   ssh client (mux)           6 ms
+  tunnel  workstation -> devbox     14 ms (min 13 / max 15)   netbird: direct (P2P)
+  remote  devbox login shell         4 ms
+  ssh     workstation -> devbox     51 ms   (local + ~3 tunnel RTT + remote)
+  access  workstation -> 9.9.9.9    11 ms   (WiFi + 5G + ISP)
   egress  devbox      -> 9.9.9.9     6 ms   (homelab uplink)
 
 Verdict: comfortable — nvim/tmux feel fluid
-Attribution: the tunnel is fast (~14 ms); the extra is DNS + remote-command overhead, not the network
+Attribution: latency is just the SSH round trips over the tunnel (~3 × 14 ms); local and remote overhead are small
 ```
 
 ### `completion`

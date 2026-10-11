@@ -19,3 +19,46 @@ export OPENCHAMBER_UI_PASSWORD
 exec mise exec -- openchamber --lan --port 3000
 """
 retry = true
+
+# --- sklein-devbox-ingress ---------------------------------------------------
+# Wildcard subdomains over NetBird + a per-hostname TLS reverse proxy in front
+# of the daemons above. Driven by ~/bin/sklein-devbox-ingress (up/down/status).
+#
+#   - dnsmasq answers *.<tld> (any depth) with the wt0 address; every NetBird
+#     peer reaches it through the nameserver the script registers via the API.
+#   - the proxy routes <daemon>.<project>.<tld>, plus any extra label on the
+#     left (proxy.wildcard), and signs a per-hostname certificate with its
+#     local CA ($PITCHFORK_STATE_DIR/proxy/ca.pem, to distribute to clients).
+#
+# `host = "0.0.0.0"` lets the proxy listen on the (dynamic) wt0 address so
+# NetBird peers can reach it; it therefore also listens on the other
+# interfaces. `port = 443` relies on the bind capability granted once by
+# `pitchfork proxy setup` (re-run by the script's `up`).
+[settings.proxy]
+enable = true
+https = true
+tld = "sklein-devbox-dev.homelab.stephane-klein.info"
+wildcard = true
+host = "0.0.0.0"
+port = 443
+
+[daemons.sklein-devbox-ingress-dns]
+run = '''
+IP="$(/usr/sbin/ip -4 -o addr show wt0 | awk 'NR==1{split($4,a,"/");print a[1]}')"
+[ -n "$IP" ] || { echo "sklein-devbox-ingress-dns: wt0 has no IPv4 (is netbird up?)" >&2; exit 1; }
+exec /usr/sbin/dnsmasq --keep-in-foreground --port=5353 \
+  --listen-address="$IP" --listen-address=127.0.0.1 --bind-interfaces \
+  --no-resolv --no-hosts --domain-needed \
+  --address=/.sklein-devbox-dev.homelab.stephane-klein.info/$IP
+'''
+retry = true
+# Keep the daemon running across a supervisor restart: a daemon started only
+# through `pitchfork start` (on the CLI) is not re-adopted after
+# `pitchfork supervisor start --force`.
+boot_start = true
+
+# Route the global daemons above through the proxy. Global daemons have no
+# project hostname, so they need a slug; each <slug>.<tld> then also answers
+# for any extra label on its left.
+[slugs]
+openchamber     = { dir = "~", daemon = "openchamber" }

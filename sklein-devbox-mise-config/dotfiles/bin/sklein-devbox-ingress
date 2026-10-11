@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+# sklein-devbox-ingress - wildcard DNS + TLS reverse proxy for the
+# sklein-devbox instance, exposed to the NetBird network.
+#
+# It wires three pieces together:
+#
+#   1. dnsmasq (a pitchfork daemon, unprivileged, wt0:5353) answering
+#      *.<tld> - at any depth - with the wt0 (overlay) address;
+#   2. the pitchfork reverse proxy (settings.proxy in
+#      ~/.config/pitchfork/config.toml), routing <daemon>.<project>.<tld> plus
+#      any extra label on the left, and signing a per-hostname certificate with
+#      its local CA;
+#   3. the NetBird management API, where it registers a non-authoritative DNS
+#      zone for <tld> (needed so the client resolver falls through to our
+#      nameserver for names it does not know) and a nameserver group matching
+#      <tld> and pointing at <wt0>:5353.
+#
+# Everything runs as the `devbox` user; the only privileged step is
+# `pitchfork proxy setup` (bind capability for :443 and CA trust).
+#
+# See sklein-devbox-mise-config/README.md.
+
+set -u
+
+PROG="${0##*/}"
+
+TLD="sklein-devbox-dev.homelab.stephane-klein.info"
+DNS_PORT=5353
+NETBIRD_API="https://api.netbird.io/api"
+NS_NAME="sklein-devbox-ingress"
+ZONE_NAME="sklein-devbox-ingress"
+DNS_DAEMON="global/sklein-devbox-ingress-dns"
+
+PURGE=0
+PAT=""
+
+if [ -t 1 ]; then
+  C_DIM=$'\033[2m'; C_OK=$'\033[32m'; C_OFF=$'\033[0m'
+else
+  C_DIM=; C_OK=; C_OFF=
+fi
+
+usage() {
+  cat <<EOF
+$PROG - wildcard DNS + TLS proxy for sklein-devbox over NetBird.
+
+Serves *.$TLD (any depth) to NetBird peers and fronts the pitchfork daemons
+with a local-CA TLS proxy. DNS is answered by the dnsmasq pitchfork daemon on
+wt0:$DNS_PORT; the NetBird zone and nameserver are configured through the API.
+
+Usage:
+  $PROG up        Start dnsmasq + the proxy, configure NetBird
+  $PROG down      Stop dnsmasq, disable the NetBird nameserver
+  $PROG status    Show proxy, DNS and NetBird state
+  $PROG -h|--help Show this help
+
+\`down\` options:
+  --purge         Also delete the NetBird zone and nameserver
+
+Environment:
+  NETBIRD_PAT     NetBird personal access token. Read from gopass
+                  (netbird/apikey) when unset.
+EOF
+}
+
+die() { printf '%s: error: %s\n' "$PROG" "$*" >&2; exit 2; }
+info() { printf '%s==%s %s\n' "$C_DIM" "$C_OFF" "$*"; }
+ok() { printf '   %sok%s %s\n' "$C_OK" "$C_OFF" "$*"; }
+
+need() { command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
+
+wt0_ip() {
+  /usr/sbin/ip -4 -o addr show wt0 2>/dev/null \
+    | awk 'NR==1{split($4, a, "/"); print a[1]}'
+}
+
+dnsq() { # dnsq SERVER NAME -> one-line answer from the dnsmasq instance
+  local out
+  out="$(dig +short "@${1}" -p "${DNS_PORT}" "${2}" 2>/dev/null | tr '\n' ' ')"
+  if [ -n "$out" ]; then printf '%s' "$out"; else printf '(no answer)'; fi
+}
+
+netbird_pat() {
+  if [ -n "${NETBIRD_PAT:-}" ]; then
+    printf '%s' "$NETBIRD_PAT"
+    return
+  fi
+  command -v gopass >/dev/null 2>&1 || die "NETBIRD_PAT unset and gopass not found"
+  gopass show -o netbird/apikey 2>/dev/null \
+    || die "cannot read NETBIRD_PAT (gopass 'netbird/apikey')"
+}
+
+api() { # api METHOD PATH [JSON_BODY]
+  local method="$1" path="$2" body="${3:-}"
+  if [ -n "$body" ]; then
+    curl -fsS -X "$method" \
+      -H "Authorization: Token ${PAT}" \
+      -H 'Accept: application/json' \
+      -H 'Content-Type: application/json' \
+      --data "$body" "${NETBIRD_API}${path}"
+  else
+    curl -fsS -X "$method" \
+      -H "Authorization: Token ${PAT}" \
+      -H 'Accept: application/json' \
+      "${NETBIRD_API}${path}"
+  fi
+}
+
+all_group_id() {
+  api GET /groups | jq -r '.[] | select(.name == "All") | .id' | head -1
+}
+
+zone_id() {
+  api GET /dns/zones \
+    | jq -r --arg d "$TLD" '.[] | select(.domain == $d) | .id' | head -1
+}
+
+nameserver_id() {
+  api GET /dns/nameservers \
+    | jq -r --arg n "$NS_NAME" '.[] | select(.name == $n) | .id' | head -1
+}
+
+ensure_zone() { # ensure_zone ALL_ID -> zone id on stdout
+  local all_id="$1" zid
+  zid="$(zone_id)"
+  if [ -z "$zid" ]; then
+    info "creating NetBird DNS zone $TLD"
+    zid="$(api POST /dns/zones \
+      "$(jq -nc --arg n "$ZONE_NAME" --arg d "$TLD" --arg g "$all_id" \
+        '{name: $n, domain: $d, enabled: true,
+          enable_search_domain: false, distribution_groups: [$g]}')" \
+      | jq -r '.id')"
+  fi
+  [ -n "$zid" ] && [ "$zid" != "null" ] || die "could not create/find DNS zone $TLD"
+  printf '%s' "$zid"
+}
+
+ensure_record() { # ensure_record ZONE_ID IP
+  local zid="$1" ip="$2" name="*.${TLD}" rid body
+  rid="$(api GET "/dns/zones/${zid}/records" \
+    | jq -r --arg n "$name" '.[] | select(.name == $n) | .id' | head -1)"
+  body="$(jq -nc --arg n "$name" --arg ip "$ip" \
+    '{name: $n, type: "A", content: $ip, ttl: 60}')"
+  if [ -z "$rid" ]; then
+    api POST "/dns/zones/${zid}/records" "$body" >/dev/null
+  else
+    api PUT "/dns/zones/${zid}/records/${rid}" "$body" >/dev/null
+  fi
+}
+
+ensure_nameserver() { # ensure_nameserver ALL_ID IP
+  local all_id="$1" ip="$2" nid body
+  body="$(jq -nc --arg n "$NS_NAME" --arg d "$TLD" --arg ip "$ip" \
+    --argjson port "$DNS_PORT" --arg g "$all_id" \
+    '{name: $n, description: ("wildcard " + $d), primary: false, enabled: true,
+      nameservers: [{ip: $ip, ns_type: "udp", port: $port}],
+      domains: [$d], groups: [$g], search_domains_enabled: false}')"
+  nid="$(nameserver_id)"
+  if [ -z "$nid" ]; then
+    api POST /dns/nameservers "$body" >/dev/null
+  else
+    api PUT "/dns/nameservers/${nid}" "$body" >/dev/null
+  fi
+}
+
+disable_nameserver() {
+  local nid body
+  nid="$(nameserver_id)"
+  if [ -z "$nid" ]; then
+    info "no NetBird nameserver '$NS_NAME' to disable"
+    return 0
+  fi
+  body="$(api GET "/dns/nameservers/${nid}" \
+    | jq -c '{name, description, primary, nameservers, domains, groups,
+             search_domains_enabled, enabled: false}')"
+  api PUT "/dns/nameservers/${nid}" "$body" >/dev/null
+  ok "NetBird nameserver '$NS_NAME' disabled"
+}
+
+purge_netbird() {
+  local zid nid
+  nid="$(nameserver_id)"
+  if [ -n "$nid" ]; then
+    api DELETE "/dns/nameservers/${nid}" >/dev/null \
+      && ok "deleted NetBird nameserver '$NS_NAME'"
+  fi
+  zid="$(zone_id)"
+  if [ -n "$zid" ]; then
+    api DELETE "/dns/zones/${zid}" >/dev/null \
+      && ok "deleted NetBird zone $TLD"
+  fi
+}
+
+cmd_up() {
+  need pitchfork; need dnsmasq; need curl; need jq
+
+  local ip
+  ip="$(wt0_ip)"
+  [ -n "$ip" ] || die "wt0 has no IPv4 address (is netbird up?)"
+  info "wt0 address: $ip"
+
+  info "starting the pitchfork supervisor"
+  pitchfork supervisor start --force
+
+  info "configuring the pitchfork proxy system bits (bind :443, trust CA; sudo)"
+  pitchfork proxy setup
+
+  # Reload the settings (proxy.tld, CA). `boot_start` brings dnsmasq up with the
+  # supervisor; also start it explicitly and confirm it is running. A daemon
+  # started only via `pitchfork start` is not re-adopted by a later supervisor
+  # restart, so this must be the last supervisor operation before the check.
+  pitchfork supervisor start --force
+  pitchfork start "$DNS_DAEMON"
+  if ! pitchfork status "$DNS_DAEMON" 2>/dev/null | grep -qi running; then
+    die "dnsmasq daemon did not start (see: pitchfork logs $DNS_DAEMON)"
+  fi
+  ok "dnsmasq daemon running"
+
+  pitchfork proxy doctor || true
+
+  PAT="$(netbird_pat)"
+  local all_id
+  all_id="$(all_group_id)"
+  [ -n "$all_id" ] || die "could not find the NetBird 'All' group"
+
+  info "configuring NetBird DNS (zone + nameserver -> $ip:$DNS_PORT)"
+  local zid
+  zid="$(ensure_zone "$all_id")"
+  ensure_record "$zid" "$ip"
+  ensure_nameserver "$all_id" "$ip"
+  ok "NetBird DNS configured"
+
+  cat <<EOF
+
+Ingress is up:  *.${TLD}  ->  ${ip}
+
+  - trust the proxy CA on every client:
+      ~/.local/state/pitchfork/proxy/ca.pem
+    then, on a client with pitchfork: pitchfork proxy trust --cert <copied-ca.pem>
+  - an already-connected NetBird peer may need a resync to receive the newly
+    created zone: netbird down && netbird up
+EOF
+}
+
+cmd_down() {
+  need pitchfork; need curl; need jq
+
+  if pitchfork status "$DNS_DAEMON" >/dev/null 2>&1; then
+    pitchfork stop "$DNS_DAEMON" && ok "dnsmasq daemon stopped"
+  else
+    info "dnsmasq daemon is not running"
+  fi
+
+  PAT="$(netbird_pat)"
+  if [ "$PURGE" -eq 1 ]; then
+    purge_netbird
+  else
+    disable_nameserver
+  fi
+
+  info "the pitchfork proxy itself keeps running (pitchfork supervisor stop to stop it)"
+}
+
+cmd_status() {
+  need curl; need jq
+
+  local ip
+  ip="$(wt0_ip)"
+  info "wt0 address: ${ip:-<none>}"
+
+  info "pitchfork proxy"
+  pitchfork proxy status 2>&1 || true
+  pitchfork proxy doctor 2>&1 || true
+
+  info "pitchfork daemon"
+  pitchfork status "$DNS_DAEMON" 2>&1 | sed 's/^/   /' || true
+
+  info "dnsmasq (@${ip:-none}:${DNS_PORT})"
+  if [ -z "$ip" ]; then
+    printf '   (no wt0 address)\n'
+  elif command -v dig >/dev/null 2>&1; then
+    printf '   test.<tld>      -> %s\n' "$(dnsq "$ip" "test.${TLD}")"
+    printf '   a.b.test.<tld>  -> %s\n' "$(dnsq "$ip" "a.b.test.${TLD}")"
+  else
+    printf '   dig not found (add bind-utils to query dnsmasq directly)\n'
+  fi
+
+  info "system resolution (pitchfork resolver)"
+  getent hosts "test.${TLD}" || printf '   (no answer)\n'
+  getent hosts "a.b.test.${TLD}" || printf '   (no answer)\n'
+
+  info "NetBird"
+  PAT="$(netbird_pat)"
+  printf '   zone id:       %s\n' "$(zone_id)"
+  printf '   nameserver id: %s\n' "$(nameserver_id)"
+  api GET /dns/nameservers \
+    | jq -r --arg n "$NS_NAME" \
+        '.[] | select(.name == $n)
+             | "   -> " + (.nameservers | map(.ip + ":" + (.port | tostring)) | join(","))
+               + "  enabled=" + (.enabled | tostring)' \
+    || true
+}
+
+while (( $# )); do
+  case "$1" in
+    up|down|status) CMD="$1"; shift ;;
+    --purge) PURGE=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument '$1'" ;;
+  esac
+done
+
+case "${CMD:-}" in
+  up) cmd_up ;;
+  down) cmd_down ;;
+  status) cmd_status ;;
+  *) usage; exit 2 ;;
+esac

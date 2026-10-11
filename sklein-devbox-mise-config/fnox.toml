@@ -25,6 +25,10 @@ HINDSIGHT_MCP_TOKEN                        = { provider = "gopass", value = "hin
 BROWSER_CONTROL_MCP_EXTENSION_SECRET       = { provider = "gopass", value = "browser-control-mcp/EXTENSION_SECRET" }
 MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN = { provider = "gopass", value = "memex.sklein.xyz/mcp-reader/opencode_token" }
 
+# NetBird PAT, used by sklein-devbox-ingress to auto-configure the wildcard DNS
+# zone and nameserver through the public API.
+NETBIRD_PAT                                = { provider = "gopass", value = "netbird/apikey" }
+
 
 
 

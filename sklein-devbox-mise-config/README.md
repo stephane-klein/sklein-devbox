@@ -231,6 +231,48 @@ which mutagen syncs back to the workstation. In git-bootstrapped mode (no
 mutagen) the edit stays in the container clone and must be committed from the
 workstation to persist.
 
+## Wildcard subdomains (`sklein-devbox-ingress`)
+
+`dotfiles/bin/sklein-devbox-ingress` is deployed to `~/bin/sklein-devbox-ingress`
+(that directory is not on `PATH`, so invoke it by path). It exposes the instance
+to the NetBird network under `*.<tld>` (`sklein-devbox-dev.homelab.stephane-klein.info`,
+any depth) and terminates TLS for the daemons behind a per-hostname certificate:
+
+```sh
+~/bin/sklein-devbox-ingress up       # dnsmasq + proxy + NetBird zone/nameserver
+~/bin/sklein-devbox-ingress status
+~/bin/sklein-devbox-ingress down [--purge]
+```
+
+It ties three pieces together, none of which needs cloud-init or a root
+systemd unit:
+
+- **dnsmasq**, a pitchfork daemon (`sklein-devbox-ingress-dns`, unprivileged)
+  bound to `wt0:5353`, answering `*.<tld>` at any depth with the overlay
+  address. Its `run` computes the current `wt0` address at start, so `up`
+  must run after `netbird up`.
+- the **pitchfork reverse proxy** (`[settings.proxy]` in
+  `dotfiles/.config/pitchfork/config.toml.tera`): `tld`, `wildcard = true`
+  (extra left labels route to the same daemon), `host = "0.0.0.0"` (so peers
+  reach the dynamic `wt0` address) and `port = 443`. It signs a certificate
+  per requested hostname from its local CA
+  (`~/.local/state/pitchfork/proxy/ca.pem`), which clients must trust —
+  distribute it and run `pitchfork proxy trust --cert <copied-ca.pem>`.
+- the **NetBird management API**: a non-authoritative Custom DNS Zone for the
+  TLD (without it the client resolver answers NXDOMAIN instead of falling
+  through) plus a nameserver group matching the TLD and pointing at
+  `<wt0>:5353`. The PAT comes from `NETBIRD_PAT` or gopass
+  (`netbird/apikey`).
+
+The only privileged step is `pitchfork proxy setup` (bind capability for
+`:443`, CA trust into the system store), run by `up` and re-run after a
+pitchfork upgrade. Everything else runs as `devbox`.
+
+Daemons defined in the global pitchfork config get no project hostname; route
+them through the proxy with a `[slugs]` entry (see the commented block in
+`config.toml.tera`). To expose a service, set a daemon's `port`, add a slug,
+and it answers at `<slug>.<tld>`.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.

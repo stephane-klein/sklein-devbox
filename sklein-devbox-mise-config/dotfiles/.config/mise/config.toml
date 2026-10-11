@@ -7,8 +7,9 @@
 # [bootstrap.*] or [dotfiles] entries; those live in the driver.
 
 [shell_alias]
-devbox-cd  = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
-devbox-dot = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
+devbox-cd        = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
+devbox-dot       = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
+devbox-bootstrap = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run bootstrap-all"
 
 # Point kubectl (and kubectx / kubens / k9s) at the per-cluster kubeconfigs
 # deployed under ~/.kube/config.d/ by the driver's [dotfiles] entries. The

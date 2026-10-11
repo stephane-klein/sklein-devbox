@@ -88,39 +88,47 @@ connection (what opening a new terminal/tab costs). Ten round-trips and three
 fresh connections are sampled automatically: the command takes no argument
 (`--name` is honored, `--dry-run` prints the commands).
 
-It then **decomposes the delay** to point at the culprit, using a TCP connect
-(single RTT, no ICMP and no extra dependency) run from both ends, plus the
-NetBird link type:
+It then **decomposes the delay** into `dns` / `tunnel` / `ssh`, and adds the
+`access` and `egress` probes, so the culprit can be named:
 
+- `dns` — resolving the instance FQDN. NetBird serves it from the devbox
+  dnsmasq **over the tunnel**, so it is not a local lookup (timed on the first,
+  cold resolution);
+- `tunnel` — a bare TCP connect to the devbox sshd on the NetBird address, with
+  no DNS and no remote command: what the network itself contributes;
+- `ssh` — the ControlMaster samples above, i.e. tunnel + DNS + remote-command
+  execution (`sshd ForceCommand` → login shell `-c true`); the leftover over the
+  tunnel is shown as `(+N ms over tunnel: dns + remote exec)`;
 - `access` — workstation → `9.9.9.9` / `1.1.1.1` (the fastest of the two), i.e.
   the WiFi/5G access network and its internet egress;
-- `egress` — the same probe run **inside** the devbox, i.e. the homelab uplink;
-- `overlay` — workstation → devbox end-to-end, annotated with the NetBird
-  connection type (`direct (P2P)` or relayed).
+- `egress` — the same probe run **inside** the devbox, i.e. the homelab uplink.
 
-An `Attribution:` line interprets them (slow access network, relayed NetBird
-link, slow homelab uplink, high mobile jitter, or a fast access network whose
-extra latency sits in the internet path to the homelab). Parts that cannot be
-measured (no `netbird`, no `/dev/tcp`) are reported as `n/a` and skipped.
+The `tunnel` line is annotated with the NetBird connection type (`direct (P2P)`
+or relayed). An `Attribution:` line interprets all of it (slow access network,
+relayed NetBird link, slow homelab uplink, intermittent tunnel spikes, or a fast
+tunnel whose extra latency is DNS + remote-command overhead). Parts that cannot
+be measured (no `netbird`, no `/dev/tcp`, no IPv4) are reported as `n/a`.
 
-The verdict follows the average round-trip: `< 30 ms` excellent, `< 80 ms`
-comfortable, `< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful,
-`>= 200 ms` unusable. From 120 ms up it suggests the `mosh` transport
-(predictive local echo), which tolerates latency far better than plain `ssh`.
+The verdict follows the **median** round-trip (robust to a few mobile spikes;
+`min`/`max` are shown too): `< 30 ms` excellent, `< 80 ms` comfortable,
+`< 120 ms` fair (perceptible lag while typing), `< 200 ms` painful, `>= 200 ms`
+unusable. From 120 ms up it suggests the `mosh` transport (predictive local
+echo), which tolerates latency far better than plain `ssh`.
 
 ```sh
 $ sklein-devbox check-latency
-devbox@sklein-devbox-dev1.homelab.stephane-klein.info
-Overlay RTT 193 ms (jitter 86 ms) · fresh connect 950 ms
+devbox@sklein-devbox-dev.homelab.stephane-klein.info (100.91.177.168)
+SSH RTT 54 ms (min 49 / med 54 / max 57) · fresh connect 315 ms
 
 ==> breakdown
-  access  workstation -> 1.1.1.1          65 ms   (WiFi + 5G + ISP)
-  egress  devbox      -> 9.9.9.9           7 ms   (homelab uplink)
-  overlay workstation -> devbox          193 ms   netbird: direct (P2P)
+  dns     resolve fqdn               6 ms
+  tunnel  workstation -> devbox     14 ms   netbird: direct (P2P)
+  ssh     workstation -> devbox     54 ms   (+34 ms over tunnel: dns + remote exec)
+  access  workstation -> 1.1.1.1    12 ms   (WiFi + 5G + ISP)
+  egress  devbox      -> 9.9.9.9     6 ms   (homelab uplink)
 
-Verdict: painful — every keystroke waits for the round trip
-Attribution: access (~65 ms) and homelab are fast; the delay is the internet path between the access network and the homelab; high jitter (86 ms) typical of a mobile link
-Tip: try the mosh transport (predictive local echo): sklein-devbox console --terminal=mosh
+Verdict: comfortable — nvim/tmux feel fluid
+Attribution: the tunnel is fast (~14 ms); the extra is DNS + remote-command overhead, not the network
 ```
 
 ### `completion`

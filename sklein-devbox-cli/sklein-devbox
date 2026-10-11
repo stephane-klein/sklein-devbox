@@ -461,10 +461,10 @@ usage_extra_resize() {
 
 usage_extra_check_latency() {
   printf '\nTakes no argument: everything is automatic. Measures the SSH round-trip\n'
-  printf 'to the instance, then prints a verdict on whether interactive tools\n'
-  printf '(tmux, nvim) will feel comfortable. It also decomposes the delay\n'
-  printf '(access network / homelab uplink / NetBird link type) to point at the\n'
-  printf 'culprit. The --name flag is honored.\n'
+  printf 'to the instance, then prints a verdict (on the median) on whether\n'
+  printf 'interactive tools (tmux, nvim) will feel comfortable. The delay is\n'
+  printf 'split into dns / tunnel / ssh, plus the access network and homelab\n'
+  printf 'uplink, to point at the culprit. The --name flag is honored.\n'
 }
 
 cmd_console() {
@@ -619,23 +619,37 @@ cmd_doctor() {
 # pollute the samples. A fresh-connection time is reported too: it is what a new
 # terminal/tab costs.
 #
-# The command then decomposes the delay: the same TCP-connect probe (one RTT)
-# is run from the workstation and, over the ControlMaster, from the devbox, and
-# the NetBird link type to the workstation is read from `netbird status`. That
-# tells whether the access network (WiFi/5G), the NetBird relay or the internet
-# path to the homelab is responsible. No ICMP (there is no portable ping) and no
-# extra dependency.
+# The delay is then decomposed into dns / tunnel / ssh:
+#   * dns    - resolving the FQDN (NetBird points it at the devbox dnsmasq, over
+#              the tunnel, so it is not a local lookup);
+#   * tunnel - a bare TCP connect to the devbox sshd on the NetBird address, no
+#              DNS and no remote command: what the network itself contributes;
+#   * ssh    - the ControlMaster samples above, i.e. tunnel + dns + remote exec
+#              (sshd ForceCommand -> login shell -c true); the leftover is shown.
+# A median (not the average) drives the verdict, so a few mobile spikes do not
+# dominate. The same TCP-connect probe also runs from the devbox and the NetBird
+# link type is read from `netbird status`, to place the access network (WiFi/5G)
+# and the homelab uplink. No ICMP (no portable ping) and no extra dependency.
 
+# Prints "min med avg max jitter" for the integers read on stdin (all rounded
+# to whole milliseconds). The median is what the verdict is based on: unlike the
+# average it is not dragged up by a few 300-400 ms mobile spikes.
 latency_stats() {
   awk '
     { n++; s += $1; v[n] = $1
       if (n == 1 || $1 < min) min = $1
       if (n == 1 || $1 > max) max = $1 }
     END {
-      if (n == 0) { print "0 0 0 0"; exit }
+      if (n == 0) { print "0 0 0 0 0"; exit }
       avg = s / n
       for (i = 1; i <= n; i++) { d = v[i] - avg; ss += d * d }
-      printf "%.0f %.0f %d %d\n", avg, sqrt(ss / n), min, max
+      for (i = 2; i <= n; i++) {
+        key = v[i]; j = i - 1
+        while (j > 0 && v[j] > key) { v[j+1] = v[j]; j-- }
+        v[j+1] = key
+      }
+      med = (n % 2) ? v[(n + 1) / 2] : (v[n / 2] + v[n / 2 + 1]) / 2
+      printf "%d %.0f %.0f %d %.0f\n", min, med, avg, max, sqrt(ss / n)
     }'
 }
 
@@ -661,17 +675,25 @@ sample_tcp_rtt() {
   return 0
 }
 
+# First IPv4 address of a hostname, through the system resolver. For the devbox
+# FQDN that resolver is NetBird's, pointing at the devbox dnsmasq over the
+# tunnel, so this is not a local lookup. Empty when the name does not resolve.
+resolve_ip() {
+  getent ahostsv4 "$1" 2>/dev/null | awk 'NR==1 { print $1 }'
+  return 0
+}
+
 # Probes the anycast endpoints given as arguments and prints "avg jitter host"
 # for the fastest reachable one (nothing when none is reachable). Trying several
 # avoids a single filtered target skewing the access measurement.
 best_public_rtt() {
-  local host vals stats avg jitter
+  local host vals stats avg jitter _min _med _max
   local best_avg="" best_jitter="" best_host=""
   for host in "$@"; do
     vals="$(sample_tcp_rtt "$host" 443 3)"
     [ -n "$vals" ] || continue
     stats="$(printf '%s\n' "$vals" | latency_stats)"
-    read -r avg jitter _min _max <<<"$stats"
+    read -r _min _med avg _max jitter <<<"$stats"
     if [ -z "$best_avg" ] || (( avg < best_avg )); then
       best_avg="$avg"; best_jitter="$jitter"; best_host="$host"
     fi
@@ -712,8 +734,9 @@ cmd_check_latency() {
   [ $# -eq 0 ] || die "check-latency: takes no argument"
   have ssh || die "ssh not found in PATH"
 
-  local target
-  target="${SSH_USER}@$(instance_fqdn)"
+  local fqdn target
+  fqdn="$(instance_fqdn)"
+  target="${SSH_USER}@$fqdn"
   local -a ssh_opts=(-o StrictHostKeyChecking=accept-new
                      -o UserKnownHostsFile=/dev/null
                      -o LogLevel=ERROR
@@ -721,6 +744,8 @@ cmd_check_latency() {
                      -o ConnectTimeout=10)
 
   if (( DRY_RUN )); then
+    printf '+ getent ahostsv4 %q   # DNS resolution over the tunnel\n' "$fqdn" >&2
+    printf '+ bash /dev/tcp/<resolved-ip>/22   # tunnel-only RTT samples\n' >&2
     printf '+ ssh %s %q true   # fresh-connect sample\n' "${ssh_opts[*]}" "$target" >&2
     printf '+ ssh %s -o ControlMaster=yes -o ControlPath=<tmp> %q true\n' "${ssh_opts[*]}" "$target" >&2
     printf '+ ssh -o ControlPath=<tmp> %q true   # round-trip samples\n' "$target" >&2
@@ -730,8 +755,21 @@ cmd_check_latency() {
     return 0
   fi
 
+  # DNS: the devbox FQDN is served by NetBird's resolver (the devbox dnsmasq
+  # over the tunnel), so resolving it costs a tunnel round-trip, not a local
+  # lookup. Timed on this first (cold) resolution, which also yields the address
+  # reused for the tunnel-only probe below.
+  local t0 t1 resolved_ip="" dns_ms="" dns_val=0
+  t0="$(date +%s%N)"
+  resolved_ip="$(resolve_ip "$fqdn")"
+  t1="$(date +%s%N)"
+  if [ -n "$resolved_ip" ]; then
+    dns_ms=$(( (t1 - t0) / 1000000 ))
+    dns_val="$dns_ms"
+  fi
+
   local ctl="/tmp/sklein-devbox-latency.$$.sock"
-  local t0 t1 connect_ms i
+  local connect_ms i
   local -a samples=()
 
   t0="$(date +%s%N)"
@@ -755,8 +793,21 @@ cmd_check_latency() {
     samples+=( $(( (t1 - t0) / 1000000 )) )
   done
 
-  local avg jitter _min _max
-  read -r avg jitter _min _max < <(printf '%s\n' "${samples[@]}" | latency_stats)
+  local ssh_min ssh_med ssh_avg ssh_max ssh_jit
+  read -r ssh_min ssh_med ssh_avg ssh_max ssh_jit \
+    < <(printf '%s\n' "${samples[@]}" | latency_stats)
+
+  # Tunnel-only RTT: a bare TCP connect to the devbox sshd on the NetBird
+  # address, with no DNS and no remote command. It is what the network itself
+  # contributes; the SSH figure above is tunnel + DNS + remote exec.
+  local _tun_min="" tun_med="" _tun_avg="" tun_max="" _tun_jit="" tun_vals=""
+  if [ -n "$resolved_ip" ]; then
+    tun_vals="$(sample_tcp_rtt "$resolved_ip" 22 10)"
+    if [ -n "$tun_vals" ]; then
+      read -r _tun_min tun_med _tun_avg tun_max _tun_jit \
+        < <(printf '%s\n' "$tun_vals" | latency_stats)
+    fi
+  fi
 
   # Decomposition: the same TCP-connect probe on both ends plus the NetBird
   # link type, to tell where the delay comes from.
@@ -772,12 +823,12 @@ cmd_check_latency() {
 
   local client_ip="" egress_avg="" egress_host="" peer_type=""
   client_ip="$(printf '%s\n' "$remote_out" | sed -n 's/^SSH_CLIENT=\([^ ]*\) .*/\1/p' | head -n1)"
-  local rh vals stats ravg _rjitter
+  local rh vals stats ravg _rmin _rmed _rmax _rjit
   for rh in 9.9.9.9 1.1.1.1; do
     vals="$(printf '%s\n' "$remote_out" | awk -v h="$rh" '$1 == h { print $2 }')"
     [ -n "$vals" ] || continue
     stats="$(printf '%s\n' "$vals" | latency_stats)"
-    read -r ravg _rjitter _min _max <<<"$stats"
+    read -r _rmin _rmed ravg _rmax _rjit <<<"$stats"
     if [ -z "$egress_avg" ] || (( ravg < egress_avg )); then
       egress_avg="$ravg"; egress_host="$rh"
     fi
@@ -800,35 +851,60 @@ cmd_check_latency() {
       }')"
   fi
 
-  printf '%s\n' "$target"
-  printf 'Overlay RTT %s ms (jitter %s ms) · fresh connect %s ms\n' "$avg" "$jitter" "$connect_ms"
+  if [ -n "$resolved_ip" ]; then
+    printf '%s (%s)\n' "$target" "$resolved_ip"
+  else
+    printf '%s\n' "$target"
+  fi
+  printf 'SSH RTT %s ms (min %s / med %s / max %s) · fresh connect %s ms\n' \
+    "$ssh_avg" "$ssh_min" "$ssh_med" "$ssh_max" "$connect_ms"
 
   printf '\n==> breakdown\n'
+  if [ -n "$dns_ms" ]; then
+    printf '  dns     resolve fqdn            %4s ms\n' "$dns_ms"
+  else
+    printf '  dns     resolve fqdn               n/a\n'
+  fi
+
+  local tun_note=""
+  case "$peer_type" in
+    P2P) tun_note="   netbird: direct (P2P)" ;;
+    -)   tun_note="   netbird: connecting" ;;
+    "")  ;;
+    *)   tun_note="   netbird: $peer_type" ;;
+  esac
+  if [ -n "$tun_med" ]; then
+    printf '  tunnel  workstation -> devbox   %4s ms%s\n' "$tun_med" "$tun_note"
+  else
+    printf '  tunnel  workstation -> devbox      n/a%s\n' "$tun_note"
+  fi
+
+  # What SSH adds over the pure tunnel: DNS resolution + remote-command exec.
+  local overhead_note=""
+  if [ -n "$tun_med" ]; then
+    local over=$(( ssh_med - tun_med - dns_val ))
+    (( over > 0 )) || over=0
+    overhead_note="   (+${over} ms over tunnel: dns + remote exec)"
+  fi
+  printf '  ssh     workstation -> devbox   %4s ms%s\n' "$ssh_med" "$overhead_note"
+
   if [ -n "$access_avg" ]; then
-    printf '  access  workstation -> %-15s %3s ms   (WiFi + 5G + ISP)\n' "$access_host" "$access_avg"
+    printf '  access  workstation -> %-8s %4s ms   (WiFi + 5G + ISP)\n' "$access_host" "$access_avg"
   else
     printf '  access  workstation -> public anycast   n/a\n'
   fi
   if [ -n "$egress_avg" ]; then
-    printf '  egress  devbox      -> %-15s %3s ms   (homelab uplink)\n' "$egress_host" "$egress_avg"
+    printf '  egress  devbox      -> %-8s %4s ms   (homelab uplink)\n' "$egress_host" "$egress_avg"
   else
     printf '  egress  devbox      -> public anycast   n/a\n'
   fi
-  local overlay_note=""
-  case "$peer_type" in
-    P2P) overlay_note="   netbird: direct (P2P)" ;;
-    -)   overlay_note="   netbird: connecting" ;;
-    "")  ;;
-    *)   overlay_note="   netbird: $peer_type" ;;
-  esac
-  printf '  overlay workstation -> devbox          %3s ms%s\n' "$avg" "$overlay_note"
 
   local verdict
-  if   (( avg < 30 ));  then verdict="excellent — feels almost local"
-  elif (( avg < 80 ));  then verdict="comfortable — nvim/tmux feel fluid"
-  elif (( avg < 120 )); then verdict="fair — perceptible lag while typing"
-  elif (( avg < 200 )); then verdict="painful — every keystroke waits for the round trip"
-  else                       verdict="unusable — too slow for an interactive shell"
+  if   (( ssh_med < 30 ));  then verdict="excellent — feels almost local"
+  elif (( ssh_med < 80 ));  then verdict="comfortable — nvim/tmux feel fluid"
+  elif (( ssh_med < 120 )); then verdict="fair — perceptible lag while typing"
+  elif (( ssh_med < 200 )); then verdict="painful — every keystroke waits for the round trip"
+  else                           verdict="unusable — too slow for an interactive shell"
   fi
   printf '\nVerdict: %s\n' "$verdict"
 
@@ -837,22 +913,26 @@ cmd_check_latency() {
     attribution="the access network (WiFi/5G) is the bottleneck (~${access_avg} ms to ${access_host})"
   elif [ "$peer_type" = "Relay" ] || [ "$peer_type" = "Relayed" ]; then
     attribution="the NetBird link is relayed; the relay detour adds latency"
-  elif [ -n "$access_avg" ] && (( avg - access_avg <= 20 )); then
-    attribution="latency is dominated by the access network (~${access_avg} ms)"
+  elif [ -n "$tun_med" ] && (( ssh_med - tun_med - dns_val >= 30 )); then
+    attribution="the tunnel is fast (~${tun_med} ms); the extra is DNS + remote-command overhead, not the network"
+  elif [ -n "$tun_med" ] && (( ssh_med - tun_med <= 20 )); then
+    attribution="latency is dominated by the tunnel/access path (~${tun_med} ms), no large local overhead"
   elif [ -n "$access_avg" ]; then
-    attribution="access (~${access_avg} ms) and homelab are fast; the delay is the internet path between the access network and the homelab"
+    attribution="access (~${access_avg} ms) and homelab are fast; the delay is the path between the access network and the homelab"
   fi
   if [ -n "$egress_avg" ] && (( egress_avg >= 80 )); then
     attribution="${attribution:+$attribution; }the homelab uplink is slow (~${egress_avg} ms)"
   fi
-  if (( jitter >= 50 )); then
-    attribution="${attribution:+$attribution; }high jitter (${jitter} ms) typical of a mobile link"
+  if [ -n "$tun_max" ] && (( tun_max - tun_med >= 100 )); then
+    attribution="${attribution:+$attribution; }intermittent spikes on the tunnel (max ${tun_max} ms vs med ${tun_med} ms)"
+  elif (( ssh_jit >= 50 )); then
+    attribution="${attribution:+$attribution; }high jitter (${ssh_jit} ms) typical of a mobile link"
   fi
   if [ -n "$attribution" ]; then
     printf 'Attribution: %s\n' "$attribution"
   fi
 
-  if (( avg >= 120 )); then
+  if (( ssh_med >= 120 )); then
     printf 'Tip: try the mosh transport (predictive local echo): %s console --terminal=mosh\n' "$PROG_NAME"
   fi
 }

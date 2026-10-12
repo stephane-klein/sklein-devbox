@@ -59,7 +59,7 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 
 # sklein-devbox-ingress: wildcard DNS for the proxy TLD, served over NetBird.
 # dnsmasq runs as an unprivileged pitchfork daemon on wt0:5353; see
-# dotfiles/bin/sklein-devbox-ingress and dotfiles/.config/pitchfork/config.toml.tera.
+# dotfiles/bin/sklein-devbox-ingress and dotfiles/dot-config/pitchfork/config.toml.tera.
 # bind-utils provides `dig`, used by `sklein-devbox-ingress status` to query
 # dnsmasq directly (instead of the system resolver).
 "dnf:dnsmasq" = "latest"
@@ -77,10 +77,10 @@ run = "sudo chsh -s /bin/zsh devbox"
 # ~/.config/tmux and ~/.config/zsh. The directories are empty only on a fresh
 # machine, so this is a no-op afterwards.
 run = '''
-if [ -z "$(ls -A "{{ config_root }}/dotfiles/.config/tmux/plugins/catppuccin/tmux" 2>/dev/null)" ]; then
+if [ -z "$(ls -A "{{ config_root }}/dotfiles/dot-config/tmux/plugins/catppuccin/tmux" 2>/dev/null)" ]; then
   bash "{{ config_root }}/scripts/sync-catppuccin-tmux.sh"
 fi
-if [ -z "$(ls -A "{{ config_root }}/dotfiles/.config/zsh/fzf-tab" 2>/dev/null)" ]; then
+if [ -z "$(ls -A "{{ config_root }}/dotfiles/dot-config/zsh/fzf-tab" 2>/dev/null)" ]; then
   bash "{{ config_root }}/scripts/sync-fzf-tab.sh"
 fi
 '''
@@ -130,85 +130,51 @@ bashrc = "activate"
 [tools]
 starship = "1.26.0"
 
+# The home tree is deployed by one group that walks dotfiles/ and, thanks to
+# dot_prefix, maps every `dot-<name>` path component to `.<name>`:
+#   dotfiles/dot-config/...  -> ~/.config/...
+#   dotfiles/dot-ssh/config  -> ~/.ssh/config
+#   dotfiles/dot-zshrc       -> ~/.zshrc
+#   dotfiles/dot-local/...   -> ~/.local/...
+#   dotfiles/dot-kube/...    -> ~/.kube/...
+#   dotfiles/bin/...         -> ~/bin/...
+[dotfile_groups.home]
+root = "."
+target = "~"
+mode = "copy"
+dot_prefix = true
+exclude = ["*.tera"]
+
+[dotfile_groups.home.entries]
+# Permissions the plain copy walk cannot express.
+"~/.ssh/config"                     = { mode = "copy", permissions = "0600" }
+"~/bin/export-gpg-keys.sh"          = { mode = "copy", permissions = "0700" }
+"~/bin/import-gpg-keys.sh"          = { mode = "copy", permissions = "0700" }
+"~/bin/suspend_incus1.sh"           = { mode = "copy", permissions = "0700" }
+"~/bin/wakeup_incus1.sh"            = { mode = "copy", permissions = "0700" }
+"~/bin/lock-ssh-agent.sh"           = { mode = "copy", permissions = "0700" }
+"~/bin/install-or-update-neovim.sh" = { mode = "copy", permissions = "0700" }
+"~/bin/switch-opencode-auth-1.sh"   = { mode = "copy", permissions = "0700" }
+"~/bin/switch-opencode-auth-2.sh"   = { mode = "copy", permissions = "0700" }
+"~/bin/sklein-devbox-doctor"        = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
+
+# Templates (sources end in .tera, excluded from the walk above; the source is
+# relative to the group root, i.e. dotfiles/).
+"~/.config/pitchfork/config.toml"    = { source = "dot-config/pitchfork/config.toml.tera", mode = "template" }
+"~/.config/incus/client.crt"         = { source = "dot-config/incus/client.crt.tera", mode = "template" }
+"~/.config/incus/client.key"         = { source = "dot-config/incus/client.key.tera", mode = "template" }
+"~/.config/gh/hosts.yml"             = { source = "dot-config/gh/hosts.yml.tera", mode = "template" }
+"~/.config/opencode/opencode.jsonc"  = { source = "dot-config/opencode/opencode.jsonc.tera", mode = "template" }
+"~/.local/share/opencode/auth.json"  = { source = "dot-local/share/opencode/auth.json.tera", mode = "template" }
+"~/.local/share/opencode/auth.json1" = { source = "dot-local/share/opencode/auth.json.tera", mode = "template" }
+"~/.local/share/opencode/auth.json2" = { source = "dot-local/share/opencode/auth.json2.tera", mode = "template" }
+"~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = { source = "dot-kube/config.d/homelab-stephane-klein-info.kubeconfig.tera", mode = "template", permissions = "0600" }
+
+# Entries whose source lives outside the group root, or that use inline content.
 [dotfiles]
-"~/.ssh/config"        = { mode = "copy", permissions = "0600" }
-"~/.zshenv"            = { content = "export PATH=\"$HOME/.local/bin:$PATH\"\n", permissions = "0644" }
-"~/.config/atuin"      = { mode = "copy" }
-"~/.config/mise/config.toml" = { mode = "copy" }
-"~/.config/tmux"             = { mode = "copy" }
-"~/.config/zsh"              = { mode = "copy" }
-"~/.zshrc"                   = { mode = "copy" }
-"~/.config/starship.toml"    = { mode = "copy" }
-"~/.config/containers"       = { mode = "copy" }
-"~/.config/git"              = { mode = "copy" }
-"~/.config/jj"               = { mode = "copy" }
-# gpg-agent config for commit/tag signing (pinentry + passphrase caching).
-"~/.config/gnupg/gpg-agent.conf" = { mode = "copy" }
-"~/.config/try-rs/"          = { mode = "copy" }
-"~/.config/yazi"             = { mode = "copy" }
-"~/.config/nvim"             = { mode = "copy" }
-
-"~/.config/pitchfork/config.toml" = {
-  source = "dotfiles/.config/pitchfork/config.toml.tera",
-  mode = "template"
-}
-
-# Incus
-"~/.config/incus/config.yml" = { mode = "copy" }
-"~/.config/incus/client.crt" = {
-  source = "dotfiles/.config/incus/client.crt.tera",
-  mode = "template"
-}
-"~/.config/incus/client.key" = {
-  source = "dotfiles/.config/incus/client.key.tera",
-  mode = "template"
-}
-
-# Kubernetes
-"~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = {
-  source = "dotfiles/.kube/config.d/homelab-stephane-klein-info.kubeconfig.tera",
-  mode = "template",
-  permissions = "0600",
-}
-
-# GitHub Cli
-"~/.config/gh/config.yml" = { mode = "copy" }
-"~/.config/gh/hosts.yml"  = {
-  source = "dotfiles/.config/gh/hosts.yml.tera",
-  mode = "template"
-}
-
-# OpenCode
-"~/.config/opencode/"  = { mode = "copy" }
-"~/.config/opencode/opencode.jsonc" = {
-  source = "dotfiles/.config/opencode/opencode.jsonc.tera",
-  mode = "template"
-}
-"~/.local/share/opencode/auth.json" = {
-  source = "dotfiles/.local/share/opencode/auth.json.tera",
-  mode = "template"
-}
-"~/.local/share/opencode/auth.json1" = {
-  source = "dotfiles/.local/share/opencode/auth.json.tera",
-  mode = "template"
-}
-"~/.local/share/opencode/auth.json2" = {
-  source = "dotfiles/.local/share/opencode/auth.json2.tera",
-  mode = "template"
-}
-
-# Binaries
-"~/bin/export-gpg-keys.sh"          = { mode ="copy", permissions = "0700" }
-"~/bin/import-gpg-keys.sh"          = { mode ="copy", permissions = "0700" }
-"~/bin/suspend_incus1.sh"           = { mode ="copy", permissions = "0700" }
-"~/bin/wakeup_incus1.sh"            = { mode ="copy", permissions = "0700" }
-"~/bin/lock-ssh-agent.sh"           = { mode ="copy", permissions = "0700" }
-"~/bin/install-or-update-neovim.sh" = { mode ="copy", permissions = "0700" }
-"~/bin/switch-opencode-auth-1.sh"   = { mode ="copy", permissions = "0700" }
-"~/bin/switch-opencode-auth-2.sh"   = { mode ="copy", permissions = "0700" }
-"~/bin/sklein-devbox-doctor"        = { mode ="copy", permissions = "0755" }
-"~/bin/sklein-devbox-mise-upgrade"  = { mode ="copy", permissions = "0755" }
-"~/bin/sklein-devbox-ingress"       = { mode ="copy", permissions = "0755" }
+"~/.zshenv" = { content = "export PATH=\"$HOME/.local/bin:$PATH\"\n", permissions = "0644" }
 
 # Default sound for the audio check of `~/bin/sklein-devbox-doctor` (CC0, see
 # files/sounds/README.md). A dotfiles `copy` entry rather than a
@@ -217,7 +183,7 @@ starship = "1.26.0"
 "~/.local/share/sklein-devbox/sounds/door-bell.ogg" = {
   source = "files/sounds/door-bell.ogg",
   mode = "copy",
-  permissions = "0644",
+  permissions = "0644"
 }
 
 [bootstrap.directories."~/.kube/"]

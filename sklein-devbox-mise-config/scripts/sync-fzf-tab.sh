@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../"
 #
 FZF_TAB_VERSION="${FZF_TAB_VERSION:-v1.3.0}"
 
-DEST="dotfiles/.config/zsh/fzf-tab"
+DEST="dotfiles/dot-config/zsh/fzf-tab"
 
 for bin in curl tar; do
   command -v "$bin" >/dev/null 2>&1 || {

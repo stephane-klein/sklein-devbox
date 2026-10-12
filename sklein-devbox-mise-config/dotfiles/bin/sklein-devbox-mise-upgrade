@@ -4,7 +4,7 @@
 #
 # Walks `mise outdated --bump`, asks tool by tool whether to take the bump,
 # writes the accepted versions into the driver's *source* global config
-# (dotfiles/.config/mise/config.toml) with `mise use --path`, then runs the
+# (dotfiles/dot-config/mise/config.toml) with `mise use --path`, then runs the
 # driver's `dot apply` task (fnox-wrapped) so the change lands in
 # ~/.config/mise/config.toml and the tools are installed.
 #
@@ -38,7 +38,7 @@ $PROG - bump the global mise tools of sklein-devbox, then re-apply.
 
 Runs \`mise outdated --bump\`, asks tool by tool whether to take the bump,
 writes the accepted versions into the driver source config
-(dotfiles/.config/mise/config.toml), then runs the driver's \`dot apply\`.
+(dotfiles/dot-config/mise/config.toml), then runs the driver's \`dot apply\`.
 
 Usage:
   $PROG [options]
@@ -77,7 +77,7 @@ while (( $# )); do
   esac
 done
 
-SRC_CONFIG="$DRIVER/dotfiles/.config/mise/config.toml"
+SRC_CONFIG="$DRIVER/dotfiles/dot-config/mise/config.toml"
 
 command -v mise >/dev/null 2>&1 || die "mise not found in PATH"
 command -v jq >/dev/null 2>&1 || die "jq not found in PATH"

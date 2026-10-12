@@ -44,7 +44,7 @@ atuin = "18.23.0"
 pitchfork = "2.30.1"
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
-# kubectl, k9s, helm, ... Loaded from dotfiles/.zshrc.
+# kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
 # Supported completers: https://carapace-sh.github.io/carapace-bin/completers.html
 carapace = "1.8.0"
 
@@ -57,7 +57,7 @@ starship = "1.26.0"
   postinstall = "chmod u+x ${MISE_TOOL_INSTALL_PATH}/jj-starship"
 }
 
-# Tmux status bar / window scripts (see dotfiles/.config/tmux/scripts/):
+# Tmux status bar / window scripts (see dotfiles/dot-config/tmux/scripts/):
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"

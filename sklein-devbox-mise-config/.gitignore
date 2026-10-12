@@ -1,2 +1,2 @@
-dotfiles/.config/tmux/plugins/
-dotfiles/.config/zsh/fzf-tab/
+dotfiles/dot-config/tmux/plugins/
+dotfiles/dot-config/zsh/fzf-tab/

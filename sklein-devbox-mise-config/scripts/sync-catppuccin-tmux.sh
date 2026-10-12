@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../"
 #
 CATPPUCCIN_TMUX_VERSION="${CATPPUCCIN_TMUX_VERSION:-v2.3.1}"
 
-DEST="dotfiles/.config/tmux/plugins/catppuccin/tmux"
+DEST="dotfiles/dot-config/tmux/plugins/catppuccin/tmux"
 
 for bin in curl tar; do
   command -v "$bin" >/dev/null 2>&1 || {

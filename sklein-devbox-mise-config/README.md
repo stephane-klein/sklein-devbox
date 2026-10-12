@@ -10,8 +10,8 @@ same role, and confusing them is the main pitfall.
 
 | File in the container | Source here | Loaded when | Purpose |
 | --- | --- | --- | --- |
-| `~/.local/share/sklein-devbox/sklein-devbox-mise-config/mise.toml` | `mise.toml` | only when the working directory is `~/.local/share/sklein-devbox/sklein-devbox-mise-config/` (or with `mise -C` / `--cd`) | **Bootstrap driver**: `[bootstrap.*]`, `[dotfiles]`, `[settings]`, and the tools needed during bootstrap |
-| `~/.config/mise/config.toml` | `dotfiles/.config/mise/config.toml` | everywhere | **Global config**: user-wide `[settings]`, `[tools]` and `[shell_alias]` |
+| `~/.local/share/sklein-devbox/sklein-devbox-mise-config/mise.toml` | `mise.toml` | only when the working directory is `~/.local/share/sklein-devbox/sklein-devbox-mise-config/` (or with `mise -C` / `--cd`) | **Bootstrap driver**: `[bootstrap.*]`, `[dotfile_groups.*]`, `[dotfiles]`, `[settings]`, and the tools needed during bootstrap |
+| `~/.config/mise/config.toml` | `dotfiles/dot-config/mise/config.toml` | everywhere | **Global config**: user-wide `[settings]`, `[tools]` and `[shell_alias]` |
 
 
 ### Bootstrap driver — `mise.toml`
@@ -79,13 +79,16 @@ user-wide content:
 - `[env]` — user-wide environment variables (e.g. `KUBECONFIG`, see
   [Kubernetes access](#kubernetes-access))
 
-It must **not** contain `[bootstrap.*]` or `[dotfiles]`. Its source is
-`dotfiles/.config/mise/config.toml`, installed by a `[dotfiles]` entry declared
-in the driver.
+It must **not** contain `[bootstrap.*]`, `[dotfiles]` or `[dotfile_groups.*]`. Its
+source is `dotfiles/dot-config/mise/config.toml`, deployed by the driver's
+`[dotfile_groups.home]` tree (a `copy` walk with `dot_prefix`, which maps
+`dot-config/…` to `~/.config/…`).
 
-`mise use -g` and `mise settings set` write this file. In `copy` mode, capture
-the changes back into the source with `mise dot add ~/.config/mise/config.toml`
-(run it from the driver directory, or with `mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config`).
+`mise use -g` and `mise settings set` write this file. The home group uses
+`dot_prefix`, and `mise dot add` refuses to capture into such an entry, so edit
+the source directly (`dotfiles/dot-config/mise/config.toml`), or use
+`mise use --path dotfiles/dot-config/mise/config.toml …` from the driver
+directory.
 
 ## Shell aliases
 
@@ -113,7 +116,7 @@ section: `devbox-dot apply` applies only the `[dotfiles]` entries (and installs
 
 ## Shell completions
 
-`dotfiles/.zshrc` wires four completion sources, in this order:
+`dotfiles/dot-zshrc` wires four completion sources, in this order:
 
 - **mise** — `eval "$(mise completion zsh)"`. `mise activate` only wires completions for managed tools that ship one (fnox, pitchfork, ...), never for the `mise` command itself, which needs its own line.
 - **carapace** — the multi-command completion engine (`carapace` in the global `[tools]`). A single `source <(carapace _carapace)` dispatches to per-command completers, so no per-tool script is needed. Supported completers: <https://carapace-sh.github.io/carapace-bin/completers.html>
@@ -153,7 +156,7 @@ fnox -c ~/.local/share/sklein-devbox/sklein-devbox-mise-config/fnox.toml \
 global config. The driver declares a `post-dotfiles` bootstrap hook with
 `run = "mise install"`; `mise dot apply` runs it (see
 [hooks](https://mise.jdx.dev/bootstrap.html#hooks)), so a new entry in
-`dotfiles/.config/mise/config.toml` takes effect without a manual
+`dotfiles/dot-config/mise/config.toml` takes effect without a manual
 `mise install`.
 
 ## Remote-desktop link
@@ -212,7 +215,7 @@ sound is CC0; see `files/sounds/README.md`.
 `dotfiles/bin/sklein-devbox-mise-upgrade` is deployed to
 `~/bin/sklein-devbox-mise-upgrade`. It walks `mise outdated --bump`, asks tool
 by tool whether to take the bump, writes the accepted versions into the driver
-**source** (`dotfiles/.config/mise/config.toml`) with `mise use --path`, then
+**source** (`dotfiles/dot-config/mise/config.toml`) with `mise use --path`, then
 runs the fnox-wrapped `mise -C <driver> run dot apply` so the change lands in
 `~/.config/mise/config.toml` and the tools are installed:
 
@@ -252,7 +255,7 @@ systemd unit:
   address. Its `run` computes the current `wt0` address at start, so `up`
   must run after `netbird up`.
 - the **pitchfork reverse proxy** (`[settings.proxy]` in
-  `dotfiles/.config/pitchfork/config.toml.tera`): `tld`, `wildcard = true`
+  `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld`, `wildcard = true`
   (extra left labels route to the same daemon), `host = "0.0.0.0"` (so peers
   reach the dynamic `wt0` address) and `port = 443`. It signs a certificate
   per requested hostname from its local CA
@@ -275,7 +278,7 @@ and it answers at `<slug>.<tld>`.
 
 ## Rules of thumb
 
-- Global tools go in `dotfiles/.config/mise/config.toml`, never in the driver.
+- Global tools go in `dotfiles/dot-config/mise/config.toml`, never in the driver.
 - The driver keeps only what bootstrap itself needs.
 - `dotfiles.root` stays in the driver (relative path resolution).
 - `mise dot` and `mise bootstrap` need `[bootstrap.secrets]` in the environment:

@@ -16,6 +16,11 @@ eval "$(mise activate zsh)"
 # never for the `mise` command: it must be installed explicitly.
 eval "$(mise completion zsh)"
 
+# Pitchfork's chpwd hook: starts/stops the daemons declared in a project's
+# pitchfork.toml on enter/exit. pitchfork is a mise-managed tool, so this
+# block belongs after `mise activate`.
+eval "$(pitchfork activate zsh)"
+
 # Carapace - multi-command completion engine (jj, gh, kubectl, k9s, helm, ...).
 # carapace is a mise-managed tool: it must be on PATH, so load it after the
 # `mise activate` block above. It overrides the built-in completions of the

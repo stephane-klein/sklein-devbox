@@ -12,6 +12,16 @@
   },
   // I use `mise exec --cd / -- ...` to launch MCP servers with the Node instance installed globally by Mise
   "mcp": {
+    "mise": {
+      "type": "local",
+      "command": ["mise", "mcp"],
+      "enabled": false
+    },
+    "pitchfork": {
+      "type": "local",
+      "command": ["pitchfork", "mcp"],
+      "enabled": false
+    },
     "fetch": {
       "type": "local",
       "command": ["mise", "exec", "--cd", "/", "--", "mcp-server-fetch"],

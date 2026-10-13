@@ -263,6 +263,17 @@ _zsh_bind '^[[1;5B' _atuin_sess_down
 
 unset -f _zsh_bind
 
+# Navigation without `cd`, ported from oh-my-zsh's lib/directories.zsh (this
+# setup does not load oh-my-zsh). AUTO_CD turns a bare directory path on the
+# command line into a `cd`, so `..` goes up one level; the global aliases expand
+# `...` (and longer) to the matching relative path anywhere on the line. Kept
+# after every third-party `source`/`eval` so the globals cannot leak into them.
+setopt AUTO_CD
+alias -g ...='../..'
+alias -g ....='../../..'
+alias -g .....='../../../..'
+alias -g ......='../../../../..'
+
 # starship must be the LAST thing that sets the prompt: keep this block at
 # the end of the file, after every other prompt-affecting init.
 if command -v starship &> /dev/null; then

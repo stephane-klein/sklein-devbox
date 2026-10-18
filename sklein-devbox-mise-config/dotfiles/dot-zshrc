@@ -4,6 +4,10 @@ compinit
 #allow tab completion in the middle of a word
 setopt COMPLETE_IN_WORD
 
+# Expand aliases before completing, so an alias inherits the completer of the
+# command it points to (carapace then completes `k` like `kubectl`).
+setopt COMPLETE_ALIASES
+
 # `mise activate` prepends the mise shims dir to PATH at eval time.
 # Any mise-managed tool (starship, fzf, ...) must therefore be called
 # AFTER the mise:activate block below.
@@ -160,6 +164,10 @@ function y() {
 
 # try-rs integration
 alias try="try-rs"
+
+# kubectl, as in oh-my-zsh's kubectl plugin. COMPLETE_ALIASES (above) routes its
+# completion to carapace.
+alias k=kubectl
 
 source "$HOME/.config/try-rs/try-rs.zsh"
 # try-rs tab completion for directory names

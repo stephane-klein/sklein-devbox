@@ -48,6 +48,12 @@ if [[ -r "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh" ]]; then
     zstyle ':completion:*' menu no
     # Enable group support in the fzf menu.
     zstyle ':completion:*:descriptions' format '[%d]'
+    # Carapace file completions put the whole path in PREFIX without an hpre,
+    # so the default 'input' query would prefill fzf with e.g.
+    # `~/.config/opencode/` while fzf only searches the basenames shown in the
+    # list (--nth=2,3): every candidate is filtered out. The common prefix is
+    # shared by all candidates, so it never hides one.
+    zstyle ':fzf-tab:*' query-string prefix
     source "$HOME/.config/zsh/fzf-tab/fzf-tab.plugin.zsh"
 fi
 

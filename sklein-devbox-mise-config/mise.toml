@@ -159,6 +159,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-doctor"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
+"~/bin/pinentry-tmux"               = { mode = "copy", permissions = "0755" }
 
 # Templates (sources end in .tera, excluded from the walk above; the source is
 # relative to the group root, i.e. dotfiles/).

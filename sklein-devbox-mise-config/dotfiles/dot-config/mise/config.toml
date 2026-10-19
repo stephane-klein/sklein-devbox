@@ -64,7 +64,7 @@ starship = "1.26.0"
 pipx = "1.17.12"
 "pipx:petname" = "2.9"
 
-opencode = "1.19.0"
+opencode = "1.19.3"
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.4"

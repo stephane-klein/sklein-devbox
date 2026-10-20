@@ -8,6 +8,21 @@ He speaks French natively and has a modest level of English.
 Before starting a task, scan the available skills for a matching `sklein-*`
 skill and load it if applicable.
 
+## Stateful systems
+
+"apply"/"go"/"ok"/"continue" never authorize DB or remote execution; they mean
+the file only. Execution needs `run on <instance>` in a separate message,
+matching the database name in the URL.
+
+Two steps always: announce the command, host/database/role and credential
+source, then stop; run only on the next matching `run on <instance>`, otherwise
+ask with `question` and named options. A file write and its execution are
+separate approvals; include any `GRANT`/`REVOKE`/`ALTER ROLE`. Covers `psql`,
+`pg_dump`/`pg_restore`, ORM migrations, `ssh`/`kubectl exec`/`docker exec`.
+
+Exempt: `localhost`, `127.0.0.1`, `::1`, Unix sockets, project containers —
+unless reached through an SSH tunnel or port-forward.
+
 ## Language Behavior
 
 This rule applies only to the conversation between the agent and the human, not

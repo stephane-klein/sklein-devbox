@@ -1,9 +1,8 @@
 # sklein-devbox
 
-> [!NOTE]
-> You are viewing an experimental branch, a reboot of the *sklein-devbox* project toward
-> [Incus LXC](https://linuxcontainers.org/incus/) and [Mise bootstrap](https://mise.jdx.dev/bootstrap.html).
-> For now this branch is a POC that, if successful, will become the future stable version.
+A personal, opinionated system container development environment running Fedora 44,
+instantiated on LXC by [Incus](https://linuxcontainers.org/incus/).
+Designed to keep each project's toolchain and dependencies isolated.
 
 ## AI-Assisted Development
 
@@ -11,11 +10,6 @@ This project was developed using:
 
 - [OpenCode](https://opencode.ai) CLI — coding assistant workflow (not vibe coding)
 - Models: DeepSeek-v4.1-Flash (OpenCode Go)
-
-> [!IMPORTANT]
-> Everything below is aimed at a developer (me) contributing to *sklein-devbox*:
-> this is the work and build environment, not the thing final users consume.
-> End-user documentation for the generated devbox is not written yet.
 
 ## Tech stack
 
@@ -32,7 +26,7 @@ command-line interface, a single self-contained bash script installed over
 usage.
 
 ```sh
-$ curl -fsSL https://raw.githubusercontent.com/stephane-klein/sklein-devbox/poc-reboot-to-incus-lxc-and-mise-bootstrap/sklein-devbox-cli/install.sh | bash
+$ curl -fsSL https://raw.githubusercontent.com/stephane-klein/sklein-devbox/main/sklein-devbox-cli/install.sh | bash
 ```
 
 The CLI exposes `check-latency`, `completion`, `console`, `destroy`, `doctor`,

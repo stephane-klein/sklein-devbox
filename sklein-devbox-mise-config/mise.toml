@@ -68,6 +68,13 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 [bootstrap.user]
 login_shell = "/bin/zsh"
 
+[bootstrap.hooks.post-packages]
+# The image ships with Etc/UTC. Set the timezone system-wide so journald,
+# timers, `date` and every process agree; `timedatectl` is idempotent (it is a
+# no-op when /etc/localtime already points at the right zone). Runs on
+# `mise bootstrap`, not on `mise dot apply`.
+run = "sudo timedatectl set-timezone Europe/Paris"
+
 [bootstrap.hooks.pre-user]
 run = "sudo chsh -s /bin/zsh devbox"
 

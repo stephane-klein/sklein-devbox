@@ -3,6 +3,13 @@
 A personal, opinionated Podman-based development environment running Fedora 43.  
 Designed to keep each project's toolchain and dependencies isolated.
 
+> [!NOTE]
+> You are on a branch of an older version of *sklein-devbox*, the one that was
+> based on Podman, before the refactoring of *sklein-devbox* into a system container based
+> on [Incus LXC](https://linuxcontainers.org/incus/) and [Mise bootstrap](https://mise.jdx.dev/bootstrap.html)
+> instead of [Chezmoi](https://www.chezmoi.io/).
+> The new version is available on the [`main`](https://github.com/stephane-klein/sklein-devbox/tree/main) branch.
+
 ## Container Image
 
 The container image is published at: `ghcr.io/stephane-klein/sklein-devbox:latest`

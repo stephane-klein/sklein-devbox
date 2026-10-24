@@ -37,21 +37,21 @@ uvx = false
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = "1.39.0"
+fnox = { version = "1.42.0", workflow = "release.yml" }
 tmux = "3.7c"
-fzf = "0.74.4"
-atuin = "18.23.0"
-pitchfork = "2.30.1"
+fzf = "0.74.5"
+atuin = "18.24.2"
+pitchfork = { version = "2.32.1", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
 # Supported completers: https://carapace-sh.github.io/carapace-bin/completers.html
-carapace = "1.8.0"
+carapace = "1.8.1"
 
 jujutsu = "0.46.0"
-jjui = "0.10.11"
+jjui = "0.10.12"
 
-starship = "1.26.0"
+starship = "1.27.0"
 "github:dmmulroy/jj-starship" = {
   version = "0.7.4",
   postinstall = "chmod u+x ${MISE_TOOL_INSTALL_PATH}/jj-starship"
@@ -61,13 +61,13 @@ starship = "1.26.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.17.12"
+pipx = "1.18.4"
 "pipx:petname" = "2.9"
 
-opencode = "1.19.3"
+opencode = "1.19.4"
 
 # https://github.com/Shlomob/ocmonitor-share
-"pipx:opencode-monitor" = "1.0.4"
+"pipx:opencode-monitor" = "1.0.5"
 
 ripgrep = "15.2.0"
 fd = "10.5.0"

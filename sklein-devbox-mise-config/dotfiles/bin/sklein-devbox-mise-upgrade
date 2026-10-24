@@ -93,16 +93,21 @@ printf '%s   source: %s%s\n' "$C_DIM" "$SRC_CONFIG" "$C_OFF"
 outdated_json="$(mise -C "$HOME" outdated --bump --json 2>/dev/null)"
 [ -n "$outdated_json" ] || outdated_json='{}'
 
-# Global tools with a newer version: name <TAB> current <TAB> bump <TAB> url.
+# Global tools with a newer version, one record per line. Fields are separated
+# by US (0x1f), not by a tab: a tab is IFS whitespace, so `read` would collapse
+# the empty `current` field mise emits for a requested version that is not
+# installed, silently shifting the following columns.
+SEP=$'\x1f'
 rows=()
-while IFS=$'\t' read -r name current bump url; do
+while IFS="$SEP" read -r name current bump url; do
   [ -n "$name" ] || continue
-  rows+=("$name"$'\t'"$current"$'\t'"$bump"$'\t'"$url")
+  rows+=("$name$SEP$current$SEP$bump$SEP$url")
 done < <(
   jq -r --arg g "$GLOBAL_CONFIG" '
     to_entries[]
     | select(.value.source.path == $g)
-    | [.key, .value.current, (.value.bump // ""), (.value.release_url // "")] | @tsv' \
+    | [.key, (.value.current // ((.value.requested // "?") + " (missing)")),
+       (.value.bump // ""), (.value.release_url // "")] | join("\u001f")' \
     <<<"$outdated_json"
 )
 
@@ -124,7 +129,7 @@ fi
 if (( DRY_RUN )); then
   printf '\n   %d tool(s) could be bumped:\n\n' "${#rows[@]}"
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r name current bump url <<<"$row"
+    IFS="$SEP" read -r name current bump url <<<"$row"
     printf '   %-32s %s -> %s\n' "$name" "$current" "$bump"
   done
   exit 0
@@ -134,7 +139,7 @@ printf '\n   %d tool(s) can be bumped:\n\n' "${#rows[@]}"
 
 accepted=()
 for row in "${rows[@]}"; do
-  IFS=$'\t' read -r name current bump url <<<"$row"
+  IFS="$SEP" read -r name current bump url <<<"$row"
   printf '   %-32s %s -> %s\n' "$name" "$current" "$bump"
   if [ -n "$url" ]; then
     printf '   %s%s%s\n' "$C_DIM" "$url" "$C_OFF"

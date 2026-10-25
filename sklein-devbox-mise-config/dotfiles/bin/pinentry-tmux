@@ -173,6 +173,7 @@ fifodir=$(mktemp -d "${TMPDIR:-/tmp}/pinentry-tmux.XXXXXX")
 PINENTRY_TMUX_STDOUT="$fifodir/r2t.sock"; mkfifo -m 600 "$PINENTRY_TMUX_STDOUT"
 PINENTRY_TMUX_STDIN="$fifodir/t2r.sock";  mkfifo -m 600 "$PINENTRY_TMUX_STDIN"
 PINENTRY_TMUX_READY="$fifodir/ready"
+popup_log="${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log"
 
 # Function that kills all children of a process, except the process itself.
 # Works with both BSD and GNU coreutils.
@@ -208,7 +209,7 @@ cleanup() {
 	rm -f "$PINENTRY_TMUX_STDOUT"
 	rm -f "$PINENTRY_TMUX_STDIN"
 	rmdir "$fifodir" 2>/dev/null || true
-	rm -f "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" 2>/dev/null || true
+	rm -f "$popup_log" 2>/dev/null || true
 
 	echo "BYE"
 }
@@ -228,11 +229,19 @@ pid_in_sock=$!
 
 # Create the popup.
 ({
-	# Capture all the exported environment variables.
-	# These will be forwarded to the popup.
+	# Forward only the environment variables the popup needs. Forwarding all
+	# of them exceeds what a tmux client accepts on a command line ("command
+	# too long"): with this zsh/carapace setup the environment is ~27 kB and
+	# ~1700 lines (CARAPACE_*, __MISE_*), so tmux refused to open the popup.
 	envs=()
-	while read -r envvar; do
-		envs+=(-e "$envvar")
+	while IFS= read -r envvar; do
+		case "${envvar%%=*}" in
+			DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS|\
+			HOME|PATH|TERM|TMPDIR|TZ|GPG_TTY|GNUPGHOME|\
+			LANG|LC_*|XDG_*|PINENTRY_TMUX_*)
+				envs+=(-e "$envvar")
+				;;
+		esac
 	done < <(env)
 
 	# Determine the ideal height for a popup.
@@ -266,7 +275,7 @@ pid_in_sock=$!
 		-h "$DESIRED_HEIGHT" \
 		"$0"
 
-}) 0>&- &>"${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" &
+}) 0>&- &>"$popup_log" &
 pid_popup=$!
 
 # Open the request FIFO read-write so the open never blocks, whatever the popup
@@ -285,10 +294,13 @@ for (( i = 0; i < attempts; i++ )); do
 	sleep 0.1
 done
 if [[ ! -e "$PINENTRY_TMUX_READY" ]]; then
-	debug "popup did not come up within ${timeout_seconds}s"
-	[ -s "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" ] \
-		&& debug "popup log: $(cat "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log")"
 	echo "ERR 83886179 Operation cancelled <Pinentry-Tmux>"
+	# Surface why the popup did not start (tmux "command too long", wrong
+	# client, ...) instead of leaving it only in a log removed at exit.
+	if [[ -s "$popup_log" ]]; then
+		printf 'pinentry-tmux: the popup did not start:\n' >&2
+		sed 's/^/  /' "$popup_log" >&2 || true
+	fi
 	exit 1
 fi
 

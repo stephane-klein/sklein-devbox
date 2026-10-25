@@ -279,7 +279,7 @@ EOF
     record_pass "popup relay round-trip"
   else
     record_fail "relay failed (exit $rc)"
-    printf '   output: %s\n' "$(printf '%s' "$out" | head -3 | tr '\n' ' ')"
+    printf '   output: %s\n' "$(printf '%s' "$out" | tail -4 | tr '\n' ' ')"
   fi
 }
 

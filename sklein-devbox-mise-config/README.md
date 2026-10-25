@@ -210,6 +210,35 @@ When both `/tmp/foot-host-bus` and `/tmp/foot-host-pulse` are missing it exits 2
 and points at `sklein-devbox foot-link` to run on the foot host. The default
 sound is CC0; see `files/sounds/README.md`.
 
+## GPG signing doctor
+
+`dotfiles/bin/gpg-signing-doctor` is deployed to `~/bin/gpg-signing-doctor`.
+It checks the signing chain used by git and jj: gpg, gpg-agent,
+`~/bin/pinentry-tmux` and the tmux popup. Run it from a console inside the
+instance:
+
+```sh
+~/bin/gpg-signing-doctor
+```
+
+- **inventory**: `pinentry-program`, agent, `GPG_TTY`, popup client, signing
+  key, keygrip and whether the passphrase is cached;
+- **automated**: with a fake `tmux`, no attached client must fail at once with
+  `No pinentry`, and a popup that cannot open must give up with
+  `Operation cancelled`; a stub pinentry checks the popup relay round-trip;
+  then it asserts that no FIFO, log or process is left behind;
+- **guided** (`--only-sign`, interactive): creates a throwaway key in a
+  temporary `GNUPGHOME`, prints a disposable passphrase, and asks you to type
+  it in the real popup, then verifies the signature. Your own key, its 24 h
+  cache and the real agent are never touched.
+
+Useful options: `--only-config`, `--only-fallback`, `--only-timeout`,
+`--only-relay`, `--only-sign`, `--key KEY`. `sklein-devbox-doctor --with-gpg`
+runs it in the same pass and aggregates its result; `sklein-devbox-doctor
+--only-gpg` delegates to it entirely.
+
+
+
 ## Updating the global tools
 
 `dotfiles/bin/sklein-devbox-mise-upgrade` is deployed to

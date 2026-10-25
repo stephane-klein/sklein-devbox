@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # Vendored from https://github.com/eth-p/pinentry-tmux (MIT license).
-# Local change: default to pinentry-curses inside the popup instead of the
-# `pinentry` found in PATH (which is pinentry-tty on this system).
+# Upstream is unmaintained (last commit Nov. 2022).
+#
+# https://github.com/mmmeon/pit is a possible long-term replacement, but when
+# this comment was written (2026-10-25) the project was only 11 days old
+# (created 2026-10-14), had no release, no packaging and no prebuilt binary,
+# and only one author. So we leave it aside for now. We will look at it again
+# if it gets releases, or if this script needs more than a passphrase prompt.
+#
+# Changes made here, compared to upstream:
+#  - default to pinentry-curses inside the popup instead of the `pinentry`
+#    found in PATH (which is pinentry-tty on this system);
+#  - show the popup on the tmux client of the pane that asked (found through
+#    GPG_TTY) instead of whatever tmux calls the "current" client;
+#  - never block forever on the FIFO handshake: the popup advertises READY and
+#    a bounded wait turns a failed popup into an error reported to gpg;
+#  - fail fast with "No pinentry" when no attached client can show a popup,
+#    instead of falling back to a tty pinentry that would scribble over the
+#    screen of Neovim, OpenCode or any other full-screen program;
+#  - stop swallowing `display-popup` failures. Set PINENTRY_TMUX_DEBUG=1 to
+#    trace into $TMPDIR/pinentry-tmux-<pid>.log.
 # -----------------------------------------------------------------------------
 
 # If called from within the popup, run the real pinentry program and
@@ -23,17 +41,21 @@ if [ -z "${PINENTRY_TMUX_PROGRAM:-}" ]; then
 fi
 export PINENTRY_TMUX_PROGRAM
 
-# If PINENTRY_TMUX_POPUP is set to "1", we're (normally) running this within
-# the tmux popup. Run the real pinentry here and forward its output back to
-# the original pinentry-tmux process.
+# If PINENTRY_TMUX_CALLER is set, we're running this script within the tmux
+# popup. Run the real pinentry here and forward its output back to the
+# original pinentry-tmux process.
 if [[ -n "${PINENTRY_TMUX_CALLER:-}" ]]; then
 	popup_tty="$(tty)"
 
 	# Redirect STDIN and STDOUT.
 	exec 1>"${PINENTRY_TMUX_STDOUT}" 0<"${PINENTRY_TMUX_STDIN}"
+	# Tell the parent process the popup is up. This must happen after the
+	# redirections above, and can't use them: they are now the Assuan channel.
+	if [[ -n "${PINENTRY_TMUX_READY:-}" ]]; then : >"${PINENTRY_TMUX_READY}"; fi
 	unset PINENTRY_TMUX_POPUP
 	unset PINENTRY_TMUX_STDIN
 	unset PINENTRY_TMUX_STDOUT
+	unset PINENTRY_TMUX_READY
 	unset TMUX_TMPDIR
 	unset TMUX
 
@@ -54,19 +76,103 @@ fi
 # pinentry-tmux
 # -----------------------------------------------------------------------------
 set -euo pipefail
+umask 077
 pid_pinentry_tmux=$$
 
-# If we're not running in a pane, call the original pinentry directly.
-if ! tmux display-message -p "#{client_name}" &>/dev/null; then
-	"$PINENTRY_TMUX_PROGRAM" "$@"
-	exit $?
+debug() {
+	if [[ -n "${PINENTRY_TMUX_DEBUG:-}" ]]; then
+		printf '%s\n' "pinentry-tmux[$$]: $*" >&2
+	fi
+	return 0
+}
+
+# Report to gpg-agent that there is no pinentry to talk to, and exit. Falling
+# back to a tty pinentry is not an option: the tty may belong to Neovim or to
+# OpenCode, and drawing the prompt there corrupts their screen.
+# 83886147 is GPG_ERR_NO_PIN_ENTRY from source pinentry.
+no_pinentry() {
+	debug "no pinentry: $1"
+	printf 'ERR 83886147 No pinentry <Pinentry-Tmux>: %s\n' "$1"
+	exit 1
+}
+
+if [[ -n "${PINENTRY_TMUX_DEBUG:-}" ]]; then
+	PINENTRY_TMUX_LOG="${TMPDIR:-/tmp}/pinentry-tmux-$$.log"
+	: >"$PINENTRY_TMUX_LOG"
+	exec 2>>"$PINENTRY_TMUX_LOG"
+	set -x
+	debug "log file: $PINENTRY_TMUX_LOG"
 fi
 
+# Return the tty of the tmux client that should receive the popup: the client
+# attached to the session owning GPG_TTY when possible, otherwise the most
+# recently active client.
+tmux_client() {
+	local session client
+	if [[ -n "${GPG_TTY:-}" ]]; then
+		session=$(timeout 2 tmux list-panes -a -F '#{pane_tty} #{session_name}' 2>/dev/null \
+			| awk -v tty="$GPG_TTY" '$1 == tty { print $2; exit }') || true
+		if [[ -n "$session" ]]; then
+			client=$(timeout 2 tmux list-clients -F '#{client_tty} #{client_session}' 2>/dev/null \
+				| awk -v s="$session" '$2 == s { print $1; exit }') || true
+			if [[ -n "$client" ]]; then
+				printf '%s\n' "$client"
+				return 0
+			fi
+		fi
+	fi
+	timeout 2 tmux list-clients -F '#{client_tty} #{client_activity}' 2>/dev/null \
+		| sort -k2 -rn | awk 'NR == 1 { print $1 }'
+}
+
+# Introspection, for humans and for gpg-signing-doctor: print which tmux client
+# would receive the popup, without talking to gpg or creating any FIFO.
+case "${1:-}" in
+	-h|--help)
+		cat <<EOF
+Usage: ${0##*/} [--check|--help]
+
+pinentry-tmux is normally run by gpg-agent, not by hand.
+
+  --check   Print "client=<tty>" for the tmux client that would get the popup,
+            and exit 0. Exit 1 when no client is reachable.
+  -h, --help
+            Show this help.
+EOF
+		exit 0
+		;;
+	--check)
+		if ! command -v tmux >/dev/null 2>&1; then
+			printf 'tmux not found\n' >&2
+			exit 1
+		fi
+		check_client="$(tmux_client 2>/dev/null || true)"
+		if [[ -z "$check_client" ]]; then
+			printf 'no attached tmux client\n' >&2
+			exit 1
+		fi
+		printf 'client=%s\n' "$check_client"
+		exit 0
+		;;
+	"") ;;
+	*) printf 'unexpected argument: %s\n' "$1" >&2; exit 2 ;;
+esac
+
+if ! command -v tmux >/dev/null 2>&1; then
+	no_pinentry "tmux not found"
+fi
+
+client="$(tmux_client 2>/dev/null || true)"
+if [[ -z "$client" ]]; then
+	no_pinentry "no attached tmux client"
+fi
+debug "popup client: $client"
+
 # Make a pair of FIFOs to communicate with the popup.
-fifodir=$(mktemp -u)
-mkdir -m 700 "$fifodir"
-PINENTRY_TMUX_STDOUT="$fifodir/r2t.sock"; mkfifo "$PINENTRY_TMUX_STDOUT"
-PINENTRY_TMUX_STDIN="$fifodir/t2r.sock";  mkfifo "$PINENTRY_TMUX_STDIN"
+fifodir=$(mktemp -d "${TMPDIR:-/tmp}/pinentry-tmux.XXXXXX")
+PINENTRY_TMUX_STDOUT="$fifodir/r2t.sock"; mkfifo -m 600 "$PINENTRY_TMUX_STDOUT"
+PINENTRY_TMUX_STDIN="$fifodir/t2r.sock";  mkfifo -m 600 "$PINENTRY_TMUX_STDIN"
+PINENTRY_TMUX_READY="$fifodir/ready"
 
 # Function that kills all children of a process, except the process itself.
 # Works with both BSD and GNU coreutils.
@@ -80,18 +186,29 @@ rkill() {
 	} \
 	| sed $'1d; s/[ \t]//g' \
 	| grep -Fv "$1" \
-	| xargs kill -INT \
+	| xargs -r kill -INT \
 	|| true
 }
 
 # Traps and cleanup.
 cleanup() {
-	if [ -e "$PINENTRY_TMUX_STDOUT" ]; then rm "$PINENTRY_TMUX_STDOUT"; fi
-	if [ -e "$PINENTRY_TMUX_STDIN"  ]; then rm "$PINENTRY_TMUX_STDIN";  fi
-	if [ -d "$fifodir" ]; then rmdir "$fifodir"; fi
+	if [ -n "${pid_popup:-}" ] && kill -0 "$pid_popup" &>/dev/null; then
+		timeout 2 tmux display-popup -C -c "$client" &>/dev/null || true
+	fi
+	if [ -n "${pid_in_sock:-}" ] && kill -0 "$pid_in_sock" &>/dev/null; then
+		kill -INT "$pid_in_sock" 2>/dev/null || true
+		sleep 0.1
+		kill -KILL "$pid_in_sock" 2>/dev/null || true
+	fi
+	if [ -n "${pid_popup:-}" ] && kill -0 "$pid_popup" &>/dev/null; then
+		kill -TERM "$pid_popup" 2>/dev/null || true
+	fi
 
-	if [ -n "${pid_popup:-}" ]   && kill -0 "$pid_popup" &>/dev/null; then tmux display-popup -C; fi
-	if [ -n "${pid_in_sock:-}" ] && kill -0 "$pid_in_sock" &>/dev/null; then kill -INT "$pid_in_sock"; fi
+	rm -f "$PINENTRY_TMUX_READY"
+	rm -f "$PINENTRY_TMUX_STDOUT"
+	rm -f "$PINENTRY_TMUX_STDIN"
+	rmdir "$fifodir" 2>/dev/null || true
+	rm -f "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" 2>/dev/null || true
 
 	echo "BYE"
 }
@@ -122,7 +239,9 @@ pid_in_sock=$!
 	DESIRED_WIDTH=78
 	DESIRED_HEIGHT=18
 	read -r ACTUAL_WIDTH ACTUAL_HEIGHT \
-		< <(tmux display-message -p '#{client_width} #{client_height}')
+		< <(timeout 2 tmux display-message -p -c "$client" '#{client_width} #{client_height}' 2>/dev/null) || true
+	if ! [[ "${ACTUAL_WIDTH:-}" =~ ^[0-9]+$ ]]; then ACTUAL_WIDTH=80; fi
+	if ! [[ "${ACTUAL_HEIGHT:-}" =~ ^[0-9]+$ ]]; then ACTUAL_HEIGHT=24; fi
 
 	if [[ "$ACTUAL_WIDTH" -lt "$DESIRED_WIDTH" ]]; then
 		DESIRED_WIDTH="$ACTUAL_WIDTH"
@@ -133,27 +252,50 @@ pid_in_sock=$!
 	fi
 
 	# Create the popup.
-	tmux display-popup -E \
+	exec tmux display-popup -E \
+		-c "$client" \
 		-d "$(pwd)" \
 		"${envs[@]}" \
 		-e "PINENTRY_TMUX_CALLER=$pid_pinentry_tmux" \
 		-e "PINENTRY_TMUX_STDIN=$PINENTRY_TMUX_STDOUT" \
 		-e "PINENTRY_TMUX_STDOUT=$PINENTRY_TMUX_STDIN" \
+		-e "PINENTRY_TMUX_READY=$PINENTRY_TMUX_READY" \
 		-T "[ pinentry-tmux ]" \
-		-s 'fg=#0066aa bg=0' \
-		-S 'fg=#0066ff' \
 		-B \
 		-w "$DESIRED_WIDTH" \
 		-h "$DESIRED_HEIGHT" \
-		"$0" || true
+		"$0"
 
-}) 0>&- &>/dev/null &
+}) 0>&- &>"${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" &
 pid_popup=$!
+
+# Open the request FIFO read-write so the open never blocks, whatever the popup
+# does. The popup reads what we write here.
+exec 3<>"$PINENTRY_TMUX_STDOUT"
+
+# Wait, bounded, for the popup to be actually up. Without this, a popup that
+# fails to start (wrong client, tmux refusing, ...) would leave us blocked on
+# the FIFO forever, which is exactly the bug we are fixing.
+timeout_seconds="${PINENTRY_TMUX_TIMEOUT:-5}"
+if ! [[ "$timeout_seconds" =~ ^[0-9]+$ ]]; then timeout_seconds=5; fi
+attempts=$(( timeout_seconds * 10 ))
+for (( i = 0; i < attempts; i++ )); do
+	[[ -e "$PINENTRY_TMUX_READY" ]] && break
+	kill -0 "$pid_popup" 2>/dev/null || break
+	sleep 0.1
+done
+if [[ ! -e "$PINENTRY_TMUX_READY" ]]; then
+	debug "popup did not come up within ${timeout_seconds}s"
+	[ -s "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log" ] \
+		&& debug "popup log: $(cat "${TMPDIR:-/tmp}/pinentry-tmux-popup-$$.log")"
+	echo "ERR 83886179 Operation cancelled <Pinentry-Tmux>"
+	exit 1
+fi
 
 # Write STDOUT from pinentry-tmux to the socket STDIN.
 # A couple options will need to be intercepted for this to work properly.
-exec 3>"$PINENTRY_TMUX_STDOUT"
 while IFS='' read -r line; do
+	kill -0 "$pid_popup" 2>/dev/null || break
 	case "$line" in
 		"OPTION ttyname="*) printf "OK\n"; continue ;;
 		"GETINFO flavor"*) printf "D pinentry-tmux\nOK\n"; continue ;;
@@ -162,5 +304,5 @@ while IFS='' read -r line; do
 done
 
 # Wait for the real pinentry to finish.
-wait "$pid_in_sock"
-wait "$pid_popup"
+wait "$pid_in_sock" 2>/dev/null || true
+wait "$pid_popup" 2>/dev/null || true

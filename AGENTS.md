@@ -93,6 +93,16 @@ The container's configuration is the **deployed** form of this repo's
   environment; run them through the driver tasks `mise -C <driver> run dot` /
   `mise -C <driver> run bootstrap-all` (or `fnox exec`) rather than bare
   `mise dot` / `mise bootstrap`.
+- GPG signing (git, jj) prompts through the vendored `~/bin/pinentry-tmux`,
+  which opens a `tmux display-popup` on the client attached to the session
+  owning `GPG_TTY`. Without an attached tmux client it fails immediately with
+  `No pinentry`; it never falls back to a tty pinentry, which would corrupt
+  the screen of Neovim or OpenCode. gpg-agent caches the passphrase for 24 h,
+  so a broken prompt may only show up after a reboot or cache expiry. Upstream
+  is unmaintained (last commit nov. 2022); a rewrite is being evaluated at
+  https://github.com/mmmeon/pit. `~/bin/gpg-signing-doctor` checks the whole
+  chain without touching your key or its cache (`--with-gpg` from
+  `~/bin/sklein-devbox-doctor`).
 
 ## If you are already inside the container
 

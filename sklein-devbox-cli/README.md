@@ -4,7 +4,8 @@ The `sklein-devbox` command-line interface: a single, self-contained bash
 script that launches and drives the Incus-based development environment.
 
 The script has no build step. Installation needs `bash` and `curl`; `console`
-needs `foot` and `ssh`, and optionally `mosh`; `up` additionally needs `incus`,
+needs `foot`, `ssh` and `timeout` (coreutils, used by the reconnect probe), and
+optionally `mosh` and `gdbus`; `up` additionally needs `incus`,
 `ssh-keygen`, `ssh-keyscan` and `getent` (plus `gopass` when
 `NETBIRD_SETUP_KEY` is not already exported). Reading a configuration file
 additionally needs `yq` (mikefarah v4).
@@ -68,9 +69,11 @@ Available Commands:
 Flags:
   -c, --config string  Configuration file (default: auto)
       --dry-run      Print commands without executing
+      --hold         Keep the foot window open after the session ends
   -h, --help         help for sklein-devbox
   -n, --name string  Instance name (default "dev1")
       --no-link      Do not manage the foot host -> instance reverse link
+      --no-reconnect Do not supervise the session: no auto-reconnect on a drop
       --size string  Root disk size (default "250GiB")
       --terminal string  Terminal transport: ssh or mosh (default "ssh")
   -v, --version      version for sklein-devbox
@@ -164,13 +167,46 @@ Opens a maximized [foot](https://codeberg.org/dnkl/foot) terminal running a
 remote shell against the instance. The instance must exist and be running,
 otherwise `console` fails with an explicit message.
 
+By default the session runs under a **console supervisor**: foot does not run
+`ssh` directly, it runs this same script as `console-session`, which owns the
+transport. When the connection drops — workstation suspended, network roaming,
+NetBird tunnel down — the foot window **stays open**, reports the drop and
+reconnects by itself:
+
+```
+[22:31:04] connection to devbox@sklein-devbox-dev1.homelab.stephane-klein.info lost (exit 255); the remote tmux session is intact.
+[22:31:04] devbox@sklein-devbox-dev1.homelab.stephane-klein.info unreachable; retry in 1s (Ctrl-C to close this window)
+[22:31:06] reconnecting to devbox@sklein-devbox-dev1.homelab.stephane-klein.info (ssh)
+```
+
+- the remote tmux workspace is never affected: it lives in the instance, in the
+  `main` session group, so a reconnect restores the same windows and panes;
+- a **clean** end (`exit`, Ctrl-D in tmux) still closes the window; `--hold`
+  makes the window sticky in every case;
+- while disconnected, `Ctrl-C` (during the wait) closes the window;
+- the retry delay starts at 1 s after a session that lived, and doubles from 2 s
+  up to `SKLEIN_DEVBOX_RECONNECT_MAX_DELAY` (default 15 s) when sessions die
+  immediately (sshd still starting, auth or host key problem), so a reachable
+  but failing host is not hammered.
+
+The transport carries `ConnectTimeout=10` (a suspended-tunnel `ssh` fails fast
+instead of blocking for two minutes) and `ServerAliveInterval=15` with
+`ServerAliveCountMax=3` (a dead connection is detected in ~45 s). Opt into an
+immediate reconnect on resume with `SKLEIN_DEVBOX_RECONNECT_ON_RESUME=1`: a
+`gdbus` watcher on logind's `PrepareForSleep` kills the frozen transport as soon
+as the machine resumes (requires `gdbus` and `pkill`; the transport runs in the
+foreground so it is found as a child of the supervisor). Disable the supervisor
+entirely with `--no-reconnect` (or `SKLEIN_DEVBOX_RECONNECT=0`); `--hold` (`-H`)
+then keeps the foot window open, which is the only way to read why the session
+ended.
+
 The transport is selected with `--terminal` (or `SKLEIN_DEVBOX_TERMINAL`):
 
 - `ssh` (default): `ssh -t` against the instance, equivalent to `mise run ssh`;
 - `mosh`: `mosh` against the instance — opt-in. The ssh bootstrap reuses the
-  same `StrictHostKeyChecking`, `UserKnownHostsFile` and `LogLevel` options, and
-  mosh launches `env -u SSH_ORIGINAL_COMMAND /usr/local/bin/ssh-tmux-login`, so
-  the shared tmux workspace is preserved.
+  same ssh options (host key handling, log level, connect timeout, keepalives),
+  and mosh launches `env -u SSH_ORIGINAL_COMMAND /usr/local/bin/ssh-tmux-login`,
+  so the shared tmux workspace is preserved.
 
   **Clipboard caveat**: mosh 1.4.0 only implements OSC 52 in the *write*
   direction, so it can never *read* the host clipboard — pasting from the host
@@ -211,6 +247,8 @@ warning. The same link can be created, repaired or restarted on its own with
 ```sh
 $ sklein-devbox console
 $ sklein-devbox console --terminal=mosh
+$ sklein-devbox console --no-reconnect --hold
+$ SKLEIN_DEVBOX_RECONNECT_ON_RESUME=1 sklein-devbox console
 $ sklein-devbox --no-link console
 $ sklein-devbox --name dev2 console
 $ sklein-devbox --dry-run console
@@ -254,9 +292,10 @@ $ sklein-devbox -n dev2 generate-mutagen         # target sklein-devbox-dev2
 
 Checks that the required commands (`foot`, `incus`, `ssh`) and the `up`
 requirements (`incus`, `ssh-keygen`, `ssh-keyscan`, `getent`) are installed,
-then reports the optional commands (`mosh`) and the resolved configuration.
-Exits non-zero when a required command is missing; a missing optional command
-does not affect the exit status.
+then reports the optional commands (`mosh`, `yq`, `gdbus`, `timeout`, `pkill`)
+and the resolved configuration. Exits non-zero when a required command is
+missing; a missing optional command does not affect the exit status (`timeout`
+is only reported as a note: it is required by the reconnect probe).
 
 ```sh
 $ sklein-devbox doctor
@@ -274,6 +313,9 @@ $ sklein-devbox doctor
 ==> Optional commands
   opt   mosh      not found (optional)
   ok    yq        /usr/bin/yq
+  ok    gdbus     /usr/bin/gdbus
+  ok    timeout   /usr/bin/timeout
+  ok    pkill     /usr/bin/pkill
 
 ==> Configuration
   version    dev
@@ -281,6 +323,9 @@ $ sklein-devbox doctor
   fqdn       sklein-devbox-dev1.homelab.stephane-klein.info
   user       devbox
   terminal   ssh
+  reconnect  on
+  resume     off
+  hold       off
   size       250GiB
   git-branch poc-reboot-to-incus-lxc-and-mise-bootstrap
   config     (none)
@@ -426,6 +471,10 @@ are available. `destroy` on a non-existent instance prints a message and exits
 | `SKLEIN_DEVBOX_FOOT_CONFIG` | — | forced `foot.ini` path |
 | `SKLEIN_DEVBOX_FOOT_LOG_LEVEL` | `error` | foot `--log-level` (`info`, `warning`, `error`, `none`) |
 | `SKLEIN_DEVBOX_TERMINAL` | `ssh` | `console` transport: `ssh` or `mosh` |
+| `SKLEIN_DEVBOX_RECONNECT` | `1` | `console` supervises the session and reconnects on a drop (`0`/`--no-reconnect` to disable) |
+| `SKLEIN_DEVBOX_RECONNECT_MAX_DELAY` | `15` | ceiling, in seconds, of the reconnect backoff |
+| `SKLEIN_DEVBOX_RECONNECT_ON_RESUME` | `0` | reconnect immediately on resume through logind's `PrepareForSleep` (`gdbus`) |
+| `SKLEIN_DEVBOX_FOOT_HOLD` | `0` | keep the foot window open after a clean exit (`--hold`) |
 | `SKLEIN_DEVBOX_FOOT_LINK` | `1` | `console`/`foot-link` manage the reverse link (`0`/`--no-link` to disable) |
 | `SKLEIN_DEVBOX_GIT_BRANCH` | `poc-reboot-to-incus-lxc-and-mise-bootstrap` | branch cloned by `up` |
 | `SKLEIN_DEVBOX_DISK_SIZE` | `250GiB` | root disk size set at creation by `up`, and by `resize` |

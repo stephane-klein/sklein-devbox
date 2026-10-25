@@ -119,6 +119,10 @@ Host github.com
     IdentitiesOnly yes'
 
 PROG_NAME="${SKLEIN_DEVBOX_EXEC_NAME:-${0##*/}}"
+# Absolute path of this script. The console supervisor re-executes it inside the
+# foot window (`console-session`), whatever working directory foot inherits.
+SELF="${BASH_SOURCE[0]:-$0}"
+SELF="$(readlink -f -- "$SELF" 2>/dev/null || printf '%s' "$SELF")"
 INSTANCE_NAME="${SKLEIN_DEVBOX_NAME:-dev1}"
 FQDN_SUFFIX="${SKLEIN_DEVBOX_FQDN_SUFFIX:-homelab.stephane-klein.info}"
 SSH_USER="${SKLEIN_DEVBOX_SSH_USER:-devbox}"
@@ -126,6 +130,10 @@ TERMINAL_MODE="${SKLEIN_DEVBOX_TERMINAL:-}"
 TMUX_LOGIN_COMMAND="/usr/local/bin/ssh-tmux-login"
 FOOT_LOG_LEVEL="${SKLEIN_DEVBOX_FOOT_LOG_LEVEL:-error}"
 FOOT_LINK="${SKLEIN_DEVBOX_FOOT_LINK:-1}"
+FOOT_HOLD="${SKLEIN_DEVBOX_FOOT_HOLD:-0}"
+RECONNECT="${SKLEIN_DEVBOX_RECONNECT:-1}"
+RECONNECT_MAX_DELAY="${SKLEIN_DEVBOX_RECONNECT_MAX_DELAY:-15}"
+RECONNECT_ON_RESUME="${SKLEIN_DEVBOX_RECONNECT_ON_RESUME:-0}"
 FOOT_LINK_BUS_SOCKET="/tmp/foot-host-bus"
 FOOT_LINK_PULSE_SOCKET="/tmp/foot-host-pulse"
 DISK_SIZE="${SKLEIN_DEVBOX_DISK_SIZE:-250GiB}"
@@ -133,6 +141,16 @@ DISK_SIZE="${SKLEIN_DEVBOX_DISK_SIZE:-250GiB}"
 DRY_RUN=0
 HELP_REQUESTED=0
 declare -a POSITIONAL=()
+
+# --- Truthiness, shared by the boolean knobs above ----------------------------
+truthy() {
+  case "$1" in
+    ""|0|false|no|off) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+on_off() { if "$@"; then printf 'on'; else printf 'off'; fi; }
 
 yaml_squote() { printf "'%s'" "${1//\'/\'\'}"; }
 
@@ -238,12 +256,13 @@ systemd_user_available() {
 
 instance_exists() { incus info "$1" >/dev/null 2>&1; }
 
-foot_link_enabled() {
-  case "$FOOT_LINK" in
-    ""|0|false|no|off) return 1 ;;
-    *) return 0 ;;
-  esac
-}
+foot_link_enabled() { truthy "$FOOT_LINK"; }
+
+foot_hold_enabled() { truthy "$FOOT_HOLD"; }
+
+reconnect_enabled() { truthy "$RECONNECT"; }
+
+resume_reconnect_enabled() { truthy "$RECONNECT_ON_RESUME"; }
 
 foot_link_unit_content() {
   local instance="$1" ssh_bin
@@ -378,6 +397,8 @@ parse_global_flags() {
       --terminal)   TERMINAL_MODE="${2:?--terminal requires a value}"; shift 2 ;;
       --terminal=*) TERMINAL_MODE="${1#*=}"; shift ;;
       --no-link)    FOOT_LINK=0; shift ;;
+      --hold)       FOOT_HOLD=1; shift ;;
+      --no-reconnect) RECONNECT=0; shift ;;
       --size)       DISK_SIZE="${2:?--size requires a value}"; shift 2 ;;
       --size=*)     DISK_SIZE="${1#*=}"; shift ;;
       -v|--version) printf '%s version %s\n' "$PROG_NAME" "$VERSION"; exit 0 ;;
@@ -404,9 +425,11 @@ usage() {
 Flags:
   -c, --config string  Configuration file (default: auto)
       --dry-run      Print commands without executing
+      --hold         Keep the foot window open after the session ends
   -h, --help         help for $PROG_NAME
   -n, --name string  Instance name (default "$INSTANCE_NAME")
       --no-link      Do not manage the foot host -> instance reverse link
+      --no-reconnect Do not supervise the session: no auto-reconnect on a drop
       --size string  Root disk size (default "$DISK_SIZE")
       --terminal string  Terminal transport: ssh or mosh (default "ssh")
   -v, --version      version for $PROG_NAME
@@ -417,6 +440,12 @@ EOF
 
 usage_for() {
   local cmd="$1"
+  # console-session is internal: it has no CMD_DESC entry, so fall back to the
+  # general usage instead of tripping over an unset array element.
+  if [ -z "${CMD_DESC[$cmd]:-}" ]; then
+    usage
+    return 0
+  fi
   printf '%s\n\nUsage:\n  %s %s\n' "${CMD_DESC[$cmd]}" "$PROG_NAME" "$cmd"
   if declare -F "usage_extra_${cmd//-/_}" >/dev/null; then
     "usage_extra_${cmd//-/_}"
@@ -439,10 +468,19 @@ usage_extra_console() {
   printf '\nFlags:\n'
   printf '  %-17s  %s\n' --terminal "Terminal transport: ssh or mosh (default \"ssh\")"
   printf '  %-17s  %s\n' --no-link "Do not manage the foot host -> instance reverse link"
+  printf '  %-17s  %s\n' --no-reconnect "Do not supervise the session (no auto-reconnect)"
+  printf '  %-17s  %s\n' --hold "Keep the window open after a clean exit too"
   printf '\nBefore opening foot, console (re)starts a per-instance systemd user\n'
   printf 'unit that reverse-forwards the foot host session bus and audio server\n'
   printf 'into the instance (notify-send, xdg-open, paplay). Disable with\n'
   printf '%s\n' '--no-link or SKLEIN_DEVBOX_FOOT_LINK=0.'
+  printf '\nBy default the session runs under a supervisor: when the connection drops\n'
+  printf '(workstation suspended, network roaming, tunnel down) the foot window\n'
+  printf 'stays open, reports the drop and reconnects as soon as the instance is\n'
+  printf 'reachable — the remote tmux workspace is preserved. A clean exit\n'
+  printf '(exit, Ctrl-D in tmux) still closes the window, unless --hold is given.\n'
+  printf 'Disable the supervisor with --no-reconnect or SKLEIN_DEVBOX_RECONNECT=0\n'
+  printf '%s\n' '(--hold then keeps the window open, showing why the session ended).'
 }
 
 usage_extra_foot_link() {
@@ -467,6 +505,224 @@ usage_extra_check_latency() {
   printf 'access, egress) so the culprit can be named. The --name flag is honored.\n'
 }
 
+# --- Console transport --------------------------------------------------------
+# CONSOLE_CMD is the argv handed to `foot -e`. It is built in one place so the
+# direct path and the reconnect supervisor use exactly the same ssh options.
+
+declare -a CONSOLE_CMD=()
+# A transport that lived at least this long is a genuine drop (reconnect at
+# once); anything shorter is a failing loop, which backs off instead.
+CONSOLE_HEALTHY_SECONDS=5
+CONSOLE_SSH_OPTS=(-o StrictHostKeyChecking=accept-new
+                  -o UserKnownHostsFile=/dev/null
+                  -o LogLevel=ERROR
+                  -o ConnectTimeout=10
+                  -o ServerAliveInterval=15
+                  -o ServerAliveCountMax=3
+                  -o TCPKeepAlive=yes)
+# ConnectTimeout: without it an ssh towards a tunnel that has not resumed yet
+# blocks for about two minutes. ServerAlive*: a dead connection (workstation
+# suspended, tunnel lost) is detected in ~45 s instead of waiting for the TCP
+# retransmissions to give up.
+
+console_require_transport() {
+  local transport="$1" quiet="${2:-}"
+  case "$transport" in
+    ssh) return 0 ;;
+    mosh)
+      (( DRY_RUN )) && return 0
+      have mosh || die "mosh not found in PATH (use --terminal=ssh)"
+      # The supervisor runs this again inside foot, where the warning was
+      # already printed by the parent: stay quiet there.
+      [ -n "$quiet" ] && return 0
+      printf 'console: warning: the mosh transport cannot read the host clipboard\n' >&2
+      printf 'console: (OSC 52 write only; copying out of the instance works, pasting from the host does not).\n' >&2
+      printf 'console: use --terminal=ssh, which is required for host clipboard reads.\n' >&2
+      return 0
+      ;;
+    *) die "console: unknown terminal '$transport' (expected: ssh, mosh)" ;;
+  esac
+}
+
+console_build_transport() {
+  local transport="$1" target="$2"
+  case "$transport" in
+    ssh)
+      CONSOLE_CMD=(ssh -t "${CONSOLE_SSH_OPTS[@]}" "$target")
+      ;;
+    mosh)
+      # mosh passes its own `--` before the remote command; the `--` here must
+      # therefore sit before the host (the command contains `-u`, which mosh's
+      # option parser would otherwise consume). mosh-server leaves
+      # SSH_ORIGINAL_COMMAND set, so it must be cleared or ssh-tmux-login would
+      # re-run mosh-server instead of starting tmux.
+      CONSOLE_CMD=(mosh "--ssh=ssh ${CONSOLE_SSH_OPTS[*]}" -- "$target"
+                   env -u SSH_ORIGINAL_COMMAND "$TMUX_LOGIN_COMMAND")
+      ;;
+    *) die "console: unknown terminal '$transport' (expected: ssh, mosh)" ;;
+  esac
+}
+
+# --- Console reconnect supervisor ---------------------------------------------
+# `console` runs this script back inside foot (`console-session`), and that child
+# owns the transport instead of exec'ing it. A dropped connection therefore no
+# longer ends the window: the supervisor reports it, waits for the instance to
+# be reachable again and reconnects. The remote tmux workspace is unaffected
+# (it lives in the instance); only the window, its scrollback and the
+# current-window pointer are lost.
+#
+#   exit 0        -> deliberate end (exit / Ctrl-D in tmux): the window closes
+#   anything else -> drop: reconnect, with a bounded backoff
+#
+# Disable with --no-reconnect or SKLEIN_DEVBOX_RECONNECT=0.
+
+CONSOLE_WATCHER_PID=""
+
+# One TCP connect to the instance sshd: no ssh, no long DNS stall, so a tunnel
+# that has not resumed yet costs 3 s per round instead of a two-minute hang.
+console_probe_host() {
+  local host="$1" ip
+  have getent && have timeout || return 0
+  ip="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1 { print $1 }')"
+  [ -n "$ip" ] || return 1
+  timeout 3 bash -c "exec 3<>/dev/tcp/$ip/22" 2>/dev/null
+}
+
+# The transport runs in the foreground (see cmd_console_session), so it is a
+# direct child of this shell: $$ is the supervisor pid, here and inside the
+# watcher subshell (POSIX: a subshell keeps its parent's $$).
+console_kill_transport() {
+  have pkill || return 0
+  pkill -TERM -P $$ -x ssh 2>/dev/null || true
+  pkill -TERM -P $$ -x mosh 2>/dev/null || true
+  return 0
+}
+
+# Resume detection (opt-in, SKLEIN_DEVBOX_RECONNECT_ON_RESUME=1). logind
+# broadcasts PrepareForSleep(true) when suspending and PrepareForSleep(false)
+# when resuming; a suspended ssh client comes back with a dead TCP connection,
+# so the transport is killed at resume and the loop reconnects immediately
+# instead of waiting up to ServerAliveInterval.
+console_watch_resume() {
+  local slept=0 line
+  gdbus monitor --system --dest org.freedesktop.login1 \
+    --object-path /org/freedesktop/login1 2>/dev/null |
+  while IFS= read -r line; do
+    case "$line" in
+      *PrepareForSleep*true*)
+        slept=1
+        ;;
+      *PrepareForSleep*false*)
+        [ "$slept" = 1 ] || continue
+        slept=0
+        console_kill_transport
+        ;;
+    esac
+  done
+}
+
+console_cleanup() {
+  # Closing the window (Ctrl+Shift+W, SIGHUP) must not leave the transport
+  # running: it is ours, foot only signals the supervisor it knows about.
+  console_kill_transport
+  if [ -n "$CONSOLE_WATCHER_PID" ]; then
+    # The watcher is a subshell running `gdbus monitor | while ...`. Kill its
+    # pipeline members rather than the subshell, then reap it. The watcher was
+    # started with stderr on /dev/null, so the "Terminated <pipeline>" report
+    # bash prints for a signalled job never reaches the window.
+    if have pkill; then
+      pkill -P "$CONSOLE_WATCHER_PID" 2>/dev/null || true
+    else
+      kill "$CONSOLE_WATCHER_PID" 2>/dev/null || true
+    fi
+    wait "$CONSOLE_WATCHER_PID" 2>/dev/null || true
+    CONSOLE_WATCHER_PID=""
+  fi
+  return 0
+}
+
+cmd_console_session() {
+  local transport="${1:-ssh}" target="${2:-}"
+  local host rc attempt=0 delay max_delay start now
+
+  [ -n "$target" ] || die "console-session: missing target (internal command)"
+  host="${target#*@}"
+
+  max_delay="$RECONNECT_MAX_DELAY"
+  case "$max_delay" in
+    ''|*[!0-9]*) max_delay=15 ;;
+  esac
+  (( max_delay >= 1 )) || max_delay=15
+
+  console_require_transport "$transport" quiet
+
+  # Ctrl-C is only delivered while the loop is idle: the transport runs with a
+  # raw tty and consumes ^C itself. Closing the window from the wait is the
+  # intended escape hatch.
+  trap 'console_cleanup; exit 0' INT TERM HUP
+  trap 'console_cleanup' EXIT
+
+  if resume_reconnect_enabled; then
+    if have gdbus && have pkill; then
+      # stderr is dropped: the watcher only speaks through its actions, and a
+      # signalled pipeline member would otherwise print a raw "Terminated
+      # <pipeline text>" report into the console at exit.
+      console_watch_resume 2>/dev/null &
+      CONSOLE_WATCHER_PID=$!
+    else
+      printf 'console: gdbus and pkill are required; resume reconnect disabled\n' >&2
+    fi
+  fi
+
+  delay=1
+  while :; do
+    if (( attempt > 0 )); then
+      printf '[%s] reconnecting to %s (%s)\n' \
+        "$(date '+%H:%M:%S')" "$target" "$transport" >&2
+    fi
+    console_build_transport "$transport" "$target"
+    rc=0
+    start=$SECONDS
+    # Foreground, never in the background: bash redirects the stdin of an
+    # asynchronous command to /dev/null (a script has no job control), `ssh -t`
+    # then skips the pseudo-terminal, the remote login is non-interactive,
+    # ssh-tmux-login skips tmux and exits, and the window closes at once.
+    "${CONSOLE_CMD[@]}" || rc=$?
+    now=$SECONDS
+    if (( rc == 0 )); then
+      printf '[%s] session closed.\n' "$(date '+%H:%M:%S')" >&2
+      console_cleanup
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    printf '[%s] connection to %s lost (exit %d); the remote tmux session is intact.\n' \
+      "$(date '+%H:%M:%S')" "$target" "$rc" >&2
+
+    # Backoff policy. A session that lived is a genuine drop: reconnect after a
+    # second. A session that died immediately is a failing loop (sshd still
+    # starting, auth or host key problem, connection refused) and must not hammer
+    # an otherwise reachable host: double the delay up to max_delay.
+    if (( now - start >= CONSOLE_HEALTHY_SECONDS )); then
+      delay=1
+    elif (( delay * 2 > max_delay )); then
+      delay=$max_delay
+    else
+      delay=$((delay * 2))
+    fi
+
+    # The probe only picks the message: ssh itself is bounded by ConnectTimeout.
+    # While the tunnel is down, say so every round.
+    if console_probe_host "$host"; then
+      printf '[%s] retry in %ds (Ctrl-C to close this window)\n' \
+        "$(date '+%H:%M:%S')" "$delay" >&2
+    else
+      printf '[%s] %s unreachable; retry in %ds (Ctrl-C to close this window)\n' \
+        "$(date '+%H:%M:%S')" "$host" "$delay" >&2
+    fi
+    sleep "$delay" || true
+  done
+}
+
 cmd_console() {
   local instance
   instance="$(instance_name)"
@@ -484,34 +740,21 @@ cmd_console() {
   if [ -n "$cfg" ]; then
     args+=(--config "$cfg")
   fi
-  local -a ssh_opts=(-o StrictHostKeyChecking=accept-new
-                     -o UserKnownHostsFile=/dev/null
-                     -o LogLevel=ERROR)
   local transport="${TERMINAL_MODE:-ssh}"
   local target
   target="${SSH_USER}@$(instance_fqdn)"
-  case "$transport" in
-    ssh)
-      args+=(-e ssh -t "${ssh_opts[@]}" "$target")
-      ;;
-    mosh)
-      if (( ! DRY_RUN )); then
-        have mosh || die "mosh not found in PATH (use --terminal=ssh)"
-        printf 'console: warning: the mosh transport cannot read the host clipboard\n' >&2
-        printf 'console: (OSC 52 write only; copying out of the instance works, pasting from the host does not).\n' >&2
-        printf 'console: use --terminal=ssh, which is required for host clipboard reads.\n' >&2
-      fi
-      # mosh passes its own `--` before the remote command; the `--` here must
-      # therefore sit before the host (the command contains `-u`, which mosh's
-      # option parser would otherwise consume). mosh-server leaves
-      # SSH_ORIGINAL_COMMAND set, so it must be cleared or ssh-tmux-login would
-      # re-run mosh-server instead of starting tmux.
-      args+=(-e mosh "--ssh=ssh ${ssh_opts[*]}" -- "$target" env -u SSH_ORIGINAL_COMMAND "$TMUX_LOGIN_COMMAND")
-      ;;
-    *)
-      die "console: unknown terminal '$transport' (expected: ssh, mosh)"
-      ;;
-  esac
+  console_require_transport "$transport"
+  # -H must precede the command: foot ignores -e (xterm compatibility) and takes
+  # the first non-option argument as the start of the command line.
+  if foot_hold_enabled; then
+    args+=(-H)
+  fi
+  if reconnect_enabled; then
+    args+=(-e "$SELF" console-session "$transport" "$target")
+  else
+    console_build_transport "$transport" "$target"
+    args+=(-e "${CONSOLE_CMD[@]}")
+  fi
   ensure_foot_link || true
   run foot "${args[@]}"
 }
@@ -564,9 +807,12 @@ cmd_doctor() {
   check_commands "${UP_REQUIRED_COMMANDS[@]}" || rc=1
 
   printf '\n==> Optional commands\n'
-  check_optional_commands mosh yq
+  check_optional_commands mosh yq gdbus timeout pkill
   if have mosh; then
     printf '  %-9s %s\n' note "mosh cannot read the host clipboard; ssh is the default transport"
+  fi
+  if ! have timeout; then
+    printf '  %-9s %s\n' note "timeout is required by the reconnect probe (coreutils)"
   fi
 
   cfg="$(foot_config)"
@@ -576,6 +822,9 @@ cmd_doctor() {
   printf '  %-10s %s\n' fqdn "$(instance_fqdn)"
   printf '  %-10s %s\n' user "$SSH_USER"
   printf '  %-10s %s\n' terminal "${TERMINAL_MODE:-ssh}"
+  printf '  %-10s %s\n' reconnect "$(on_off reconnect_enabled)"
+  printf '  %-10s %s\n' resume "$(on_off resume_reconnect_enabled)"
+  printf '  %-10s %s\n' hold "$(on_off foot_hold_enabled)"
   printf '  %-10s %s\n' size "$DISK_SIZE"
   printf '  %-10s %s\n' git-branch "$GIT_BRANCH"
   printf '  %-10s %s\n' config "$(config_display)"
@@ -1540,7 +1789,7 @@ _@FUNC@_complete() {
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
   cmds="@CMDS@"
-  flags="--config --dry-run --help --name --no-link --size --version --terminal"
+  flags="--config --dry-run --help --hold --name --no-link --no-reconnect --size --version --terminal"
 
   case "$prev" in
     -n|--name)
@@ -1603,6 +1852,8 @@ _arguments -C \
   '(-c --config)'{-c,--config}'[configuration file]:config file:_files' \
   '--dry-run[print commands without executing]' \
   '--no-link[do not manage the remote-desktop link]' \
+  '--no-reconnect[do not supervise the session]' \
+  '--hold[keep the foot window open after the session ends]' \
   '--size[root disk size]:size:' \
   '--terminal[terminal transport]:transport:(ssh mosh)' \
   '(-h --help)'{-h,--help}'[help]' \
@@ -1638,6 +1889,8 @@ complete -c $prog -f -s n -l name -x -a "(incus list @PREFIX@- -c n --format csv
 complete -c $prog -s c -l config -r -F -d 'configuration file'
 complete -c $prog -f -l dry-run -d 'print commands without executing'
 complete -c $prog -f -l no-link -d 'do not manage the remote-desktop link'
+complete -c $prog -f -l no-reconnect -d 'do not supervise the session'
+complete -c $prog -f -l hold -d 'keep the foot window open after the session ends'
 complete -c $prog -f -l size -x -d 'root disk size'
 complete -c $prog -f -l terminal -x -a 'ssh mosh' -d 'terminal transport'
 complete -c $prog -f -s h -l help -d 'help'

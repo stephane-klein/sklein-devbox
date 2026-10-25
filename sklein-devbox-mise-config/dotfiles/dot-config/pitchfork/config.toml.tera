@@ -1,6 +1,6 @@
-{#- The proxy TLD is the host's own FQDN: each instance exposes
-    <daemon>.<project>.<fqdn>. `~/bin/sklein-devbox-ingress` derives the same
-    value from `hostname -f`, so both must stay in sync. -#}
+#- The proxy TLD is the host's own FQDN: each instance exposes
+#   <daemon>.<project>.<fqdn>. `~/bin/sklein-devbox-ingress` derives the same
+#   value from `hostname -f`, so both must stay in sync.
 {%- set fqdn = exec(command="hostname -f") -%}
 {%- if "." not in fqdn %}{{ throw(message="pitchfork config.toml: `hostname -f` did not return an FQDN") }}{% endif %}
 
@@ -16,7 +16,12 @@ chromium-browser --headless=new  --remote-debugging-port=9222  --remote-debuggin
 retry = true
 
 [daemons.opencode-server]
-run = "mise exec -- opencode serve --port 4096"
+# OpenCode 2: `serve --service` runs the shared server in the foreground and
+# registers it in ~/.local/state/opencode/service.json, so every client (TUI,
+# CLI, OpenChamber) discovers its URL and password without any flag. Port,
+# hostname and password come from `opencode service set` (see the mise
+# post-dotfiles hook); pitchfork keeps the process supervised and logs it.
+run = "mise exec -- opencode serve --service"
 retry = true
 # Readiness: pitchfork starts dependents (openchamber) once the port listens.
 port = 4096
@@ -32,6 +37,7 @@ export XDG_RUNTIME_DIR=/tmp/user/1000
 export GOPASS_AGE_NO_CONFIRM=1
 export OPENCODE_SKIP_START=true
 export OPENCODE_PORT=4096
+export OPENCODE_SERVER_PASSWORD={{ secret(name="OPENCODE_SERVER_PASSWORD") }}
 OPENCHAMBER_UI_PASSWORD={{ secret(name="OPENCHAMBER_UI_PASSWORD") }}
 export OPENCHAMBER_UI_PASSWORD
 exec mise exec -- openchamber --lan --port 3000 --foreground

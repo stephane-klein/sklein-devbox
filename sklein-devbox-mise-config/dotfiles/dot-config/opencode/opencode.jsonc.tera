@@ -1,97 +1,109 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "autoupdate": false,
-  "default_agent": "dialogue",
-  "lsp": {},
-  "permission": {
-    "bash": "allow",
-    "external_directory": {
-      "/workspace/examples/**": "allow",
-      "~/.corrections/": "allow"
-    }
-  },
-  // I use `mise exec --cd / -- ...` to launch MCP servers with the Node instance installed globally by Mise
+  "update": "disable",
+  "default_agent": "chat",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "allow" },
+    { "action": "external_directory", "resource": "/workspace/examples/**", "effect": "allow" },
+    { "action": "external_directory", "resource": "~/.corrections/", "effect": "allow" }
+  ],
+  // I use `mise exec --cd / -- ...` to launch MCP servers with the Node instance installed globally by Mise.
+  // `codemode: false` keeps the MCP tools directly callable, as in OpenCode 1 (the subagents and skills call them by name).
   "mcp": {
-    "mise": {
-      "type": "local",
-      "command": ["mise", "mcp"],
-      "enabled": false
-    },
-    "pitchfork": {
-      "type": "local",
-      "command": ["pitchfork", "mcp"],
-      "enabled": false
-    },
-    "fetch": {
-      "type": "local",
-      "command": ["mise", "exec", "--cd", "/", "--", "mcp-server-fetch"],
-      "enabled": true,
-      "environment": {
-        "DEFAULT_LIMIT": "0"
-      }
-    },
-    "context7": {
-      "type": "local",
-      "command": ["mise", "exec", "--cd", "/", "--", "context7-mcp", "--api-key", "{{ secret(name="CONTEXT7_APIKEY") }}"],
-      "enabled": false,
-    },
-    "tavily": {
-      "type": "local",
-      "command": ["mise", "exec", "--cd", "/", "--", "tavily-mcp"],
-      "environment": {
-        "TAVILY_API_KEY": "{{ secret(name="TAVILY_APIKEY") }}",
-        "DEFAULT_PARAMETERS": "{\"include_images\": false, \"max_results\": 15, \"search_depth\": \"advanced\"}"
+    "servers": {
+      "mise": {
+        "type": "local",
+        "command": ["mise", "mcp"],
+        "disabled": true,
+        "codemode": false
       },
-      "enabled": false,
-    },
-    "exa": {
-      "type": "local",
-      "command": ["mise", "exec", "--cd", "/", "--", "exa-mcp-server"],
-      "enabled": false,
-      "environment": {
-        "EXA_API_KEY": "{{ secret(name="EXA_IA_OPENCODE_DEVBOX_APIKEY") }}"
-      }
-    },
-    "hindsight": {
-      "enabled": false,
-      "type": "remote",
-      "url": "https://api.hindsight.sklein.internal/mcp/",
-      "headers": {
-        "Authorization": "Bearer {{ secret(name="HINDSIGHT_MCP_TOKEN") }}"
-      }
-    },
-    "playwright": {
-      "type": "local",
-      "command": ["mise", "exec", "--cd", "/", "--", "playwright-mcp", "--no-sandbox"],
-      "enabled": false,
-      "environment": {
-        "PLAYWRIGHT_MCP_CDP_ENDPOINT": "http://127.0.0.1:9222"
-      }
-    },
-    "browser-control": {
-      "type": "local",
-      "command": ["node", "{{ env.HOME }}/.local/share/browser-control-mcp/mcp-server/dist/server.js"],
-      "enabled": false,
-      "environment": {
-        "EXTENSION_SECRET": "{{ secret(name="BROWSER_CONTROL_MCP_EXTENSION_SECRET") }}",
-        "EXTENSION_PORT": "8090"
-      }
-    },
-    "toggl-pg-mirror-readonly": {
-      "type": "remote",
-      "url": "https://memex.sklein.xyz/mcp/readonly",
-      "enabled": false,
-      "headers": {
-        "Authorization": "Bearer {{ secret(name="MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN") }}"
+      "pitchfork": {
+        "type": "local",
+        "command": ["pitchfork", "mcp"],
+        "disabled": true,
+        "codemode": false
+      },
+      "fetch": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "mcp-server-fetch"],
+        "codemode": false,
+        "environment": {
+          "DEFAULT_LIMIT": "0"
+        }
+      },
+      "context7": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "context7-mcp", "--api-key", "{{ secret(name="CONTEXT7_APIKEY") }}"],
+        "disabled": true,
+        "codemode": false
+      },
+      "tavily": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "tavily-mcp"],
+        "disabled": true,
+        "codemode": false,
+        "environment": {
+          "TAVILY_API_KEY": "{{ secret(name="TAVILY_APIKEY") }}",
+          "DEFAULT_PARAMETERS": "{\"include_images\": false, \"max_results\": 15, \"search_depth\": \"advanced\"}"
+        }
+      },
+      "exa": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "exa-mcp-server"],
+        "disabled": true,
+        "codemode": false,
+        "environment": {
+          "EXA_API_KEY": "{{ secret(name="EXA_IA_OPENCODE_DEVBOX_APIKEY") }}"
+        }
+      },
+      "hindsight": {
+        "type": "remote",
+        "url": "https://api.hindsight.sklein.internal/mcp/",
+        "oauth": false,
+        "disabled": true,
+        "codemode": false,
+        "headers": {
+          "Authorization": "Bearer {{ secret(name="HINDSIGHT_MCP_TOKEN") }}"
+        }
+      },
+      "playwright": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "playwright-mcp", "--no-sandbox"],
+        "disabled": true,
+        "codemode": false,
+        "environment": {
+          "PLAYWRIGHT_MCP_CDP_ENDPOINT": "http://127.0.0.1:9222"
+        }
+      },
+      "browser-control": {
+        "type": "local",
+        "command": ["node", "{{ env.HOME }}/.local/share/browser-control-mcp/mcp-server/dist/server.js"],
+        "disabled": true,
+        "codemode": false,
+        "environment": {
+          "EXTENSION_SECRET": "{{ secret(name="BROWSER_CONTROL_MCP_EXTENSION_SECRET") }}",
+          "EXTENSION_PORT": "8090"
+        }
+      },
+      "toggl-pg-mirror-readonly": {
+        "type": "remote",
+        "url": "https://memex.sklein.xyz/mcp/readonly",
+        "oauth": false,
+        "disabled": true,
+        "codemode": false,
+        "headers": {
+          "Authorization": "Bearer {{ secret(name="MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN") }}"
+        }
       }
     }
   },
-  "plugin": [
-    // "@mohak34/opencode-notifier@0.2.8",
-    "@slkiser/opencode-quota@4.9.0",
-    "cc-safety-net@2.3.4",
-    "opencode-vibeguard@0.1.0",
-    "opencode-hashline@1.4.0",
-    // "opencode-claude-auth@latest"
-  ]
+  // OpenCode 2: one entry loads both the server and the TUI parts of a plugin.
+  "plugins": [
+    "@slkiser/opencode-quota@5.0.3",
+    "cc-safety-net@2.6.19",
+  ],
+  // Todos are off by default in OpenCode 2.
+  "experimental": {
+    "todo": true
+  }
 }

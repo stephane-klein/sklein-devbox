@@ -301,4 +301,7 @@ export EDITOR="nvim"
 # signing commits (git/jj). Evaluated per TTY, so it belongs in the shell rc.
 export GPG_TTY="$(tty)"
 
+# OpenCode 2 runs one shared server, supervised by pitchfork (`opencode serve
+# --service`, 127.0.0.1:4096). Clients discover its URL and password from
+# ~/.local/state/opencode/service.json, so no flag or extra env is needed here.
 alias opencode='TMUX= command opencode'

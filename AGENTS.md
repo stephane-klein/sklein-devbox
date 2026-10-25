@@ -104,6 +104,36 @@ The container's configuration is the **deployed** form of this repo's
   chain without touching your key or its cache (`--with-gpg` from
   `~/bin/sklein-devbox-doctor`).
 
+## OpenCode 2 server topology
+
+- The OpenCode server is supervised by pitchfork as a foreground process:
+  `opencode serve --service`. Service mode binds port 4096 and registers itself
+  in `~/.local/state/opencode/service.json` (URL + password); every client — TUI,
+  CLI subcommands, OpenChamber — discovers it, so no `--server` flag and no
+  password environment variable are needed. Note that `--server` is a
+  per-subcommand flag in V2, not a global one: `opencode --server … auth list`
+  fails, `opencode auth list --server …` works.
+- Port, hostname and password are pinned by the bootstrap `post-dotfiles` hook
+  (`opencode service set port 4096`, `hostname 127.0.0.1`, `password`), the
+  password coming from gopass `opencode/devbox/server-password`. Do not disable
+  the service: clients would silently start private servers on the same
+  `opencode.db`.
+- Provider credentials live in the SQLite database. `~/.local/share/opencode/credentials.json`
+  (rendered from gopass) seeds them on a fresh instance through
+  `opencode auth import --standalone` in the bootstrap hook: two OpenCode Go
+  accounts (`account1` active, `account2` inactive) plus the fixed deepseek and
+  openrouter keys. Switch accounts from the TUI (`/connect`) or OpenChamber
+  (Settings → Providers); `opencode auth switch <integration> <label>` is only
+  for scripts. `auth.json` is no longer used.
+- Plugins are server-side (`plugins` in `~/.config/opencode/opencode.jsonc`);
+  TUI-only settings live in `~/.config/opencode/cli.json`. `tui.json` is gone.
+- `mise dot apply` ends with `pitchfork restart global/opencode-server`, because
+  the running process keeps the old binary, plugin modules and daemon
+  environment. The apply therefore kills running OpenCode sessions: run it from
+  a plain SSH shell, never from an OpenCode tool call. Configuration files under
+  `~/.config/opencode` are hot-reloaded by the server and need no restart; a TUI
+  plugin change only requires reopening the TUI.
+
 ## If you are already inside the container
 
 opencode is installed in the container too. In that case the driver directory is

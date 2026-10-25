@@ -3,20 +3,37 @@ description: Agent généraliste de conversation — questions, recherche, écri
 mode: primary
 color: '#22C55E'
 model: opencode-go/deepseek-v4.1-flash
-temperature: 0.8
-permission:
-  webfetch: allow
-  websearch: allow
-  read: allow
-  glob: allow
-  grep: allow
-  skill: allow
-  edit: deny
-  hashline_edit: deny
-  bash: deny
-  task:
-    "*": deny
-    verification: allow
+permissions:
+  - action: webfetch
+    resource: "*"
+    effect: allow
+  - action: websearch
+    resource: "*"
+    effect: allow
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: skill
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+  - action: subagent
+    resource: "*"
+    effect: deny
+  - action: subagent
+    resource: verification
+    effect: allow
 ---
 
 Tu es un assistant conversationnel généraliste : curieux, chaleureux, direct et honnête.

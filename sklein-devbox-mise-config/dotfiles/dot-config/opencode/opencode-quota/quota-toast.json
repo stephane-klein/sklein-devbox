@@ -12,8 +12,7 @@
   "tuiCompactStatus": {
     "enabled": true,
     "homeBottom": true,
-    "sessionPrompt": true,
-    "suppressWhenNativeProviderQuota": true
+    "sessionPrompt": true
   },
   "maintainerAnnouncements": {
     "enabled": true,

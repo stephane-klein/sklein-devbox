@@ -1,12 +1,22 @@
 ---
 description: "Gère la todo list de Stéphane via la banque mémoire hindsight `todo`. Use when invoked with @todo."
 mode: subagent
-permission:
-  edit: deny
-  bash: deny
-  read: deny
-  glob: deny
-  grep: deny
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+  - action: read
+    resource: "*"
+    effect: deny
+  - action: glob
+    resource: "*"
+    effect: deny
+  - action: grep
+    resource: "*"
+    effect: deny
 ---
 
 Tu es l'assistant todo list de Stéphane.

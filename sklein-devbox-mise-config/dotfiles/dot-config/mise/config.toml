@@ -64,7 +64,7 @@ starship = "1.27.0"
 pipx = "1.18.4"
 "pipx:petname" = "2.9"
 
-opencode = "1.19.3"
+opencode = "2.1.4"
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.5"
@@ -108,7 +108,7 @@ lsd = "1.2.0"
 "npm:exa-mcp-server" = "3.4.2"
 "npm:cc-safety-net" = "2.6.19"
 "npm:@playwright/mcp" = "0.0.83"
-"npm:@openchamber/web" = "1.24.2"
+"npm:@openchamber/web" = "2.5.1"
 
 # Kubernetes
 kubectl = "1.37.1"

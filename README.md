@@ -151,6 +151,14 @@ foot is used for what a plain terminal cannot do over the SSH + tmux chain:
 `foot.ini` enables `osc52`, uses the Hack Nerd Font, and binds `Ctrl+Shift+F5`
 to switch between the Catppuccin dark and light themes.
 
+`mise run foot` runs `ssh` directly, so the window closes as soon as the
+connection drops (workstation suspended, network roaming). The CLI's `console`
+subcommand (see [`sklein-devbox-cli/`](./sklein-devbox-cli/)) opens the same
+terminal under a **supervisor**: the window stays open, reports the drop and
+reconnects by itself, the remote tmux workspace being untouched. `--no-reconnect`
+restores the direct behaviour; see the
+[console documentation](./sklein-devbox-cli/README.md#console).
+
 The `foot` task passes `-o StrictHostKeyChecking=accept-new` and
 `-o UserKnownHostsFile=/dev/null`: host key verification is disabled. This is a
 POC shortcut, not suitable outside this throwaway environment.
@@ -270,6 +278,29 @@ by `mise run //apps/forgejo:container-registry-token` in the homelab repository;
 token in the GitHub UI first).
 
 ## FAQ
+
+### What happens to the console when the workstation goes to sleep?
+
+`sklein-devbox console` keeps the window open and reconnects. foot does not run
+`ssh` directly: it runs the CLI again as an internal `console-session` command,
+which owns the transport. On a drop the supervisor prints the reason, probes the
+instance with a bare TCP connect (no `ssh` hang), retries with a bounded backoff
+(1 s after a session that lived, 2 s doubling to 15 s when sessions die
+immediately) and reattaches. The remote tmux workspace lives in the instance, so
+nothing is lost — only the foot window's own history and the current-window
+pointer.
+
+A clean end (`exit`, Ctrl-D in tmux) still closes the window; `Ctrl-C` during a
+retry wait closes it too. `--no-reconnect` (or `SKLEIN_DEVBOX_RECONNECT=0`)
+restores the direct behaviour, and `--hold` keeps the window open on a drop.
+`SKLEIN_DEVBOX_RECONNECT_ON_RESUME=1` additionally kills the frozen transport
+the moment logind reports the resume, instead of waiting for the ssh keepalive
+(≤45 s). `mise run foot` does not supervise anything.
+
+Server-side, `ClientAliveInterval 30` / `ClientAliveCountMax 3` (in
+`files/sshd-tmux-force.conf`) make sshd notice a vanished client in ~90 s
+instead of waiting for the TCP retransmissions, so the dead `console-*` tmux
+session is detached and reaped by the next login.
 
 ### Why does `console` default to `ssh`, not mosh?
 

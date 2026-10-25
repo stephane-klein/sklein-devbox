@@ -191,6 +191,11 @@ This repository provides the **instance side** of the link:
   No such process`. The host bus is set per tool instead (above).
 - `files/sshd-foot-link.conf` (`StreamLocalBindUnlink yes`) — lets a restarted
   carrier re-bind the reverse socket over a stale one.
+- `files/sshd-tmux-force.conf` — besides the `ForceCommand`, sets
+  `ClientAliveInterval 30` / `ClientAliveCountMax 3` under `Match User devbox`:
+  a vanished client (workstation suspended, network loss) is detected in ~90 s
+  instead of waiting for the TCP retransmissions, which detaches its
+  `console-*` tmux session so the next `ssh-tmux-login` reaps it.
 
 ## Instance doctor
 

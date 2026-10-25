@@ -623,8 +623,9 @@ cmd_doctor() {
 #
 # Every other line is a per-connection or context cost, shown so the culprit can
 # be named when something is slow:
-#   * dns     - resolving the FQDN (NetBird points it at the devbox dnsmasq over
-#               the tunnel, so it is not a local lookup), both address families;
+#   * dns     - resolving the FQDN (a NetBird Custom DNS Zone record, answered
+#               by the local NetBird resolver, so a local lookup, not a tunnel
+#               round-trip), both address families;
 #   * startup - what every ssh pays before connecting: parse the config
 #               (including any `Match exec`, e.g. NetBird's `netbird ssh
 #               detect`) and resolve the name, via `ssh -G`;
@@ -768,9 +769,10 @@ cmd_check_latency() {
     return 0
   fi
 
-  # DNS: the devbox FQDN is served by NetBird's resolver (the devbox dnsmasq
-  # over the tunnel), so resolving it costs a tunnel round-trip, not a local
-  # lookup. Timed on this first (cold) getaddrinfo for both address families
+  # DNS: the devbox FQDN comes from a NetBird Custom DNS Zone record, served by
+  # this peer's local NetBird resolver (like `*.sklein.internal`), so it is a
+  # local lookup, not a tunnel round-trip. Timed on this first (cold)
+  # getaddrinfo for both address families
   # (`getent hosts`), so a slow AAAA is visible; the IPv4 is fetched separately
   # for the tunnel probe below (`getent hosts` only returns the IPv6 here).
   local t0 t1 resolved_ip="" dns_ms=""

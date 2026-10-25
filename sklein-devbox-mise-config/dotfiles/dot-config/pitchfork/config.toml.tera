@@ -18,6 +18,13 @@ retry = true
 [daemons.opencode-server]
 run = "mise exec -- opencode serve --port 4096"
 retry = true
+# Readiness: pitchfork starts dependents (openchamber) once the port listens.
+port = 4096
+# Come back with the supervisor: without this, a `supervisor start --force`
+# (e.g. reloading the proxy TLD) leaves the server down, and the next OpenCode
+# client starts an unsupervised `serve --service` that then holds port 4096,
+# making every later `pitchfork start global/opencode-server` fail.
+boot_start = true
 
 [daemons.openchamber]
 run = """
@@ -32,16 +39,21 @@ exec mise exec -- openchamber --lan --port 3000 --foreground
 retry = true
 depends = ["opencode-server"]
 port = 3000
+boot_start = true
 
 # --- sklein-devbox-ingress ---------------------------------------------------
 # Wildcard subdomains over NetBird + a per-hostname TLS reverse proxy in front
 # of the daemons above. Driven by ~/bin/sklein-devbox-ingress (up/down/status).
 #
-#   - dnsmasq answers *.<tld> (any depth) with the wt0 address; every NetBird
-#     peer reaches it through the nameserver the script registers via the API.
+#   - a NetBird Custom DNS Zone for <tld> holds a wildcard A record
+#     *.<tld> -> the wt0 address (the script maintains it through the API).
+#     NetBird resolves it as part of its authoritative peer DNS domain, so no
+#     DNS daemon runs on this host; a wildcard matches one label level only.
 #   - the proxy routes <daemon>.<project>.<tld>, plus any extra label on the
 #     left (proxy.wildcard), and signs a per-hostname certificate with its
 #     local CA ($PITCHFORK_STATE_DIR/proxy/ca.pem, to distribute to clients).
+#     DNS only covers one label (<slug>.<tld>), so project daemons and
+#     extra-left-label hostnames are routed but not resolvable from peers.
 #
 # `host = "0.0.0.0"` lets the proxy listen on the (dynamic) wt0 address so
 # NetBird peers can reach it; it therefore also listens on the other
@@ -55,23 +67,8 @@ wildcard = true
 host = "0.0.0.0"
 port = 443
 
-[daemons.sklein-devbox-ingress-dns]
-run = '''
-IP="$(/usr/sbin/ip -4 -o addr show wt0 | awk 'NR==1{split($4,a,"/");print a[1]}')"
-[ -n "$IP" ] || { echo "sklein-devbox-ingress-dns: wt0 has no IPv4 (is netbird up?)" >&2; exit 1; }
-exec /usr/sbin/dnsmasq --keep-in-foreground --port=5353 \
-  --listen-address="$IP" --listen-address=127.0.0.1 --bind-interfaces \
-  --no-resolv --no-hosts --domain-needed \
-  --address=/.{{ fqdn }}/$IP
-'''
-retry = true
-# Keep the daemon running across a supervisor restart: a daemon started only
-# through `pitchfork start` (on the CLI) is not re-adopted after
-# `pitchfork supervisor start --force`.
-boot_start = true
-
 # Route the global daemons above through the proxy. Global daemons have no
-# project hostname, so they need a slug; each <slug>.<tld> then also answers
-# for any extra label on its left.
+# project hostname, so they need a slug; <slug>.<tld> is what peers resolve
+# (the DNS wildcard covers one label level only).
 [slugs]
 openchamber     = { dir = "~", daemon = "openchamber" }

@@ -91,9 +91,9 @@ costs that a keystroke never pays — don't read them as typing latency.
 
 It decomposes everything so the culprit can be named:
 
-- `dns` — resolving the instance FQDN. NetBird serves it from the devbox
-  dnsmasq **over the tunnel**, so it is not a local lookup (timed on the first,
-  cold resolution, both address families);
+- `dns` — resolving the instance FQDN. The name comes from a NetBird Custom DNS
+  Zone record, answered by the **local** NetBird resolver (no tunnel round-trip;
+  timed on the first, cold resolution, both address families);
 - `startup` — what **every** `ssh` pays before connecting: parse the config
   (including any `Match exec`, e.g. NetBird's `netbird ssh detect`) and resolve
   the name, via `ssh -G`;

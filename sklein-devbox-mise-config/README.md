@@ -267,41 +267,74 @@ workstation to persist.
 
 `dotfiles/bin/sklein-devbox-ingress` is deployed to `~/bin/sklein-devbox-ingress`
 (that directory is not on `PATH`, so invoke it by path). It exposes the instance
-to the NetBird network under `*.<tld>` (any depth) and terminates TLS for the
-daemons behind a per-hostname certificate. `<tld>` is the **host's own FQDN**
-(`hostname -f`, e.g. `sklein-devbox-dev.homelab.stephane-klein.info`): the
-script and the pitchfork proxy template both derive it the same way, so they
-cannot diverge.
+to the NetBird network under `*.<tld>` and terminates TLS for the daemons behind
+a per-hostname certificate. `<tld>` is the **host's own FQDN** (`hostname -f`,
+e.g. `sklein-devbox-dev.homelab.stephane-klein.info`): the script and the
+pitchfork proxy template both derive it the same way, so they cannot diverge.
 
 ```sh
-~/bin/sklein-devbox-ingress up       # dnsmasq + proxy + NetBird zone/nameserver
-~/bin/sklein-devbox-ingress status
+~/bin/sklein-devbox-ingress up       # NetBird zone + wildcard record + proxy
+~/bin/sklein-devbox-ingress status   # proxy, zone, record, NetBird resolution
 ~/bin/sklein-devbox-ingress down [--purge]
 ```
 
-It ties three pieces together, none of which needs cloud-init or a root
-systemd unit:
+`down` removes the wildcard record (peers stop resolving the ingress);
+`--purge` also deletes the zone and the legacy nameserver group.
 
-- **dnsmasq**, a pitchfork daemon (`sklein-devbox-ingress-dns`, unprivileged)
-  bound to `wt0:5353`, answering `*.<tld>` at any depth with the overlay
-  address. Its `run` computes the current `wt0` address at start, so `up`
-  must run after `netbird up`.
+It ties two pieces together, none of which needs cloud-init or a root systemd
+unit:
+
+- a **NetBird Custom DNS Zone** whose domain is `<tld>`, distributed to the
+  `All` group, holding one wildcard `A` record `*.<tld>` → the `wt0` address.
+  NetBird serves it from its own resolver on every peer. No DNS daemon runs on
+  the instance, and `up` must run after `netbird up` (the record carries the
+  overlay address).
 - the **pitchfork reverse proxy** (`[settings.proxy]` in
   `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld` = the host FQDN,
-  `wildcard = true` (extra left labels route to the same daemon),
-  `host = "0.0.0.0"` (so peers reach the dynamic `wt0` address) and
-  `port = 443`. It signs a certificate per requested hostname from its local CA
+  `host = "0.0.0.0"` (so peers reach the dynamic `wt0` address) and `port = 443`.
+  It signs a certificate per requested hostname from its local CA
   (`~/.local/state/pitchfork/proxy/ca.pem`), which clients must trust —
   distribute it and run `pitchfork proxy trust --cert <copied-ca.pem>`.
-- the **NetBird management API**: a non-authoritative Custom DNS Zone for the
-  TLD (without it the client resolver answers NXDOMAIN instead of falling
-  through) plus a nameserver group matching the TLD and pointing at
-  `<wt0>:5353`. The PAT comes from `NETBIRD_PAT` or gopass
-  (`netbird/apikey`).
 
 The only privileged step is `pitchfork proxy setup` (bind capability for
 `:443`, CA trust into the system store), run by `up` and re-run after a
 pitchfork upgrade. Everything else runs as `devbox`.
+
+### Why a zone and not a nameserver
+
+`<tld>` is a peer FQDN, i.e. a name inside the NetBird peer DNS domain
+(Settings → Network → DNS Domain, here `homelab.stephane-klein.info`). The
+NetBird client resolver is **authoritative** for that domain: it answers peer
+names and returns NXDOMAIN with the `aa` flag for everything else, never
+forwarding to a nameserver. A nameserver group with `match domain = <tld>`
+would look `Available` in `netbird status -d` and still be dead config. Zone
+records are injected into that authoritative answer instead — the only
+supported way to add names under the peer DNS domain (same mechanism as
+`*.sklein.internal`).
+
+### One label level only
+
+A wildcard record matches exactly one label, so:
+
+- `<slug>.<tld>` resolves — this covers global daemons routed with `[slugs]`;
+- `<daemon>.<project>.<tld>` and `<extra>.<slug>.<tld>` do **not** resolve.
+  The proxy would route them, but no peer can resolve the name.
+
+Getting more levels would require moving the TLD out of the peer DNS domain
+(e.g. a dedicated zone like `devbox.sklein.dev`), since NetBird never delegates
+a subdomain of its own peer domain.
+
+### Checking it
+
+`status` queries the zone and the record through the API, then asks **this
+peer's NetBird resolver** (`dig @<wt0 ip>`) — which answers the zone records
+exactly like any other peer. Do not trust a local `getent`/`dig` without
+`@<wt0 ip>`: `pitchfork proxy setup` installs a stub on `127.0.0.1:15353` that
+answers `*.<tld>` with `127.0.0.1` on the ingress host itself, so the system
+resolver always looks green there.
+
+Connected peers pick the zone up on their next network map update; if a name
+still does not resolve, resync the client: `netbird down && netbird up`.
 
 Daemons defined in the global pitchfork config get no project hostname; route
 them through the proxy with a `[slugs]` entry (see the commented block in

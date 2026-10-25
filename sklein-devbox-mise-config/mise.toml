@@ -58,12 +58,12 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 "dnf:libnotify" = "latest"
 "dnf:pulseaudio-utils" = "latest"
 
-# sklein-devbox-ingress: wildcard DNS for the proxy TLD, served over NetBird.
-# dnsmasq runs as an unprivileged pitchfork daemon on wt0:5353; see
+# sklein-devbox-ingress: wildcard DNS for the proxy TLD. NetBird resolves it
+# from a Custom DNS Zone record (no DNS daemon runs on the instance); see
 # dotfiles/bin/sklein-devbox-ingress and dotfiles/dot-config/pitchfork/config.toml.tera.
 # bind-utils provides `dig`, used by `sklein-devbox-ingress status` to query
-# dnsmasq directly (instead of the system resolver).
-"dnf:dnsmasq" = "latest"
+# this peer's NetBird resolver (the system resolver answers through pitchfork's
+# local stub and would always say 127.0.0.1).
 "dnf:bind-utils" = "latest"
 
 [bootstrap.user]

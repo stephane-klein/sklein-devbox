@@ -117,3 +117,4 @@ kubectx = "0.11.0"
 kubens = "0.11.0"
 helmfile = { version = "1.8.2", workflow = "releaser.yaml" }
 k9s = "0.51.0"
+qdns = "0.19.12"

@@ -267,8 +267,11 @@ workstation to persist.
 
 `dotfiles/bin/sklein-devbox-ingress` is deployed to `~/bin/sklein-devbox-ingress`
 (that directory is not on `PATH`, so invoke it by path). It exposes the instance
-to the NetBird network under `*.<tld>` (`sklein-devbox-dev.homelab.stephane-klein.info`,
-any depth) and terminates TLS for the daemons behind a per-hostname certificate:
+to the NetBird network under `*.<tld>` (any depth) and terminates TLS for the
+daemons behind a per-hostname certificate. `<tld>` is the **host's own FQDN**
+(`hostname -f`, e.g. `sklein-devbox-dev.homelab.stephane-klein.info`): the
+script and the pitchfork proxy template both derive it the same way, so they
+cannot diverge.
 
 ```sh
 ~/bin/sklein-devbox-ingress up       # dnsmasq + proxy + NetBird zone/nameserver
@@ -284,10 +287,10 @@ systemd unit:
   address. Its `run` computes the current `wt0` address at start, so `up`
   must run after `netbird up`.
 - the **pitchfork reverse proxy** (`[settings.proxy]` in
-  `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld`, `wildcard = true`
-  (extra left labels route to the same daemon), `host = "0.0.0.0"` (so peers
-  reach the dynamic `wt0` address) and `port = 443`. It signs a certificate
-  per requested hostname from its local CA
+  `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld` = the host FQDN,
+  `wildcard = true` (extra left labels route to the same daemon),
+  `host = "0.0.0.0"` (so peers reach the dynamic `wt0` address) and
+  `port = 443`. It signs a certificate per requested hostname from its local CA
   (`~/.local/state/pitchfork/proxy/ca.pem`), which clients must trust —
   distribute it and run `pitchfork proxy trust --cert <copied-ca.pem>`.
 - the **NetBird management API**: a non-authoritative Custom DNS Zone for the

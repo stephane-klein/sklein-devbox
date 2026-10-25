@@ -1,3 +1,9 @@
+{#- The proxy TLD is the host's own FQDN: each instance exposes
+    <daemon>.<project>.<fqdn>. `~/bin/sklein-devbox-ingress` derives the same
+    value from `hostname -f`, so both must stay in sync. -#}
+{%- set fqdn = exec(command="hostname -f") -%}
+{%- if "." not in fqdn %}{{ throw(message="pitchfork config.toml: `hostname -f` did not return an FQDN") }}{% endif %}
+
 [settings.web]
 auto_start = true
 bind_port = 3120
@@ -44,7 +50,7 @@ port = 3000
 [settings.proxy]
 enable = true
 https = true
-tld = "sklein-devbox-dev.homelab.stephane-klein.info"
+tld = "{{ fqdn }}"
 wildcard = true
 host = "0.0.0.0"
 port = 443
@@ -56,7 +62,7 @@ IP="$(/usr/sbin/ip -4 -o addr show wt0 | awk 'NR==1{split($4,a,"/");print a[1]}'
 exec /usr/sbin/dnsmasq --keep-in-foreground --port=5353 \
   --listen-address="$IP" --listen-address=127.0.0.1 --bind-interfaces \
   --no-resolv --no-hosts --domain-needed \
-  --address=/.sklein-devbox-dev.homelab.stephane-klein.info/$IP
+  --address=/.{{ fqdn }}/$IP
 '''
 retry = true
 # Keep the daemon running across a supervisor restart: a daemon started only

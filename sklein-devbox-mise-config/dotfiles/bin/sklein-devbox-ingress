@@ -15,6 +15,9 @@
 #      nameserver for names it does not know) and a nameserver group matching
 #      <tld> and pointing at <wt0>:5353.
 #
+# <tld> is the host's own FQDN (`hostname -f`), the same value the pitchfork
+# proxy uses for settings.proxy.tld in ~/.config/pitchfork/config.toml.
+#
 # Everything runs as the `devbox` user; the only privileged step is
 # `pitchfork proxy setup` (bind capability for :443 and CA trust).
 #
@@ -24,7 +27,7 @@ set -u
 
 PROG="${0##*/}"
 
-TLD="sklein-devbox-dev.homelab.stephane-klein.info"
+TLD="$(hostname -f 2>/dev/null || true)"
 DNS_PORT=5353
 NETBIRD_API="https://api.netbird.io/api"
 NS_NAME="sklein-devbox-ingress"
@@ -66,6 +69,11 @@ EOF
 die() { printf '%s: error: %s\n' "$PROG" "$*" >&2; exit 2; }
 info() { printf '%s==%s %s\n' "$C_DIM" "$C_OFF" "$*"; }
 ok() { printf '   %sok%s %s\n' "$C_OK" "$C_OFF" "$*"; }
+
+case "$TLD" in
+  *.*) ;;
+  *) die "cannot determine the host FQDN (hostname -f returned '${TLD:-<empty>}')" ;;
+esac
 
 need() { command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
 

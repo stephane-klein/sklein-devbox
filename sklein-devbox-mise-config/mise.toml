@@ -125,13 +125,8 @@ if command -v opencode >/dev/null 2>&1; then
   fi
 fi
 
-# Seed provider credentials into the SQLite database. The legacy auth.json files
-# are removed during the dotfiles apply by the `mode = "absent"` entries (see
-# [dotfile_groups.home.entries]), so the V1 -> V2 database migration cannot
-# import them next to credentials.json. `auth import` skips credentials whose id
-# is already present, so this is a no-op once seeded.
-if command -v opencode >/dev/null 2>&1 && [ -f "$HOME/.local/share/opencode/credentials.json" ]; then
-  opencode auth import --standalone "$HOME/.local/share/opencode/credentials.json" >/dev/null 2>&1 || true
+if [ -x "$HOME/bin/import-opencode-credentials" ]; then
+  "$HOME/bin/import-opencode-credentials" || true
 fi
 
 # The running server keeps the old binary, the old plugin modules and the old
@@ -206,6 +201,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
 "~/bin/pinentry-tmux"               = { mode = "copy", permissions = "0755" }
+"~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
 
 # Left behind by the OpenCode 1 -> 2 migration: tui.json became cli.json,
 # auth.json* became credentials.json + `opencode auth import`, and the two
@@ -226,11 +222,6 @@ exclude = ["*.tera"]
 "~/.config/incus/client.key"         = { source = "dot-config/incus/client.key.tera", mode = "template" }
 "~/.config/gh/hosts.yml"             = { source = "dot-config/gh/hosts.yml.tera", mode = "template" }
 "~/.config/opencode/opencode.jsonc"  = { source = "dot-config/opencode/opencode.jsonc.tera", mode = "template" }
-# OpenCode 2 keeps credentials in its SQLite database. This file seeds them on a
-# fresh instance (`opencode auth import --standalone`, see the post-dotfiles
-# hook): two OpenCode Go accounts plus the fixed deepseek and openrouter keys.
-# At runtime, switch accounts from the TUI (`/connect`) or OpenChamber
-# (Settings -> Providers); `opencode auth switch` is only for scripts.
 "~/.local/share/opencode/credentials.json" = { source = "dot-local/share/opencode/credentials.json.tera", mode = "template", permissions = "0600" }
 "~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = { source = "dot-kube/config.d/homelab-stephane-klein-info.kubeconfig.tera", mode = "template", permissions = "0600" }
 

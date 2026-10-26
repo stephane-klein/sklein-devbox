@@ -119,12 +119,15 @@ The container's configuration is the **deployed** form of this repo's
   the service: clients would silently start private servers on the same
   `opencode.db`.
 - Provider credentials live in the SQLite database. `~/.local/share/opencode/credentials.json`
-  (rendered from gopass) seeds them on a fresh instance through
-  `opencode auth import --standalone` in the bootstrap hook: two OpenCode Go
-  accounts (`account1` active, `account2` inactive) plus the fixed deepseek and
-  openrouter keys. Switch accounts from the TUI (`/connect`) or OpenChamber
-  (Settings → Providers); `opencode auth switch <integration> <label>` is only
-  for scripts. `auth.json` is no longer used.
+  (rendered from gopass) is the source of truth: `~/bin/import-opencode-credentials`
+  runs at the end of the bootstrap hook and logs the managed accounts out,
+  reimports the file and restores the account that was active (`auth import`
+  alone is a one-shot seed, it skips ids it already knows and therefore never
+  picks up a rotated key). It holds two OpenCode Go accounts (`account1`,
+  `account2`) plus the fixed deepseek and openrouter keys. Switch accounts from
+  the TUI (`/connect`) or OpenChamber (Settings → Providers) — the choice holds
+  until the next apply; `opencode auth switch <integration> <label>` is for
+  scripts. `auth.json` is no longer used.
 - Plugins are server-side (`plugins` in `~/.config/opencode/opencode.jsonc`);
   TUI-only settings live in `~/.config/opencode/cli.json`. `tui.json` is gone.
 - `mise dot apply` ends with `pitchfork restart global/opencode-server`, because

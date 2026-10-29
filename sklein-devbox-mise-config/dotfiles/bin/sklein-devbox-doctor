@@ -2,11 +2,14 @@
 # sklein-devbox-doctor - end-to-end check of the instance side of the
 # remote-desktop link (the foot host -> instance reverse carrier).
 #
-# Runs `mise doctor`, then walks through the capabilities the link provides: a
-# desktop notification, audio playback and URL opening -- plus a transport-aware
-# clipboard (OSC 52) check, which does not depend on the link carrier. For each
-# it runs the command and asks whether the effect was perceived, so a transport
-# failure (missing socket, no carrier) is reported apart from a perception one.
+# Runs `mise doctor`, then compares the version of the running pitchfork
+# supervisor and of the supervised opencode server and OpenChamber with the
+# version on PATH, then walks through the capabilities the link provides: a
+# desktop notification, audio playback and URL opening -- plus a
+# transport-aware clipboard (OSC 52) check, which does not depend on the link
+# carrier. For each it runs the command and asks whether the effect was
+# perceived, so a transport failure (missing socket, no carrier) is reported
+# apart from a perception one.
 #
 # The GPG signing chain (git, jj -> gpg-agent -> pinentry-tmux -> tmux popup)
 # is checked by the companion gpg-signing-doctor: --with-gpg runs it in this
@@ -45,9 +48,11 @@ usage() {
   cat <<EOF
 $PROG - check the sklein-devbox remote-desktop link from inside the instance.
 
-Runs \`mise doctor\`, then guides you through the link checks (a desktop
-notification, an audio playback and opening a URL) and a clipboard (OSC 52)
-check, asking after each whether you perceived the effect on the foot host.
+Runs \`mise doctor\`, compares the version of the running pitchfork supervisor
+and of the supervised opencode server and OpenChamber with the version on PATH,
+then guides you through the link checks (a desktop notification, an audio
+playback and opening a URL) and a clipboard (OSC 52) check, asking after each
+whether you perceived the effect on the foot host.
 
 Usage:
   $PROG [options]
@@ -175,6 +180,163 @@ run_gpg_doctor() {
   else
     record_fail "gpg signing doctor (exit $rc)"
   fi
+}
+
+# --- versions ----------------------------------------------------------------
+# mise starts these tools through its `latest` symlink. An upgrade moves the
+# symlink under a long-lived process that keeps running the old binary, so
+# `<tool> --version` on PATH says nothing about what actually runs.
+#
+# Neither tool is probed through /proc/<pid>/exe. The pitchfork supervisor
+# cannot be read there at all: `pitchfork proxy setup` grants
+# cap_net_bind_service on the binary, which makes the process non-dumpable and
+# answers "Permission denied" even to its own user. The supervisor already
+# writes the mismatch into its log each time a client connects with another
+# version, so the check reads that line instead.
+PITCHFORK_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/pitchfork/logs/pitchfork/pitchfork.log"
+
+# daemon_pid ID -> pid of a supervised daemon, empty when pitchfork does not
+# know it (unknown name, stopped daemon) or the CLI is too old for --json.
+daemon_pid() {
+  local pid
+  pid="$(pitchfork status "$1" --json 2>/dev/null \
+         | sed -n 's/.*"pid": *\([0-9]\{1,\}\).*/\1/p' | head -n1)"
+  [ -n "$pid" ] && [ "$pid" -gt 0 ] && printf '%s\n' "$pid"
+}
+
+check_pitchfork_version() {
+  local before new warn parsed cli sup
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "pitchfork not found in PATH"
+    return
+  fi
+  if ! pgrep -f '[p]itchfork supervisor run' >/dev/null 2>&1; then
+    record_skip "pitchfork supervisor not running"
+    return
+  fi
+  if [ ! -r "$PITCHFORK_LOG" ]; then
+    record_skip "pitchfork log not readable: $PITCHFORK_LOG"
+    return
+  fi
+  before="$(wc -l < "$PITCHFORK_LOG")"
+  # This call is what makes the supervisor write the mismatch line, if any.
+  pitchfork supervisor status >/dev/null 2>&1
+  # The supervisor answers on its socket and writes the log asynchronously, so
+  # wait for the two lines it emits per status call instead of sleeping blindly.
+  new=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    new="$(tail -n +"$((before + 1))" "$PITCHFORK_LOG")"
+    printf '%s\n' "$new" | grep -q 'Web UI:' && break
+    sleep 0.05
+  done
+  # Only lines written after this very call count: the check must not report a
+  # warning left by a client that ran twenty minutes ago.
+  warn="$(printf '%s\n' "$new" | grep -i 'differs from supervisor version' | tail -n1)"
+  cli="$(pitchfork --version 2>/dev/null | awk 'NR==1 { print $2 }')"
+  cli="${cli%.}"
+  if [ -z "$warn" ]; then
+    if printf '%s\n' "$new" | grep -q 'Web UI:'; then
+      record_pass "pitchfork ${cli:-(unknown)} (CLI == supervisor)"
+    else
+      record_skip "pitchfork: no answer from the supervisor (see $PITCHFORK_LOG)"
+    fi
+    return
+  fi
+  parsed="$(printf '%s\n' "$warn" | sed -nE \
+    's/.*(Client|CLI) version ([^ ]+) differs from supervisor version ([^ ]+).*/\2 \3/p')"
+  if [ -z "$parsed" ]; then
+    record_fail "pitchfork: CLI and supervisor versions differ (see $PITCHFORK_LOG)"
+    return
+  fi
+  cli="${parsed% *}"
+  sup="${parsed#* }"
+  cli="${cli%.}"
+  sup="${sup%.}"
+  # The two versions never move together: name the side that is behind, because
+  # restarting a supervisor newer than its client would keep the drift.
+  if [ "$cli" = "$sup" ]; then
+    record_pass "pitchfork $cli (CLI == supervisor)"
+  elif [ "$(printf '%s\n%s\n' "$cli" "$sup" | sort -V | tail -n1)" = "$cli" ]; then
+    record_fail "pitchfork: supervisor $sup, CLI $cli (restart: systemctl --user restart pitchfork)"
+  else
+    record_fail "pitchfork: supervisor $sup, CLI $cli (this shell is stale: mise up, then reopen it)"
+  fi
+}
+
+check_opencode_version() {
+  local pid ver cli svc stale
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "opencode-server: pitchfork not found in PATH"
+    return
+  fi
+  pid="$(daemon_pid opencode-server)"
+  if [ -z "$pid" ]; then
+    record_skip "opencode-server not supervised by pitchfork"
+    return
+  fi
+  # The supervised process is the opencode binary itself and carries no file
+  # capability, so its own executable is readable here.
+  ver="$(/proc/"$pid"/exe --version 2>/dev/null | awk 'NR==1 { print $NF }')"
+  ver="${ver#v}"
+  if [ -z "$ver" ]; then
+    record_skip "cannot read the version of opencode-server (pid $pid)"
+    return
+  fi
+  # A stale service.json means the running server never registered this pid:
+  # clients then reuse an old URL and password.
+  svc="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' \
+         "${XDG_STATE_HOME:-$HOME/.local/state}/opencode/service.json" 2>/dev/null | head -n1)"
+  stale=""
+  if [ -n "$svc" ] && [ "$svc" != "$ver" ]; then
+    stale=", service.json still says $svc"
+  fi
+  cli="$(opencode --version 2>/dev/null | awk 'NR==1 { print $NF }')"
+  cli="${cli#v}"
+  if [ -z "$cli" ]; then
+    record_pass "opencode server $ver (pid $pid, no CLI in PATH$stale)"
+  elif [ "$cli" = "$ver" ]; then
+    record_pass "opencode $ver (pid $pid, CLI == server$stale)"
+  else
+    record_fail "opencode: server $ver (pid $pid), CLI $cli$stale (restart: pitchfork restart opencode-server, ends running sessions)"
+  fi
+}
+
+check_openchamber_version() {
+  local pid ver cli
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "openchamber: pitchfork not found in PATH"
+    return
+  fi
+  pid="$(daemon_pid openchamber)"
+  if [ -z "$pid" ]; then
+    record_skip "openchamber not supervised by pitchfork"
+    return
+  fi
+  # openchamber runs under node, so the executable is node and says nothing
+  # about the app: mise puts the version in the path of the script node runs.
+  ver="$(tr '\0' '\n' < /proc/"$pid"/cmdline 2>/dev/null \
+        | sed -n 's#.*npm-openchamber-web/\([^/]*\)/.*#\1#p' | head -n1)"
+  ver="${ver#v}"
+  if [ -z "$ver" ]; then
+    record_skip "cannot read the version of openchamber (pid $pid)"
+    return
+  fi
+  cli="$(openchamber --version 2>/dev/null | awk 'NR==1 { print $NF }')"
+  cli="${cli#v}"
+  if [ -z "$cli" ]; then
+    record_pass "openchamber $ver (pid $pid, no CLI in PATH)"
+  elif [ "$cli" = "$ver" ]; then
+    record_pass "openchamber $ver (pid $pid, CLI == app)"
+  else
+    record_fail "openchamber: running $ver (pid $pid), CLI $cli (restart: pitchfork restart openchamber)"
+  fi
+}
+
+test_versions() {
+  step "versions"
+  check_pitchfork_version
+  check_opencode_version
+  check_openchamber_version
 }
 
 env_summary() {
@@ -340,6 +502,9 @@ main() {
   if want mise && (( RUN_MISE_DOCTOR )); then
     run_mise_doctor
   fi
+  # No `--only-versions`: the check is cheap, offline, and a stale supervisor or
+  # server is exactly the kind of drift a manual pass should always reveal.
+  test_versions
   if (( RUN_GPG_DOCTOR )); then
     run_gpg_doctor
   fi

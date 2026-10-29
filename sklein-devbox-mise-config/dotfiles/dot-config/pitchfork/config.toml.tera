@@ -138,5 +138,16 @@ boot_start = true
 # Route the global daemons above through the proxy. Global daemons have no
 # project hostname, so they need a slug; <slug>.<tld> resolves like any other
 # name under the TLD.
+#
+# `dir` must be the directory the daemon actually runs from, which for a daemon
+# declared in this file is this file's own directory. It is not decoration:
+# the proxy builds its project registry from the slug dirs (plus `[namespaces]`
+# and the daemons' recorded dirs), so a dir of `~` would register /home/devbox
+# as a project named `devbox`. That checkout would then claim the same
+# `global/...` daemon IDs as this one, and the proxy would refuse
+# `openchamber.devbox.<tld>` as "other checkout" (502, or "is not available"
+# for a remote client). With the dir below, the only URL is `openchamber.<tld>`
+# (and the incidental `openchamber.pitchfork.<tld>`); no `devbox` hostname is
+# advertised.
 [slugs]
-openchamber     = { dir = "~", daemon = "openchamber" }
+openchamber     = { dir = "~/.config/pitchfork", daemon = "openchamber" }

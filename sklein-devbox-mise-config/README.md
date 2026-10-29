@@ -355,6 +355,22 @@ them through the proxy with a `[slugs]` entry (see the commented block in
 `config.toml.tera`). To expose a service, set a daemon's `port`, add a slug, and
 it answers at `<slug>.<tld>`.
 
+The slug's `dir` must be the directory the daemon actually runs from, not the
+home directory: the proxy derives its project registry from the slug dirs, and a
+dir of `~` registers `/home/devbox` as a project named `devbox`, whose daemons
+are the global ones. That checkout then claims the same `global/...` IDs as
+`~/.config/pitchfork`, and the proxy refuses `<daemon>.devbox.<tld>` with an
+`other checkout` error (502, or `'<host>' is not available.` for a remote
+client). OpenChamber, for instance, is served from `~/.config/pitchfork`:
+
+```toml
+[slugs]
+openchamber = { dir = "~/.config/pitchfork", daemon = "openchamber" }
+```
+
+Its canonical URL is `https://openchamber.<tld>/`. Do not use
+`https://openchamber.devbox.<tld>/`: that hostname was never routable.
+
 ### Migrating from the previous design (one-shot)
 
 Earlier versions of the script created a NetBird Custom DNS Zone

@@ -4,29 +4,31 @@
 #
 # It wires two pieces together:
 #
-#   1. a NetBird Custom DNS Zone for the host FQDN (<tld>) holding a wildcard
-#      A record *.<tld> -> the wt0 (overlay) address, distributed to every
-#      peer;
+#   1. dnsmasq (a pitchfork daemon, unprivileged, wt0:5353) answering
+#      *.<tld> - at any depth - with the wt0 (overlay) address, plus the
+#      NetBird nameserver group that routes <tld> to it on every peer;
 #   2. the pitchfork reverse proxy (settings.proxy in
 #      ~/.config/pitchfork/config.toml), routing <daemon>.<project>.<tld> plus
 #      any extra label on the left, and signing a per-hostname certificate with
 #      its local CA.
 #
-# Why a zone and not a nameserver: <tld> is the host FQDN, which lives inside
-# the NetBird peer DNS domain (Settings > Network > DNS Domain). NetBird's
-# client resolver is authoritative for that whole domain: it answers peer names
-# and returns NXDOMAIN (with the `aa` flag) for anything else, without ever
-# forwarding to a nameserver. A nameserver group with `match domain = <tld>` is
-# therefore dead config. Records of a Custom DNS Zone are injected into that
-# authoritative answer instead, which is the only supported way to add names
-# under the peer DNS domain.
+# Why <tld> is not the host FQDN: the NetBird client resolver is authoritative
+# over the peer DNS domain (Settings > Network > DNS Domain, here
+# homelab.stephane-klein.info) and never forwards a name below it to a
+# nameserver. A nameserver group is only consulted for a domain OUTSIDE that
+# peer domain, so the ingress namespace lives under its own domain:
 #
-# Limitation: a wildcard record matches ONE label level, so <slug>.<tld>
-# resolves (global daemons, [slugs]) but <daemon>.<project>.<tld> and
-# extra.<slug>.<tld> do not.
+#     <instance>.devbox.sklein.xyz   (INGRESS_DOMAIN below)
 #
-# <tld> is the host's own FQDN (`hostname -f`), the same value the pitchfork
-# proxy uses for settings.proxy.tld in ~/.config/pitchfork/config.toml.
+# dnsmasq --address= then matches that domain and all its subdomains, at any
+# depth, which is what allows <daemon>.<project>.<instance>.devbox.sklein.xyz.
+#
+# The namespace is deliberately not published: sklein.xyz has no record under
+# devbox.*, so a client outside NetBird gets NXDOMAIN. That is split DNS by
+# design; do not publish a wildcard record there.
+#
+# <tld> is <instance>.<INGRESS_DOMAIN>, the same value the pitchfork proxy
+# renders for settings.proxy.tld in ~/.config/pitchfork/config.toml.
 #
 # Everything runs as the `devbox` user; the only privileged step is
 # `pitchfork proxy setup` (bind capability for :443 and CA trust).
@@ -37,16 +39,18 @@ set -u -o pipefail
 
 PROG="${0##*/}"
 
-TLD="$(hostname -f 2>/dev/null || true)"
-NETBIRD_API="https://api.netbird.io/api"
-# Zone name is only a label; key it to the instance so that two ingress hosts
-# do not create homonymous zones in the same account.
-ZONE_NAME="${TLD%%.*}"
-# Nameserver group created by earlier versions of this script. It never worked
-# (see the header) and is only kept so `down --purge` can clean it up.
-LEGACY_NS_NAME="sklein-devbox-ingress"
+INSTANCE="$(hostname -s 2>/dev/null || true)"
+# Must match the `ingress_domain` literal in
+# dotfiles/dot-config/pitchfork/config.toml.tera.
+INGRESS_DOMAIN="devbox.sklein.xyz"
+TLD="${INSTANCE}.${INGRESS_DOMAIN}"
 
-PURGE=0
+DNS_PORT=5353
+NETBIRD_API="https://api.netbird.io/api"
+# One nameserver group per instance: two ingress hosts must not share a domain.
+NS_NAME="ingress-${INSTANCE}"
+DNS_DAEMON="global/sklein-devbox-ingress-dns"
+
 PAT=""
 
 if [ -t 1 ]; then
@@ -59,17 +63,15 @@ usage() {
   cat <<EOF
 $PROG - wildcard DNS + TLS proxy for sklein-devbox over NetBird.
 
-Serves *.$TLD (one label level) to NetBird peers through a NetBird Custom DNS
-Zone, and fronts the pitchfork daemons with a local-CA TLS proxy.
+Serves *.$TLD (any depth) to NetBird peers through a dnsmasq daemon and a
+NetBird nameserver group, and fronts the pitchfork daemons with a local-CA TLS
+proxy.
 
 Usage:
-  $PROG up        Ensure the DNS zone + wildcard record and the pitchfork proxy
-  $PROG down      Remove the wildcard record (peers stop resolving the ingress)
-  $PROG status    Show proxy, zone, record and resolution state
+  $PROG up        Ensure the DNS daemon, the nameserver group and the proxy
+  $PROG down      Delete the nameserver group (peers stop resolving the ingress)
+  $PROG status    Show proxy, daemon, group and resolution state
   $PROG -h|--help Show this help
-
-\`down\` options:
-  --purge         Also delete the NetBird zone and the legacy nameserver group
 
 Environment:
   NETBIRD_PAT     NetBird personal access token. Read from gopass
@@ -83,9 +85,10 @@ die() { printf '%s: error: %s\n' "$PROG" "$*" >&2; exit 2; }
 info() { printf '%s==%s %s\n' "$C_DIM" "$C_OFF" "$*" >&2; }
 ok() { printf '   %sok%s %s\n' "$C_OK" "$C_OFF" "$*" >&2; }
 
-case "$TLD" in
-  *.*) ;;
-  *) die "cannot determine the host FQDN (hostname -f returned '${TLD:-<empty>}')" ;;
+case "$INSTANCE" in
+  "" | *.* | *[!a-z0-9-]*)
+    die "cannot determine the instance name (hostname -s returned '${INSTANCE:-<empty>}')"
+    ;;
 esac
 
 need() { command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
@@ -93,6 +96,15 @@ need() { command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 wt0_ip() {
   /usr/sbin/ip -4 -o addr show wt0 2>/dev/null \
     | awk 'NR==1{split($4, a, "/"); print a[1]}'
+}
+
+dnsq() { # dnsq SERVER NAME -> first address, or "(no answer)"
+  local out
+  # `dig +short` may print several lines, and prints lookup failures (starting
+  # with ";;") on stdout: keep the first address and treat those as no answer.
+  out="$(dig +short +time=2 +tries=1 "@${1}" -p "${DNS_PORT}" "${2}" A 2>/dev/null \
+    | awk 'NR==1 && $1 !~ /^;/ {print $1}')"
+  if [ -n "$out" ]; then printf '%s' "$out"; else printf '(no answer)'; fi
 }
 
 netbird_pat() {
@@ -126,99 +138,48 @@ all_group_id() {
 }
 
 # ---------------------------------------------------------------------------
-# NetBird DNS (Custom DNS Zone + wildcard record)
+# NetBird DNS (nameserver group -> dnsmasq on the overlay)
 # ---------------------------------------------------------------------------
 
-zone_id() {
-  api GET /dns/zones \
-    | jq -r --arg d "$TLD" '[.[] | select(.domain == $d)][0].id // empty'
-}
-
-legacy_nameserver_id() {
+nameserver_id() {
   api GET /dns/nameservers \
-    | jq -r --arg n "$LEGACY_NS_NAME" '[.[] | select(.name == $n)][0].id // empty'
+    | jq -r --arg n "$NS_NAME" '[.[] | select(.name == $n)][0].id // empty'
 }
 
-zone_body() { # zone_body ALL_ID
-  jq -nc --arg n "$ZONE_NAME" --arg d "$TLD" --arg g "$1" \
-    '{name: $n, domain: $d, enabled: true,
-      enable_search_domain: false, distribution_groups: [$g]}'
+nameserver_body() { # nameserver_body ALL_ID IP
+  jq -nc --arg n "$NS_NAME" --arg d "$TLD" --arg ip "$2" --arg g "$1" \
+    --argjson port "$DNS_PORT" \
+    '{name: $n, description: ("wildcard *." + $d), primary: false, enabled: true,
+      nameservers: [{ip: $ip, ns_type: "udp", port: $port}],
+      domains: [$d], groups: [$g], search_domains_enabled: false}'
 }
 
-ensure_zone() { # ensure_zone ALL_ID -> zone id on stdout
-  local all_id="$1" zid cur body
-  body="$(zone_body "$all_id")"
-  zid="$(zone_id)"
-  if [ -z "$zid" ]; then
-    info "creating NetBird DNS zone $ZONE_NAME ($TLD)"
-    zid="$(api POST /dns/zones "$body" | jq -r '.id // empty')" \
-      || die "could not create DNS zone $TLD"
-    [ -n "$zid" ] || die "could not create DNS zone $TLD"
-    ok "zone $zid created"
-  else
-    cur="$(api GET "/dns/zones/${zid}" | jq -r '.name')"
-    if [ "$cur" != "$ZONE_NAME" ]; then
-      info "renaming NetBird DNS zone '$cur' to '$ZONE_NAME'"
-      api PUT "/dns/zones/${zid}" "$body" >/dev/null \
-        || info "could not rename the zone (its name is only a label; harmless)"
-    fi
-    ok "zone $zid (existing)"
-  fi
-  printf '%s' "$zid"
-}
-
-ensure_record() { # ensure_record ZONE_ID IP
-  local zid="$1" ip="$2" name="*.${TLD}" rid cur body
-  body="$(jq -nc --arg n "$name" --arg ip "$ip" \
-    '{name: $n, type: "A", content: $ip, ttl: 300}')"
-  rid="$(api GET "/dns/zones/${zid}/records" \
-    | jq -r --arg n "$name" '[.[] | select(.name == $n)][0].id // empty')"
-  if [ -z "$rid" ]; then
-    api POST "/dns/zones/${zid}/records" "$body" >/dev/null \
-      || die "could not create the DNS record $name -> $ip"
-    ok "record $name -> $ip (created)"
+ensure_nameserver() { # ensure_nameserver ALL_ID IP
+  local all_id="$1" ip="$2" nid body
+  body="$(nameserver_body "$all_id" "$ip")"
+  nid="$(nameserver_id)"
+  if [ -z "$nid" ]; then
+    info "creating the NetBird nameserver group $NS_NAME ($TLD -> $ip:$DNS_PORT)"
+    api POST /dns/nameservers "$body" >/dev/null \
+      || die "could not create the NetBird nameserver group $NS_NAME"
+    ok "nameserver group created"
     return
   fi
-  cur="$(api GET "/dns/zones/${zid}/records/${rid}" | jq -r '.content')"
-  if [ "$cur" = "$ip" ]; then
-    ok "record $name -> $ip (unchanged)"
-    return
-  fi
-  api PUT "/dns/zones/${zid}/records/${rid}" "$body" >/dev/null \
-    || die "could not update the DNS record $name -> $ip"
-  ok "record $name -> $ip (updated from $cur)"
+  api PUT "/dns/nameservers/${nid}" "$body" >/dev/null \
+    || die "could not update the NetBird nameserver group $NS_NAME"
+  ok "nameserver group $nid (updated)"
 }
 
-remove_record() {
-  local zid rid
-  zid="$(zone_id)"
-  if [ -z "$zid" ]; then
-    info "no NetBird zone for $TLD"
+remove_nameserver() {
+  local nid
+  nid="$(nameserver_id)"
+  if [ -z "$nid" ]; then
+    info "no NetBird nameserver group '$NS_NAME' for $TLD"
     return 0
   fi
-  rid="$(api GET "/dns/zones/${zid}/records" \
-    | jq -r --arg n "*.${TLD}" '[.[] | select(.name == $n)][0].id // empty')"
-  if [ -z "$rid" ]; then
-    info "no wildcard record for *.$TLD"
-    return 0
-  fi
-  api DELETE "/dns/zones/${zid}/records/${rid}" >/dev/null \
-    || die "could not delete the wildcard record *.$TLD"
-  ok "wildcard record *.$TLD deleted (peers stop resolving the ingress)"
-}
-
-purge_netbird() {
-  local zid nid
-  nid="$(legacy_nameserver_id)"
-  if [ -n "$nid" ]; then
-    api DELETE "/dns/nameservers/${nid}" >/dev/null \
-      && ok "deleted legacy NetBird nameserver group '$LEGACY_NS_NAME'"
-  fi
-  zid="$(zone_id)"
-  if [ -n "$zid" ]; then
-    api DELETE "/dns/zones/${zid}" >/dev/null \
-      && ok "deleted NetBird zone $TLD"
-  fi
+  api DELETE "/dns/nameservers/${nid}" >/dev/null \
+    || die "could not delete the NetBird nameserver group '$NS_NAME'"
+  ok "nameserver group '$NS_NAME' deleted (peers stop resolving $TLD)"
 }
 
 # ---------------------------------------------------------------------------
@@ -226,12 +187,13 @@ purge_netbird() {
 # ---------------------------------------------------------------------------
 
 cmd_up() {
-  need pitchfork; need curl; need jq
+  need pitchfork; need dnsmasq; need curl; need jq
 
   local ip
   ip="$(wt0_ip)"
   [ -n "$ip" ] || die "wt0 has no IPv4 address (is netbird up?)"
   info "wt0 address: $ip"
+  info "ingress TLD: $TLD"
 
   # The supervisor hands its environment to every daemon it spawns. A foreign
   # XDG_RUNTIME_DIR (seen: /tmp, leaked from the foot host's ssh client) makes
@@ -248,25 +210,22 @@ cmd_up() {
 
   # `supervisor start --force` restarts every daemon it supervises (the OpenCode
   # server and OpenChamber included), so only reload when it is actually needed:
-  #   - the supervisor is not running;
-  #   - it still knows the dnsmasq daemon of earlier versions, which means it
-  #     runs the previous config (no `boot_start` on the OpenCode daemons);
-  #   - the running proxy uses another TLD than the rendered config.
-  local legacy_daemon="global/${LEGACY_NS_NAME}-dns" running_tld="" need_restart=0
+  # the supervisor is not running, or the rendered config is newer than the
+  # running supervisor. `pitchfork proxy status` reads the config FILE, not the
+  # running proxy, so it cannot tell whether a reload is pending: the supervisor
+  # reads settings.proxy.tld once, at start, and keeps serving it.
+  local config_path="$HOME/.config/pitchfork/config.toml" sup_pid=""
   if ! pitchfork supervisor status >/dev/null 2>&1; then
     info "starting the pitchfork supervisor"
     pitchfork supervisor start
   else
-    pitchfork status "$legacy_daemon" >/dev/null 2>&1 && need_restart=1
-    running_tld="$(pitchfork proxy status 2>/dev/null \
-      | awk -F'TLD:[[:space:]]*' '/TLD:/{print $2; exit}')"
-    [ "$running_tld" = "$TLD" ] || need_restart=1
-    if [ "$need_restart" -eq 1 ]; then
-      info "reloading the pitchfork supervisor (TLD '${running_tld:-?}' -> '$TLD', current config)"
+    sup_pid="$(pgrep -f 'pitchfork supervisor run$' | head -1 || true)"
+    if [ -n "$sup_pid" ] && [ "$config_path" -nt "/proc/${sup_pid}" ]; then
+      info "reloading the pitchfork supervisor (config newer than the running daemon)"
       info "(supervised daemons restart; boot_start ones come back on their own)"
       pitchfork supervisor start --force
     else
-      info "pitchfork supervisor running with TLD $TLD (no restart)"
+      info "pitchfork supervisor up to date (no restart)"
     fi
   fi
 
@@ -275,35 +234,47 @@ cmd_up() {
 
   pitchfork proxy doctor || true
 
+  info "starting the DNS daemon ($DNS_DAEMON)"
+  if ! pitchfork status "$DNS_DAEMON" 2>/dev/null | grep -qi running; then
+    pitchfork start "$DNS_DAEMON" \
+      || die "DNS daemon did not start (see: pitchfork logs $DNS_DAEMON)"
+  fi
+  pitchfork status "$DNS_DAEMON" 2>/dev/null | grep -qi running \
+    || die "DNS daemon is not running (see: pitchfork logs $DNS_DAEMON)"
+  ok "dnsmasq running on ${ip}:${DNS_PORT}"
+
+  if command -v dig >/dev/null 2>&1; then
+    local probe="" i
+    for i in 1 2 3 4 5; do
+      probe="$(dnsq "$ip" "a.b.${TLD}")"
+      [ "$probe" = "$ip" ] && break
+      sleep 0.5
+    done
+    [ "$probe" = "$ip" ] \
+      || die "dnsmasq does not answer a.b.$TLD (got '${probe:-nothing}')"
+    ok "dnsmasq answers at any depth (a.b.$TLD -> $ip)"
+  fi
+
   PAT="$(netbird_pat)"
-  local all_id zid
+  local all_id
   all_id="$(all_group_id)"
   [ -n "$all_id" ] || die "could not find the NetBird 'All' group"
 
-  info "configuring NetBird DNS (zone + wildcard record -> $ip)"
-  zid="$(ensure_zone "$all_id")"
-  ensure_record "$zid" "$ip"
-
-  # Earlier versions also created a nameserver group pointing at dnsmasq:5353.
-  # NetBird never consults it (see the header), no DNS daemon runs anymore, so
-  # drop it instead of leaving dead config behind.
-  local nid
-  nid="$(legacy_nameserver_id)"
-  if [ -n "$nid" ]; then
-    api DELETE "/dns/nameservers/${nid}" >/dev/null \
-      && ok "deleted the legacy NetBird nameserver group ($LEGACY_NS_NAME)"
-  fi
+  info "configuring NetBird DNS (nameserver group $NS_NAME -> $ip:$DNS_PORT)"
+  ensure_nameserver "$all_id" "$ip"
 
   cat <<EOF
 
-Ingress is up:  *.$TLD  ->  $ip
-  (one label level: <slug>.$TLD; <daemon>.<project>.<tld> does not resolve)
+Ingress is up:  *.$TLD  ->  $ip  (any depth)
 
   - trust the proxy CA on every client:
       ~/.local/state/pitchfork/proxy/ca.pem
     then, on a client with pitchfork: pitchfork proxy trust --cert <copied-ca.pem>
-  - a connected NetBird peer picks the zone up on its next network map update;
-    if a name still does not resolve, resync the client: netbird down && netbird up
+  - peers pick the nameserver group up on their next network map update; if a
+    name still does not resolve, resync the client: netbird down && netbird up
+  - $TLD is not published, so an outside client gets NXDOMAIN. After a lookup
+    failed before the group was installed, clear the negative cache:
+    resolvectl flush-caches
 EOF
 }
 
@@ -311,64 +282,60 @@ cmd_down() {
   need curl; need jq
 
   PAT="$(netbird_pat)"
-  if [ "$PURGE" -eq 1 ]; then
-    purge_netbird
-  else
-    remove_record
-  fi
+  remove_nameserver
 
-  info "the pitchfork proxy itself keeps running (pitchfork supervisor stop to stop it)"
+  info "the DNS daemon and the pitchfork proxy keep running (pitchfork supervisor stop to stop them)"
 }
 
 cmd_status() {
   need curl; need jq
 
-  local ip zid rec
+  local ip nid
   ip="$(wt0_ip)"
   info "wt0 address: ${ip:-<none>}"
+  info "ingress TLD: $TLD (instance $INSTANCE, domain $INGRESS_DOMAIN)"
 
   info "pitchfork proxy"
   pitchfork proxy status 2>&1 || true
   pitchfork proxy doctor 2>&1 || true
 
-  PAT="$(netbird_pat)"
-  info "NetBird DNS zone"
-  zid="$(zone_id)"
-  if [ -z "$zid" ]; then
-    printf '   no zone for %s - run: %s up\n' "$TLD" "$PROG"
+  info "DNS daemon"
+  if pitchfork status "$DNS_DAEMON" >/dev/null 2>&1; then
+    pitchfork status "$DNS_DAEMON" 2>&1 | sed 's/^/   /'
   else
-    api GET "/dns/zones/${zid}" \
-      | jq -r '"   zone:    " + .name + " (" + .id + ", enabled=" + (.enabled | tostring) + ")"' \
-      || true
-    rec="$(api GET "/dns/zones/${zid}/records" \
-      | jq -r --arg n "*.${TLD}" \
-          '.[] | select(.name == $n)
-               | .name + " -> " + .content + " (ttl " + (.ttl | tostring) + ")"')"
-    if [ -n "$rec" ]; then
-      printf '   record:  %s\n' "$rec"
-    else
-      printf '   record:  *.%s MISSING - run: %s up\n' "$TLD" "$PROG"
-    fi
+    printf '   %s not found (run: %s up)\n' "$DNS_DAEMON" "$PROG"
   fi
 
-  # Ask this peer's own NetBird resolver: it answers the zone records exactly as
-  # it does on every other peer. Unlike this, 127.0.0.1:15353 (pitchfork's local
-  # stub) and a local getent always answer 127.0.0.1 on the ingress host itself.
-  info "NetBird local resolver (@${ip:-none}:53)"
+  info "dnsmasq (@${ip:-none}:${DNS_PORT}, queried directly)"
   if [ -z "$ip" ] || ! command -v dig >/dev/null 2>&1; then
     printf '   (needs a wt0 address and dig, from bind-utils)\n'
   else
-    printf '   test.<tld>      -> %s\n' \
-      "$(dig +short +time=2 +tries=1 "@${ip}" "test.${TLD}" A 2>/dev/null | tr '\n' ' ')"
-    printf '   a.b.test.<tld>  -> %s (one label level only)\n' \
-      "$(dig +short +time=2 +tries=1 "@${ip}" "a.b.test.${TLD}" A 2>/dev/null | tr '\n' ' ')"
+    printf '   a.b.<tld>      -> %s\n' "$(dnsq "$ip" "a.b.${TLD}")"
+    printf '   a.b.c.d.<tld>  -> %s\n' "$(dnsq "$ip" "a.b.c.d.${TLD}")"
   fi
+
+  PAT="$(netbird_pat)"
+  info "NetBird nameserver group"
+  nid="$(nameserver_id)"
+  if [ -z "$nid" ]; then
+    printf '   none for %s - run: %s up\n' "$TLD" "$PROG"
+  else
+    api GET "/dns/nameservers/${nid}" \
+      | jq -r '"   name:    " + .name + " (" + .id + ", enabled=" + (.enabled | tostring) + ")",
+               "   domains: " + (.domains | join(",")),
+               "   server:  " + (.nameservers | map(.ip + ":" + (.port | tostring)) | join(","))' \
+      || true
+  fi
+
+  info "notes"
+  printf '   local getent/dig go through pitchfork'"'"'s stub (127.0.0.1:15353) and\n'
+  printf '   answer 127.0.0.1 here; check end-to-end from another peer:\n'
+  printf '     resolvectl query a.b.%s\n' "$TLD"
 }
 
 while (( $# )); do
   case "$1" in
     up|down|status) CMD="$1"; shift ;;
-    --purge) PURGE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument '$1'" ;;
   esac

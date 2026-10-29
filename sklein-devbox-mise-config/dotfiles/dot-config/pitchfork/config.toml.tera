@@ -1,8 +1,14 @@
-#- The proxy TLD is the host's own FQDN: each instance exposes
-#   <daemon>.<project>.<fqdn>. `~/bin/sklein-devbox-ingress` derives the same
-#   value from `hostname -f`, so both must stay in sync.
-{%- set fqdn = exec(command="hostname -f") -%}
-{%- if "." not in fqdn %}{{ throw(message="pitchfork config.toml: `hostname -f` did not return an FQDN") }}{% endif %}
+#- The proxy TLD is the instance namespace, not the host FQDN: each instance
+#   exposes <daemon>.<project>.<instance>.<ingress_domain>. It must stay
+#   OUTSIDE the NetBird peer DNS domain (homelab.stephane-klein.info): NetBird
+#   is authoritative over that domain and never forwards a name below it to a
+#   nameserver, so the wildcard DNS relies on a nameserver group, which is only
+#   consulted for a foreign domain. `~/bin/sklein-devbox-ingress` computes the
+#   same value from `hostname -s` and the same `ingress_domain` literal.
+{%- set instance = exec(command="hostname -s") -%}
+{%- set ingress_domain = "devbox.sklein.xyz" -%}
+{%- set tld = instance ~ "." ~ ingress_domain %}
+{%- if "." in instance or instance == "" %}{{ throw(message="pitchfork config.toml: `hostname -s` did not return a single label") }}{% endif %}
 
 [settings.web]
 auto_start = true
@@ -51,15 +57,14 @@ boot_start = true
 # Wildcard subdomains over NetBird + a per-hostname TLS reverse proxy in front
 # of the daemons above. Driven by ~/bin/sklein-devbox-ingress (up/down/status).
 #
-#   - a NetBird Custom DNS Zone for <tld> holds a wildcard A record
-#     *.<tld> -> the wt0 address (the script maintains it through the API).
-#     NetBird resolves it as part of its authoritative peer DNS domain, so no
-#     DNS daemon runs on this host; a wildcard matches one label level only.
+#   - dnsmasq answers *.<tld> (any depth) with the wt0 address; every NetBird
+#     peer reaches it through the nameserver group the script maintains via the
+#     API. <tld> sits outside the peer DNS domain on purpose: NetBird is
+#     authoritative over that domain and never forwards below it to a
+#     nameserver, so a nameserver group there would be dead config.
 #   - the proxy routes <daemon>.<project>.<tld>, plus any extra label on the
 #     left (proxy.wildcard), and signs a per-hostname certificate with its
 #     local CA ($PITCHFORK_STATE_DIR/proxy/ca.pem, to distribute to clients).
-#     DNS only covers one label (<slug>.<tld>), so project daemons and
-#     extra-left-label hostnames are routed but not resolvable from peers.
 #
 # `host = "0.0.0.0"` lets the proxy listen on the (dynamic) wt0 address so
 # NetBird peers can reach it; it therefore also listens on the other
@@ -68,13 +73,33 @@ boot_start = true
 [settings.proxy]
 enable = true
 https = true
-tld = "{{ fqdn }}"
+tld = "{{ tld }}"
 wildcard = true
 host = "0.0.0.0"
 port = 443
 
+# DNS wildcard for the proxy TLD. `--address=/<tld>/<ip>` matches the domain
+# and every subdomain at any depth. `--conf-file=/dev/null` keeps Fedora's
+# /etc/dnsmasq.conf out of the picture (it sets `local-service`, which would
+# restrict who may query this daemon). The run script computes the wt0 address
+# at start, so `up` must run after `netbird up`.
+[daemons.sklein-devbox-ingress-dns]
+run = '''
+IP="$(/usr/sbin/ip -4 -o addr show wt0 | awk 'NR==1{split($4,a,"/");print a[1]}')"
+[ -n "$IP" ] || { echo "sklein-devbox-ingress-dns: wt0 has no IPv4 (is netbird up?)" >&2; exit 1; }
+exec /usr/sbin/dnsmasq --keep-in-foreground --conf-file=/dev/null --port=5353 \
+  --listen-address="$IP" --listen-address=127.0.0.1 --bind-interfaces \
+  --no-resolv --no-hosts --domain-needed \
+  --address=/.{{ tld }}/$IP
+'''
+retry = true
+# Keep the daemon running across a supervisor restart: a daemon started only
+# through `pitchfork start` (on the CLI) is not re-adopted after
+# `pitchfork supervisor start --force`.
+boot_start = true
+
 # Route the global daemons above through the proxy. Global daemons have no
-# project hostname, so they need a slug; <slug>.<tld> is what peers resolve
-# (the DNS wildcard covers one label level only).
+# project hostname, so they need a slug; <slug>.<tld> resolves like any other
+# name under the TLD.
 [slugs]
 openchamber     = { dir = "~", daemon = "openchamber" }

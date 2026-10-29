@@ -267,79 +267,103 @@ workstation to persist.
 
 `dotfiles/bin/sklein-devbox-ingress` is deployed to `~/bin/sklein-devbox-ingress`
 (that directory is not on `PATH`, so invoke it by path). It exposes the instance
-to the NetBird network under `*.<tld>` and terminates TLS for the daemons behind
-a per-hostname certificate. `<tld>` is the **host's own FQDN** (`hostname -f`,
-e.g. `sklein-devbox-dev.homelab.stephane-klein.info`): the script and the
-pitchfork proxy template both derive it the same way, so they cannot diverge.
+to the NetBird network under `*.<tld>` (any depth) and terminates TLS for the
+daemons behind a per-hostname certificate.
+
+`<tld>` is **not** the host FQDN: it is `<instance>.<ingress_domain>`, with
+`<instance>` = `hostname -s` and `ingress_domain` = `devbox.sklein.xyz`
+(`ingress_domain` in `config.toml.tera`, `INGRESS_DOMAIN` in the script). Both
+sides use the same two values, so they cannot diverge.
 
 ```sh
-~/bin/sklein-devbox-ingress up       # NetBird zone + wildcard record + proxy
-~/bin/sklein-devbox-ingress status   # proxy, zone, record, NetBird resolution
-~/bin/sklein-devbox-ingress down [--purge]
+~/bin/sklein-devbox-ingress up       # dnsmasq + nameserver group + proxy
+~/bin/sklein-devbox-ingress status   # proxy, daemon, group, resolution
+~/bin/sklein-devbox-ingress down     # delete the nameserver group
 ```
 
-`down` removes the wildcard record (peers stop resolving the ingress);
-`--purge` also deletes the zone and the legacy nameserver group.
+`down` deletes the group only (peers stop resolving the ingress); the daemon and
+the proxy keep running.
 
-It ties two pieces together, none of which needs cloud-init or a root systemd
+It ties three pieces together, none of which needs cloud-init or a root systemd
 unit:
 
-- a **NetBird Custom DNS Zone** whose domain is `<tld>`, distributed to the
-  `All` group, holding one wildcard `A` record `*.<tld>` → the `wt0` address.
-  NetBird serves it from its own resolver on every peer. No DNS daemon runs on
-  the instance, and `up` must run after `netbird up` (the record carries the
-  overlay address).
+- **dnsmasq**, a pitchfork daemon (`sklein-devbox-ingress-dns`, unprivileged)
+  bound to `wt0:5353`, answering `*.<tld>` at any depth with the overlay
+  address (`--address=` matches every subdomain, whatever its depth). Its `run`
+  computes the current `wt0` address at start, so `up` must run after
+  `netbird up`.
 - the **pitchfork reverse proxy** (`[settings.proxy]` in
-  `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld` = the host FQDN,
-  `host = "0.0.0.0"` (so peers reach the dynamic `wt0` address) and `port = 443`.
-  It signs a certificate per requested hostname from its local CA
-  (`~/.local/state/pitchfork/proxy/ca.pem`), which clients must trust —
-  distribute it and run `pitchfork proxy trust --cert <copied-ca.pem>`.
+  `dotfiles/dot-config/pitchfork/config.toml.tera`): `tld` = the instance
+  namespace, `wildcard = true`, `host = "0.0.0.0"` (so peers reach the dynamic
+  `wt0` address) and `port = 443`. It signs a certificate per requested
+  hostname from its local CA (`~/.local/state/pitchfork/proxy/ca.pem`), which
+  clients must trust — distribute it and run
+  `pitchfork proxy trust --cert <copied-ca.pem>`.
+- a **NetBird nameserver group** (`ingress-<instance>`, maintained by the
+  script): match domain `<tld>`, server `<wt0>:5353`, distributed to `All`.
+  That is what makes peers send the queries to dnsmasq.
 
 The only privileged step is `pitchfork proxy setup` (bind capability for
 `:443`, CA trust into the system store), run by `up` and re-run after a
 pitchfork upgrade. Everything else runs as `devbox`.
 
-### Why a zone and not a nameserver
+### Why the namespace is not the host FQDN
 
-`<tld>` is a peer FQDN, i.e. a name inside the NetBird peer DNS domain
-(Settings → Network → DNS Domain, here `homelab.stephane-klein.info`). The
-NetBird client resolver is **authoritative** for that domain: it answers peer
-names and returns NXDOMAIN with the `aa` flag for everything else, never
-forwarding to a nameserver. A nameserver group with `match domain = <tld>`
-would look `Available` in `netbird status -d` and still be dead config. Zone
-records are injected into that authoritative answer instead — the only
-supported way to add names under the peer DNS domain (same mechanism as
-`*.sklein.internal`).
+The NetBird peer DNS domain (`homelab.stephane-klein.info`, Settings → Network →
+DNS Domain) is **authoritative**: the client resolver answers peer names and
+returns NXDOMAIN with the `aa` flag for anything else, without ever forwarding
+to a nameserver. A nameserver group below that domain is dead config, and a
+Custom DNS Zone there caps the wildcard at one label level.
 
-### One label level only
+The ingress namespace therefore lives *outside* it:
+`<instance>.devbox.sklein.xyz`. A nameserver group is consulted for that domain,
+and dnsmasq answers at any depth, so `<daemon>.<project>.<tld>` and
+`extra.<slug>.<tld>` both resolve.
 
-A wildcard record matches exactly one label, so:
+### Split DNS, nothing published
 
-- `<slug>.<tld>` resolves — this covers global daemons routed with `[slugs]`;
-- `<daemon>.<project>.<tld>` and `<extra>.<slug>.<tld>` do **not** resolve.
-  The proxy would route them, but no peer can resolve the name.
+`devbox.sklein.xyz` has no public record: a client outside NetBird asks
+Cloudflare and gets NXDOMAIN, which is the intended behaviour. Do not publish a
+wildcard there — it would expose the internal names and create a split-horizon
+trap if the NetBird rule goes missing.
 
-Getting more levels would require moving the TLD out of the peer DNS domain
-(e.g. a dedicated zone like `devbox.sklein.dev`), since NetBird never delegates
-a subdomain of its own peer domain.
+Consequences: the namespace resolves only while the instance is up, and only on
+peers whose DNS is managed by NetBird and supports match domains (Linux with
+systemd-resolved, macOS, Windows 10+). A peer that queried the name before the
+group was installed keeps the public NXDOMAIN in cache; clear it with
+`resolvectl flush-caches`.
 
 ### Checking it
 
-`status` queries the zone and the record through the API, then asks **this
-peer's NetBird resolver** (`dig @<wt0 ip>`) — which answers the zone records
-exactly like any other peer. Do not trust a local `getent`/`dig` without
-`@<wt0 ip>`: `pitchfork proxy setup` installs a stub on `127.0.0.1:15353` that
-answers `*.<tld>` with `127.0.0.1` on the ingress host itself, so the system
-resolver always looks green there.
+`status` checks the daemon, queries dnsmasq directly at two and four labels, and
+prints the nameserver group from the API. The end-to-end check is from another
+peer:
 
-Connected peers pick the zone up on their next network map update; if a name
-still does not resolve, resync the client: `netbird down && netbird up`.
+```sh
+resolvectl query a.b.<instance>.devbox.sklein.xyz
+```
+
+Do not trust a local `getent`/`dig` on the ingress host itself: `pitchfork proxy
+setup` installs a stub on `127.0.0.1:15353` that answers `*.<tld>` with
+`127.0.0.1`, so the system resolver always looks green there.
+
+Peers pick the group up on their next network map update; if a name still does
+not resolve, resync the client: `netbird down && netbird up`.
 
 Daemons defined in the global pitchfork config get no project hostname; route
 them through the proxy with a `[slugs]` entry (see the commented block in
-`config.toml.tera`). To expose a service, set a daemon's `port`, add a slug,
-and it answers at `<slug>.<tld>`.
+`config.toml.tera`). To expose a service, set a daemon's `port`, add a slug, and
+it answers at `<slug>.<tld>`.
+
+### Migrating from the previous design (one-shot)
+
+Earlier versions of the script created a NetBird Custom DNS Zone
+(`sklein-devbox-ingress`) plus, before that, a nameserver group with the same
+name, both anchored on the host FQDN. Neither is used anymore. After the first
+`up` with this version, delete them once through the API (`DELETE
+/dns/zones/<id>` and `DELETE /dns/nameservers/<id>`); the script deliberately
+keeps no migration code. Leaving the old zone in place would keep resolving
+`<slug>.<old fqdn>` to the instance while the proxy no longer routes that Host.
 
 ## Rules of thumb
 

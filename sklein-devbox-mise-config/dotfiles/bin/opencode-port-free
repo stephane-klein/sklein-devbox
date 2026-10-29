@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# opencode-port-free - give port 4096 back to the pitchfork-supervised OpenCode
+# server before that daemon starts.
+#
+# Pitchfork checks `port = 4096` before it spawns `opencode serve --service`, so
+# an unsupervised server started by a client during a restart makes every later
+# `pitchfork start global/opencode-server` fail (seen on 2026-10-29). This script
+# runs as a oneshot dependency of that daemon and clears the port first.
+#
+# It never touches a process that pitchfork supervises: `pitchfork start` on an
+# already running daemon runs its dependencies first, and killing the server
+# there would leave the daemon errored.
+set -u
+
+port=4096
+
+listener_pid() {
+  ss -ltnpH "sport = :${port}" 2>/dev/null |
+    sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1
+}
+
+# True when the process belongs to the pitchfork supervisor's tree.
+is_supervised() {
+  local p="$1" i=0 comm
+  while [ -n "$p" ] && [ "$p" -gt 1 ] && [ "$i" -lt 15 ]; do
+    comm="$(ps -o comm= -p "$p" 2>/dev/null || true)"
+    [ "$comm" = "pitchfork" ] && return 0
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+    i=$((i + 1))
+  done
+  return 1
+}
+
+pid="$(listener_pid)"
+if [ -z "$pid" ]; then
+  echo "opencode-port-free: port $port is free"
+  exit 0
+fi
+
+if is_supervised "$pid"; then
+  echo "opencode-port-free: PID $pid is supervised by pitchfork, leaving it"
+  exit 0
+fi
+
+comm="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+case "$comm" in
+  *opencode*) ;;
+  *)
+    echo "opencode-port-free: port $port held by PID $pid ($comm), not an opencode process; refusing to touch it" >&2
+    exit 1
+    ;;
+esac
+
+echo "opencode-port-free: port $port held by PID $pid ($comm), stopping it"
+kill "$pid" 2>/dev/null || true
+
+i=0
+while [ "$i" -lt 25 ]; do
+  [ -z "$(listener_pid)" ] && {
+    echo "opencode-port-free: port $port is free"
+    exit 0
+  }
+  sleep 0.2
+  i=$((i + 1))
+done
+
+echo "opencode-port-free: port $port still busy, sending SIGKILL to $pid" >&2
+kill -9 "$pid" 2>/dev/null || true
+sleep 0.2
+
+if [ -n "$(listener_pid)" ]; then
+  echo "opencode-port-free: could not free port $port" >&2
+  exit 1
+fi
+
+echo "opencode-port-free: port $port is free"
+exit 0

@@ -115,9 +115,28 @@ The container's configuration is the **deployed** form of this repo's
   fails, `opencode auth list --server …` works.
 - Port, hostname and password are pinned by the bootstrap `post-dotfiles` hook
   (`opencode service set port 4096`, `hostname 127.0.0.1`, `password`), the
-  password coming from gopass `opencode/devbox/server-password`. Do not disable
-  the service: clients would silently start private servers on the same
-  `opencode.db`.
+  password coming from gopass `opencode/devbox/server-password`. Do not set
+  `disabled true` to stop clients from starting a server on port 4096: that flag
+  does not block a server, it makes every client behave like `--standalone`.
+  Each client then runs its own private server on an ephemeral port and stops
+  using the shared one, while OpenChamber keeps talking to 4096: several servers
+  on the same `opencode.db`. Keep the key at `false`; `set disabled false` does
+  not stop a running service, only `true` does.
+- The pitchfork supervisor belongs to systemd: a user unit created by
+  `pitchfork boot enable` runs `supervisor run --boot`, the only mode that
+  starts the daemons marked `boot_start`. The `post-dotfiles` hook also enables
+  linger (`loginctl enable-linger "$USER"`), so the unit starts at boot without
+  a login. A manual `pitchfork supervisor start --force` is not boot mode: it
+  stops every daemon and leaves them down, which is how the OpenCode server
+  stayed off after the 2026-10-28 reload and let a client take port 4096. Reload
+  with `systemctl --user restart pitchfork`; `~/bin/sklein-devbox-ingress up`
+  does exactly that.
+- `global/opencode-port-free` is a oneshot dependency of `opencode-server`: it
+  runs before every start and stops an unsupervised `opencode` process holding
+  port 4096, so a client that took the port during a restart cannot block the
+  next `pitchfork start`. It never touches a process supervised by pitchfork,
+  because `pitchfork start` on a running daemon runs its dependencies first. It
+  normally shows `completed` in `pitchfork list`.
 - Provider credentials live in the SQLite database. `~/.local/share/opencode/credentials.json`
   (rendered from gopass) is the source of truth: `~/bin/import-opencode-credentials`
   runs at the end of the bootstrap hook and logs the managed accounts out,

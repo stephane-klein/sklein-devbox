@@ -9,11 +9,20 @@
 {%- set ingress_domain = "devbox.sklein.xyz" -%}
 {%- set tld = instance ~ "." ~ ingress_domain %}
 {%- if "." in instance or instance == "" %}{{ throw(message="pitchfork config.toml: `hostname -s` did not return a single label") }}{% endif %}
+{%- set home = exec(command="echo $HOME") -%}
+{%- set mise_bin = home ~ "/.local/bin/mise" %}
 
 [settings.web]
 auto_start = true
 bind_port = 3120
 bind_address = "127.0.0.1"
+
+# Boot registration, written by `pitchfork boot enable`. The path must be
+# absolute: pitchfork expands neither `~` nor `$HOME`, and systemd starts the
+# unit without a shell. mise maintains the `latest` symlink across upgrades, so
+# the registration keeps pointing at a valid binary.
+[settings.boot]
+executable = "{{ home }}/.local/share/mise/installs/pitchfork/latest/pitchfork"
 
 [daemons.chromium-headless]
 run = """
@@ -21,21 +30,49 @@ chromium-browser --headless=new  --remote-debugging-port=9222  --remote-debuggin
 """
 retry = true
 
+[daemons.opencode-port-free]
+# Pitchfork checks `port = 4096` before it spawns a daemon, so an unsupervised
+# `opencode serve --service` started by a client during a restart makes every
+# later start fail (seen on 2026-10-29). This oneshot runs before
+# opencode-server and clears the port. Pitchfork runs a oneshot again on every
+# start of its dependent, so this covers start, restart, boot start and proxy
+# auto-start without any call site in the mise hook or the ingress script.
+#
+# The script leaves a process supervised by pitchfork alone: `pitchfork start`
+# on an already running daemon runs its dependencies first, and killing the
+# server there would leave the daemon errored.
+run = "{{ home }}/bin/opencode-port-free"
+oneshot = true
+
 [daemons.opencode-server]
+depends = ["opencode-port-free"]
 # OpenCode 2: `serve --service` runs the shared server in the foreground and
 # registers it in ~/.local/state/opencode/service.json, so every client (TUI,
 # CLI, OpenChamber) discovers its URL and password without any flag. Port,
 # hostname and password come from `opencode service set` (see the mise
 # post-dotfiles hook); pitchfork keeps the process supervised and logs it.
-run = "mise exec -- opencode serve --service"
+#
+# `mise` is spelled out because systemd starts the supervisor without the
+# shell's PATH: ~/.local/bin is absent from the unit environment, so a bare
+# `mise` would not resolve at boot.
+run = "{{ mise_bin }} exec -- opencode serve --service"
 retry = true
 # Readiness: pitchfork starts dependents (openchamber) once the port listens.
 port = 4096
-# Come back with the supervisor: without this, a `supervisor start --force`
-# (e.g. reloading the proxy TLD) leaves the server down, and the next OpenCode
-# client starts an unsupervised `serve --service` that then holds port 4096,
-# making every later `pitchfork start global/opencode-server` fail.
+# `boot_start` only applies when the supervisor runs in boot mode
+# (`supervisor run --boot`), which is what the systemd unit created by
+# `pitchfork boot enable` passes. A manual `supervisor start --force` is not
+# boot mode and leaves this daemon down; reload through systemd instead
+# (`systemctl --user restart pitchfork`).
 boot_start = true
+
+# The run command above calls mise by absolute path, so opencode itself starts.
+# Its children do not: `mise exec` prepends the tool install directories to PATH
+# but never ~/.local/bin, where the `mise` binary lives. Every MCP server
+# declared as `mise exec -- …` then fails with `NotFound: ChildProcess.spawn`.
+# Hand the daemon a PATH that contains ~/.local/bin so those commands resolve.
+[daemons.opencode-server.env]
+PATH = "{{ home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
 [daemons.openchamber]
 run = """
@@ -46,7 +83,7 @@ export OPENCODE_PORT=4096
 export OPENCODE_SERVER_PASSWORD={{ secret(name="OPENCODE_SERVER_PASSWORD") }}
 OPENCHAMBER_UI_PASSWORD={{ secret(name="OPENCHAMBER_UI_PASSWORD") }}
 export OPENCHAMBER_UI_PASSWORD
-exec mise exec -- openchamber --lan --port 3000 --foreground
+exec {{ mise_bin }} exec -- openchamber --lan --port 3000 --foreground
 """
 retry = true
 depends = ["opencode-server"]

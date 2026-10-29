@@ -208,22 +208,42 @@ cmd_up() {
   fi
   unset DBUS_SESSION_BUS_ADDRESS
 
-  # `supervisor start --force` restarts every daemon it supervises (the OpenCode
-  # server and OpenChamber included), so only reload when it is actually needed:
-  # the supervisor is not running, or the rendered config is newer than the
-  # running supervisor. `pitchfork proxy status` reads the config FILE, not the
-  # running proxy, so it cannot tell whether a reload is pending: the supervisor
-  # reads settings.proxy.tld once, at start, and keeps serving it.
-  local config_path="$HOME/.config/pitchfork/config.toml" sup_pid=""
-  if ! pitchfork supervisor status >/dev/null 2>&1; then
-    info "starting the pitchfork supervisor"
+  # The unit installed by `pitchfork boot enable` runs `supervisor run --boot`,
+  # the only mode where daemons marked `boot_start` start with the supervisor.
+  # A plain `supervisor start --force` is not boot mode: it stops every daemon
+  # and leaves the boot_start ones down, which is how the OpenCode server stayed
+  # off after the 2026-10-28 reload. So reload through systemd when the unit
+  # exists, and never leave a manual supervisor beside it.
+  #
+  # Reload only when it is actually needed: the supervisor is not running, or
+  # the rendered config is newer than the running supervisor. `pitchfork proxy
+  # status` reads the config FILE, not the running proxy, so it cannot tell
+  # whether a reload is pending: the supervisor reads settings.proxy.tld once,
+  # at start, and keeps serving it.
+  local config_path="$HOME/.config/pitchfork/config.toml" sup_pid="" unit=false
+  systemctl --user cat pitchfork >/dev/null 2>&1 && unit=true
+
+  if $unit && ! systemctl --user is-active --quiet pitchfork; then
+    if pitchfork supervisor status >/dev/null 2>&1; then
+      info "handing the supervisor over to systemd"
+      pitchfork supervisor stop
+    fi
+    info "starting the pitchfork supervisor (systemd unit, boot mode)"
+    systemctl --user start pitchfork
+  elif ! $unit && ! pitchfork supervisor status >/dev/null 2>&1; then
+    info "starting the pitchfork supervisor (no systemd unit)"
     pitchfork supervisor start
   else
-    sup_pid="$(pgrep -f 'pitchfork supervisor run$' | head -1 || true)"
+    sup_pid="$(pgrep -f 'pitchfork supervisor run' | head -1 || true)"
     if [ -n "$sup_pid" ] && [ "$config_path" -nt "/proc/${sup_pid}" ]; then
       info "reloading the pitchfork supervisor (config newer than the running daemon)"
-      info "(supervised daemons restart; boot_start ones come back on their own)"
-      pitchfork supervisor start --force
+      if $unit; then
+        systemctl --user restart pitchfork
+      else
+        info "(no systemd unit: boot_start daemons need an explicit start)"
+        pitchfork supervisor start --force
+        pitchfork start global/opencode-server global/openchamber || true
+      fi
     else
       info "pitchfork supervisor up to date (no restart)"
     fi

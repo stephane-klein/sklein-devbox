@@ -8,6 +8,23 @@ He speaks French natively and has a modest level of English.
 Before starting a task, scan the available skills for a matching `sklein-*`
 skill and load it if applicable.
 
+## Writing rules
+
+Write as one person talking to another, not as compressed text. Rules:
+
+- Short sentences; keep the subject and the verb close together.
+- Only people or living beings "do" actions: no "this parameter swallows the
+  error" or "this rule bites"; say what happens.
+- No verbs invented from nouns ("calendarise", "footnote"): use the full phrase.
+- No noun piles: "the reader's patience budget" rather than "reader patience
+  budget".
+- Keep the small linking words ("that", "which") even when they are optional.
+- Prefer the active voice and common turns of phrase to rare wording.
+- Do not compress: better one more sentence than a sentence to decode.
+- Before ending your turn, reread the whole message once, sentence by sentence:
+  subject, verb, head noun. Rewrite any sentence that lacks one, even inside a
+  bullet list.
+
 ## Stateful systems
 
 "apply"/"go"/"ok"/"continue" never authorize DB or remote execution; they mean

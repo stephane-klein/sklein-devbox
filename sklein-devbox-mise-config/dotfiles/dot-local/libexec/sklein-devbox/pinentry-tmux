@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Deployed to ~/.local/libexec/sklein-devbox/pinentry-tmux, off PATH: gpg-agent
+# launches it through `pinentry-program`, no human types its name.
 # -----------------------------------------------------------------------------
 # Vendored from https://github.com/eth-p/pinentry-tmux (MIT license).
 # Upstream is unmaintained (last commit Nov. 2022).

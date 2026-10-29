@@ -19,7 +19,7 @@
 set -u
 
 PROG="${0##*/}"
-PINENTRY_TMUX="${PINENTRY_TMUX:-$HOME/bin/pinentry-tmux}"
+PINENTRY_TMUX="${PINENTRY_TMUX:-$HOME/.local/libexec/sklein-devbox/pinentry-tmux}"
 GPG_AGENT_CONF="${GNUPGHOME:-$HOME/.config/gnupg}/gpg-agent.conf"
 TMP="${TMPDIR:-/tmp}"
 # Passphrase of the throwaway key used by the guided check. It is printed on

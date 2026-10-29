@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Deployed to ~/.local/libexec/sklein-devbox/opencode-port-free, off PATH: it
+# runs as a pitchfork oneshot dependency, no human types its name.
+#
 # opencode-port-free - give port 4096 back to the pitchfork-supervised OpenCode
 # server before that daemon starts.
 #

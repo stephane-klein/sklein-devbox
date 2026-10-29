@@ -48,9 +48,9 @@ OPENCODE_GO_ACCOUNT2_APIKEY = "OPENCODE_GO_ACCOUNT2_APIKEY"
 
 # GPG commit/tag signing (git, jj) needs a pinentry to prompt for the key
 # passphrase; the secret keys are imported into ~/.config/gnupg by
-# import-gpg-keys.sh. ~/bin/pinentry-tmux shows the prompt in a tmux popup;
-# without an attached tmux client, signing fails at once with "No pinentry"
-# instead of blocking (jj git init included).
+# import-gpg-keys.sh. `~/.local/libexec/sklein-devbox/pinentry-tmux` shows the
+# prompt in a tmux popup; without an attached tmux client, signing fails at
+# once with "No pinentry" instead of blocking (jj git init included).
 "dnf:pinentry" = "latest"
 "dnf:pinentry-tty" = "latest"
 
@@ -199,6 +199,7 @@ starship = "1.26.0"
 #   dotfiles/dot-local/...   -> ~/.local/...
 #   dotfiles/dot-kube/...    -> ~/.kube/...
 #   dotfiles/bin/...         -> ~/bin/...
+#
 [dotfile_groups.home]
 root = "."
 target = "~"
@@ -209,6 +210,9 @@ exclude = ["*.tera"]
 [dotfile_groups.home.entries]
 # Permissions the plain copy walk cannot express.
 "~/.ssh/config"                     = { mode = "copy", permissions = "0600" }
+
+# `~/bin` is on PATH (the base image's ~/.zprofile prepends it), so only
+# commands meant to be typed by a human live there.
 "~/bin/export-gpg-keys.sh"          = { mode = "copy", permissions = "0700" }
 "~/bin/import-gpg-keys.sh"          = { mode = "copy", permissions = "0700" }
 "~/bin/suspend_incus1.sh"           = { mode = "copy", permissions = "0700" }
@@ -219,9 +223,17 @@ exclude = ["*.tera"]
 "~/bin/gpg-signing-doctor"          = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
-"~/bin/pinentry-tmux"               = { mode = "copy", permissions = "0755" }
 "~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
-"~/bin/opencode-port-free"          = { mode = "copy", permissions = "0755" }
+
+# Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and the
+# `opencode-port-free` pitchfork oneshot runs before opencode-server.
+"~/.local/libexec/sklein-devbox/pinentry-tmux"      = { mode = "copy", permissions = "0755" }
+"~/.local/libexec/sklein-devbox/opencode-port-free" = { mode = "copy", permissions = "0755" }
+
+# Moved from ~/bin to ~/.local/libexec/sklein-devbox: `apply` never deletes a
+# file, so remove the old copies explicitly; they were reachable from PATH.
+"~/bin/pinentry-tmux"                = { mode = "absent" }
+"~/bin/opencode-port-free"           = { mode = "absent" }
 
 # Left behind by the OpenCode 1 -> 2 migration: tui.json became cli.json,
 # auth.json* became credentials.json + `opencode auth import`, and the two
@@ -238,6 +250,7 @@ exclude = ["*.tera"]
 # Templates (sources end in .tera, excluded from the walk above; the source is
 # relative to the group root, i.e. dotfiles/).
 "~/.config/pitchfork/config.toml"    = { source = "dot-config/pitchfork/config.toml.tera", mode = "template" }
+"~/.config/gnupg/gpg-agent.conf"     = { source = "dot-config/gnupg/gpg-agent.conf.tera", mode = "template" }
 "~/.config/incus/client.crt"         = { source = "dot-config/incus/client.crt.tera", mode = "template" }
 "~/.config/incus/client.key"         = { source = "dot-config/incus/client.key.tera", mode = "template" }
 "~/.config/gh/hosts.yml"             = { source = "dot-config/gh/hosts.yml.tera", mode = "template" }

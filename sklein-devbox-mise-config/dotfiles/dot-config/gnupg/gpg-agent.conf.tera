@@ -1,0 +1,8 @@
+{%- set home = exec(command="echo $HOME") -%}
+# Rendered from dotfiles/dot-config/gnupg/gpg-agent.conf.tera: the path must be
+# absolute, because gpg-signing-doctor compares the configured value with the
+# deployed helper, and gpg-agent itself does not expand `~`.
+pinentry-program {{ home }}/.local/libexec/sklein-devbox/pinentry-tmux
+default-cache-ttl 86400
+max-cache-ttl 86400
+allow-loopback-pinentry

@@ -195,7 +195,7 @@ This repository provides the **instance side** of the link:
 ## Instance doctor
 
 `dotfiles/bin/sklein-devbox-doctor` is deployed to `~/bin/sklein-devbox-doctor`
-(that directory is not on `PATH`, so invoke it by path). Run it from a console
+(`~/bin` is on `PATH`, so the bare name works too). Run it from a console
 inside the instance to exercise the instance side of the link end to end:
 
 - it first runs `mise doctor`;
@@ -214,8 +214,8 @@ sound is CC0; see `files/sounds/README.md`.
 
 `dotfiles/bin/gpg-signing-doctor` is deployed to `~/bin/gpg-signing-doctor`.
 It checks the signing chain used by git and jj: gpg, gpg-agent,
-`~/bin/pinentry-tmux` and the tmux popup. Run it from a console inside the
-instance:
+`~/.local/libexec/sklein-devbox/pinentry-tmux` and the tmux popup. Run it from a
+console inside the instance:
 
 ```sh
 ~/bin/gpg-signing-doctor
@@ -266,7 +266,7 @@ workstation to persist.
 ## Wildcard subdomains (`sklein-devbox-ingress`)
 
 `dotfiles/bin/sklein-devbox-ingress` is deployed to `~/bin/sklein-devbox-ingress`
-(that directory is not on `PATH`, so invoke it by path). It exposes the instance
+(`~/bin` is on `PATH`, so the bare name works too). It exposes the instance
 to the NetBird network under `*.<tld>` (any depth) and terminates TLS for the
 daemons behind a per-hostname certificate.
 

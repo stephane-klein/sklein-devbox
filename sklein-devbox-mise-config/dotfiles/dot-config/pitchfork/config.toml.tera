@@ -41,7 +41,7 @@ retry = true
 # The script leaves a process supervised by pitchfork alone: `pitchfork start`
 # on an already running daemon runs its dependencies first, and killing the
 # server there would leave the daemon errored.
-run = "{{ home }}/bin/opencode-port-free"
+run = "{{ home }}/.local/libexec/sklein-devbox/opencode-port-free"
 oneshot = true
 
 [daemons.opencode-server]

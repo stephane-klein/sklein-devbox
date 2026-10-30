@@ -96,6 +96,37 @@ agent_pid() {
     | awk '/^D [0-9]+$/ { print $2; exit }'
 }
 
+# Describe the attached tmux clients and how long each has been idle. The popup
+# can only be shown on one client, and with several attached (two SSH terminals,
+# for instance) pinentry-tmux picks the most recently active one. Saying so here
+# turns "nothing happened" into "the popup opened in the other terminal".
+tmux_clients_report() {
+  local now count=0 line="" tty activity idle
+  command -v tmux >/dev/null 2>&1 || return 1
+  now="$(date +%s)"
+  while read -r tty activity; do
+    [ -n "${tty:-}" ] || continue
+    idle=$(( now - ${activity:-0} ))
+    if [ "$idle" -ge 3600 ]; then
+      idle="$(( idle / 3600 ))h$(( (idle % 3600) / 60 ))m"
+    elif [ "$idle" -ge 60 ]; then
+      idle="$(( idle / 60 ))m$(( idle % 60 ))s"
+    else
+      idle="${idle}s"
+    fi
+    count=$((count + 1))
+    [ -z "$line" ] || line="$line, "
+    line="$line$tty (idle $idle)"
+  done < <(timeout 2 tmux list-clients -F '#{client_tty} #{client_activity}' 2>/dev/null)
+  [ "$count" -gt 0 ] || return 1
+  if [ "$count" -eq 1 ]; then
+    printf '1 attached: %s' "$line"
+  else
+    printf '%d attached: %s - the popup opens on the most recently active one' \
+      "$count" "$line"
+  fi
+}
+
 signing_key() {
   if [ -n "$KEY" ]; then
     printf '%s' "$KEY"
@@ -145,7 +176,10 @@ test_inventory() {
     record_pass "pinentry-program points at pinentry-tmux"
   fi
 
-  local client
+  local client clients_report
+  if clients_report="$(tmux_clients_report)"; then
+    printf '   tmux clients    %s\n' "$clients_report"
+  fi
   if client="$(timeout 5 "$PINENTRY_TMUX" --check 2>/dev/null)"; then
     printf '   client          %s\n' "${client#client=}"
     record_pass "popup client resolved"
@@ -313,7 +347,7 @@ test_sign() {
     return
   fi
 
-  local dir old_home fpr rc
+  local dir old_home fpr rc clients_report
   dir="$(mktemp -d)"
   old_home="${GNUPGHOME:-}"
   export GNUPGHOME="$dir/gnupg"
@@ -346,6 +380,11 @@ EOF
   # pinentry-program above, and must not keep the keygen passphrase cached.
   gpgconf --kill gpg-agent >/dev/null 2>&1 || true
   printf '   throwaway key  %s\n' "$fpr"
+  # Repeat the client list here: the popup may open in another terminal, and
+  # the human is about to wait for it.
+  if clients_report="$(tmux_clients_report)"; then
+    printf '   tmux clients    %s\n' "$clients_report"
+  fi
   printf '   in the popup, type: %s%s%s\n' "$C_OK" "$TEST_PASSPHRASE" "$C_OFF"
 
   if ! ask "Open the popup and sign with the throwaway key?"; then

@@ -109,22 +109,39 @@ fi
 # Return the tty of the tmux client that should receive the popup: the client
 # attached to the session owning GPG_TTY when possible, otherwise the most
 # recently active client.
+#
+# A pane can belong to several sessions at once: when sessions are grouped,
+# every pane of a shared window is listed once per session name. All of them
+# must be kept, because the client is attached to only one of them.
+#
+# Several clients can also be attached to those sessions, for instance two SSH
+# terminals on the same instance. tmux cannot tell which terminal has the OS
+# focus, and showing the popup on all of them is not possible, so the choice
+# falls on the client that received input last: that is the terminal the human
+# is actually typing in.
 tmux_client() {
-	local session client
+	local sessions clients
 	if [[ -n "${GPG_TTY:-}" ]]; then
-		session=$(timeout 2 tmux list-panes -a -F '#{pane_tty} #{session_name}' 2>/dev/null \
-			| awk -v tty="$GPG_TTY" '$1 == tty { print $2; exit }') || true
-		if [[ -n "$session" ]]; then
-			client=$(timeout 2 tmux list-clients -F '#{client_tty} #{client_session}' 2>/dev/null \
-				| awk -v s="$session" '$2 == s { print $1; exit }') || true
-			if [[ -n "$client" ]]; then
-				printf '%s\n' "$client"
+		sessions=$(timeout 2 tmux list-panes -a -F '#{pane_tty}|#{session_name}' 2>/dev/null \
+			| awk -F'|' -v tty="$GPG_TTY" '$1 == tty { print $2 }' | sort -u) || true
+		if [[ -n "$sessions" ]]; then
+			clients=$(timeout 2 tmux list-clients \
+				-F '#{client_tty}|#{client_session}|#{client_activity}' 2>/dev/null \
+				| awk -F'|' -v sessions="$sessions" '
+					BEGIN {
+						n = split(sessions, list, "\n")
+						for (i = 1; i <= n; i++) keep[list[i]] = 1
+					}
+					keep[$2] && $3 + 0 > best { best = $3 + 0; pick = $1 }
+					END { if (pick != "") print pick }') || true
+			if [[ -n "$clients" ]]; then
+				printf '%s\n' "$clients"
 				return 0
 			fi
 		fi
 	fi
-	timeout 2 tmux list-clients -F '#{client_tty} #{client_activity}' 2>/dev/null \
-		| sort -k2 -rn | awk 'NR == 1 { print $1 }'
+	timeout 2 tmux list-clients -F '#{client_tty}|#{client_activity}' 2>/dev/null \
+		| sort -t'|' -k2 -rn | awk -F'|' 'NR == 1 { print $1 }'
 }
 
 # Introspection, for humans and for gpg-signing-doctor: print which tmux client

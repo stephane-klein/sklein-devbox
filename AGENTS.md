@@ -98,7 +98,11 @@ The container's configuration is the **deployed** form of this repo's
   display-popup` on the client attached to the session
   owning `GPG_TTY`. Without an attached tmux client it fails immediately with
   `No pinentry`; it never falls back to a tty pinentry, which would corrupt
-  the screen of Neovim or OpenCode. gpg-agent caches the passphrase for 24 h,
+  the screen of Neovim or OpenCode. With several clients attached — two SSH
+  terminals on the same instance, for example, which are grouped sessions
+  sharing the same panes — the popup opens on the client that received input
+  last, so look at the terminal you just typed in: a popup in the other one
+  looks like a hang. gpg-agent caches the passphrase for 24 h,
   so a broken prompt may only show up after a reboot or cache expiry. Upstream
   is unmaintained (last commit nov. 2022); a rewrite is being evaluated at
   https://github.com/mmmeon/pit. `~/bin/gpg-signing-doctor` checks the whole

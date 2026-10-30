@@ -1,6 +1,8 @@
 ---
 name: sklein-sql-generation
 description: Génération de SQL pour PostgreSQL selon le style "river" et les conventions de Stéphane Klein.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-sql-generation

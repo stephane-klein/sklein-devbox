@@ -1,6 +1,8 @@
 ---
 name: gh-issue-sync
 description: "Create and edit GitHub issues via gh-issue-sync CLI. NEVER push, NEVER verify setup, NEVER pull/list/status before acting, NEVER use --edit, NEVER manually create .issues/ files, NEVER launch explore/task agents, NEVER Read issue files. Use gh-issue-sync view to verify, then Edit."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # gh-issue-sync

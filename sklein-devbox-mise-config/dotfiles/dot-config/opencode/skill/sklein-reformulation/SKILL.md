@@ -1,6 +1,8 @@
 ---
 name: sklein-reformulation
 description: Reformulation de notes — conserve la longueur (~20% marge), utilise des listes à puces, propose 3 alternatives par défaut.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-reformulation

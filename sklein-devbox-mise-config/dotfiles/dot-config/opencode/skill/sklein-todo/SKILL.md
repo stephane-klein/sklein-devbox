@@ -1,6 +1,8 @@
 ---
 name: sklein-todo
 description: "Gère la todo list de Stéphane via la banque mémoire hindsight `todo` et le sous-agent `@todo`. Use when user says: ajoute à ma todo, marque comme fait, liste mes tâches, supprime une tâche, bloque/débloque une tâche, quelles sont mes priorités, importe ça dans ma todo, ou colle un bloc de texte contenant plusieurs tâches."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-todo

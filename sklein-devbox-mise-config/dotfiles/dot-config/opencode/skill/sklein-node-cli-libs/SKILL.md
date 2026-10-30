@@ -5,6 +5,8 @@ description: >
   env vars, config files (TOML/YAML) with CLI > env > local config > global config >
   defaults priority. Use when creating a CLI in Node.js, adding subcommands, or
   setting up argument/env/config parsing.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # CLI Node.js avec yargs (pattern Cobra/Viper)

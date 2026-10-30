@@ -8,6 +8,8 @@ description: >
   si une écriture "sonne" trop théorique, trop scolaire, ou trop savante.
   Déclenche aussi si l'utilisateur colle un extrait et demande un retour sur
   le style, le ton, ou la lisibilité.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Tone Analyzer — Registre professoral

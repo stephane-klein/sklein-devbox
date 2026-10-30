@@ -1,6 +1,8 @@
 ---
 name: skill-authoring
 description: Guide pour la création de nouveaux skills
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # skill-authoring

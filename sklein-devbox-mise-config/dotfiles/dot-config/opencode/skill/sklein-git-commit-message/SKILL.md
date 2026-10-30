@@ -1,6 +1,8 @@
 ---
 name: sklein-git-commit-message
 description: "Guidelines for proposing git commit messages for Stéphane Klein's projects. English by default, no conventional commit prefixes unless the project explicitly defines them."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-git-commit-message

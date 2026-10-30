@@ -1,6 +1,8 @@
 ---
 name: sklein-helper-scripts
 description: Conventions pour la création de scripts helper dans des dossiers scripts/
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-helper-scripts

@@ -1,6 +1,8 @@
 ---
 name: sklein-create-node-project
 description: Créer un nouveau projet Node.js basé sur les préférences de Stéphane Klein.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-create-node-project

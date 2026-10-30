@@ -3,6 +3,8 @@ name: sklein-postgres-container-image
 description: >
   Stéphane préfère les images PostgreSQL basées **Debian** aux images Alpine,
   sauf contrainte explicite d'un projet dont il n'est pas l'auteur.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-postgres-container-image

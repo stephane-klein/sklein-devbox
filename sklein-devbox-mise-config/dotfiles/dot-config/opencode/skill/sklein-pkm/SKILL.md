@@ -1,6 +1,8 @@
 ---
 name: sklein-pkm
 description: "Conventions pour la rédaction dans le PKM (Personal Knowledge Management) de Stéphane Klein sur notes.sklein.xyz. Utilise la syntaxe Obsidian."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-pkm

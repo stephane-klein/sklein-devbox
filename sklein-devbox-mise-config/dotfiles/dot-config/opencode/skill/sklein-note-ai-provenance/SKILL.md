@@ -1,6 +1,8 @@
 ---
 name: sklein-note-ai-provenance
 description: Gère le frontmatter de provenance IA (ai_origin, ai_model, date, ai_note, reviewed_at) sur les notes Markdown personnelles (PKM, brouillons, réflexions). À consulter chaque fois qu'un fichier Markdown est généré, complété ou retravaillé à partir d'un thread de conversation avec un agent IA — même sans demande explicite de l'utilisateur — pour déterminer le bon niveau de paternité (human / human-edited / collab / ai-drafted / ai-generated) et tenir le frontmatter à jour au fil des éditions.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Provenance IA dans le frontmatter des notes Markdown

@@ -5,6 +5,8 @@ description: >
   technologie de fond en comble et lever tous les pièges avant la prod.
   À utiliser quand l'utilisateur dit "playground", "spike", "POC",
   "apprendre", "explorer", ou valide une techno pour la prod.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-playground

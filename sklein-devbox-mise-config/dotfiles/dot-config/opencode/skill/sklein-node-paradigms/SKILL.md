@@ -1,6 +1,8 @@
 ---
 name: sklein-node-paradigms
 description: Paradigmes de programmation Node.js de Stéphane Klein. Utiliser lors de l'écriture de code Node.js.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Paradigmes Node.js

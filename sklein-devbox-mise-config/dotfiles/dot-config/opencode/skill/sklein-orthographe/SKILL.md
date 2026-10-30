@@ -1,6 +1,8 @@
 ---
 name: sklein-orthographe
 description: Correction orthographique et grammaticale rigoureuse de fichiers Markdown en deux phases. Analyse exhaustive → fichier YAML des erreurs → validation manuelle → correction en une passe. Use when user says "analyze errors", "apply corrections", "orthographe", "grammaire", "correction ortho", ou demande de corriger les fautes d'un fichier .md.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-orthographe

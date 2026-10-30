@@ -1,6 +1,8 @@
 ---
 name: sklein-raw-template-script
 description: Génère un script generate.sh en shell brut + minijinja (sans framework complexe type Cookiecutter) à partir d'un dossier template contenant des fichiers .jinja, des fichiers statiques et un vars-example.yaml. Use when user wants to create a generate.sh script from a template directory with .jinja files, static files, and vars-example.yaml.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-raw-template-script

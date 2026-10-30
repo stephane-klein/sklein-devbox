@@ -5,6 +5,8 @@ description: >
   chaque fois qu'il s'agit d'ajouter une librairie, de choisir entre plusieurs candidats,
   de décider d'écrire soi-même vs dépendre, ou de retirer une dépendance existante.
   S'applique à tous les langages et écosystèmes.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Doctrine de sélection des dépendances

@@ -5,6 +5,8 @@ description: >
   les collisions entre projets et instances via un hash du chemin absolu
   dans Mise. Utiliser lors de toute création ou audit de projet avec
   compose.yaml et volumes nommés.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-named-volume-doctrine

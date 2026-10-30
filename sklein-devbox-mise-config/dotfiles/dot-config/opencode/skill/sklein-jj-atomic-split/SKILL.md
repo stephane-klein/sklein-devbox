@@ -1,6 +1,8 @@
 ---
 name: sklein-jj-atomic-split
 description: "Décompose un commit Jujutsu (jj) en plusieurs commits atomiques — enrichis si nécessaire pour la cohérence — par itérations récursives, avec validation humaine avant chaque application."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-jj-atomic-split

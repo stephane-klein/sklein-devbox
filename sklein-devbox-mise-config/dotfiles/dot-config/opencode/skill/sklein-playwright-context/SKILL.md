@@ -1,6 +1,8 @@
 ---
 name: sklein-playwright-context
 description: Contexte Playwright pour Stéphane — Chromium headless déjà lancé via pitchfork, app web déjà en cours d'exécution locale. Utiliser quand l'utilisateur demande d'utiliser Playwright, de faire des tests e2e, du browser automation, ou du scraping.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Contexte Playwright

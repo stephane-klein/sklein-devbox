@@ -1,6 +1,8 @@
 ---
 name: sklein-http-api
 description: Conventions HTTP API de Stéphane Klein — nommage, verbes, codes, pagination, erreurs, versioning, HATEOAS, filtres, embedding, upload, OpenAPI. Utiliser lors de la création, modification ou review d'une API HTTP.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-http-api

@@ -1,6 +1,8 @@
 ---
 name: create-issue
 description: "Create GitHub issues. Use gh-issue-sync new, then view to verify, then Edit the file at $GH_ISSUE_SYNC_DIR. NEVER explore the project, NEVER Read issue files, NEVER use --edit, NEVER launch explore/task agents, NEVER push."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # create-issue

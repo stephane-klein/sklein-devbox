@@ -1,6 +1,8 @@
 ---
 name: sklein-add-gitleaks
 description: Ajoute gitleaks (détection de secrets) à un projet existant — hook pre-commit, script pre-push, configuration .gitleaks.toml et intégration Mise.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-add-gitleaks

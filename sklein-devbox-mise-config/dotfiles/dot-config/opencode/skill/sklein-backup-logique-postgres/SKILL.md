@@ -1,6 +1,8 @@
 ---
 name: sklein-backup-logique-postgres
 description: Backup logique PostgreSQL avec pg_back-docker-sidecar — pg_dump -Fc vers S3 avec chiffrement age, rétention configurable et scheduling cron. Utiliser quand l'utilisateur demande à mettre en place un backup logique PostgreSQL, une sauvegarde pg_dump vers S3/Object Storage, ou déployer pg_back.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-backup-logique-postgres

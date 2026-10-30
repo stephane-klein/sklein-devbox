@@ -1,6 +1,8 @@
 ---
 name: sklein-writing-style
 description: "Style d'écriture de Stéphane Klein : narration du processus intellectuel. Pour toute rédaction (notes, documentation, messages). Français et anglais."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Narration du processus intellectuel

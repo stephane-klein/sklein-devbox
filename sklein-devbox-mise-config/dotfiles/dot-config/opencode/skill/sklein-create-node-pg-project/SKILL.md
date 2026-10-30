@@ -1,6 +1,8 @@
 ---
 name: sklein-create-node-pg-project
 description: Créer un nouveau projet Node.js avec PostgreSQL (raw SQL, migrations, conteneur Podman) basé sur les préférences de Stéphane Klein. Use when user wants to create a Node.js project with PostgreSQL, migrations, or raw SQL.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-create-node-pg-project

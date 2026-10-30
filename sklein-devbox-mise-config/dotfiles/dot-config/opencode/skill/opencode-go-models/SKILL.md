@@ -3,6 +3,8 @@ name: opencode-go-models
 description: >-
   Use when the user asks about OpenCode Go base URL, OpenAI-compatible endpoint,
   models list, opencode-go models.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # OpenCode Go — OpenAI-compatible endpoint

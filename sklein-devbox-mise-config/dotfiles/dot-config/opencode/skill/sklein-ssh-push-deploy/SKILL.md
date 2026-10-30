@@ -1,6 +1,8 @@
 ---
 name: sklein-ssh-push-deploy
 description: Script de déploiement par envoi de payload via SSH sans Ansible.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Déploiement SSH push en deux fichiers (launcher + payload)

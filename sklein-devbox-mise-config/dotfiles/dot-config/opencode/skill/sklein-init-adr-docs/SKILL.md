@@ -1,6 +1,8 @@
 ---
 name: sklein-init-adr-docs
 description: Initialize ADR/agents/docs infrastructure in a project
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-init-adr-docs

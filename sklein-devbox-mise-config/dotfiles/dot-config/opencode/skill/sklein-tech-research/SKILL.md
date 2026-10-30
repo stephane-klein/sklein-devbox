@@ -1,6 +1,8 @@
 ---
 name: sklein-tech-research
 description: "Méthode de recherche de fond sur une techno, un terme ou une tendance IT/startup via HackerNews Algolia et l'historique GitHub Contributors."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-tech-research

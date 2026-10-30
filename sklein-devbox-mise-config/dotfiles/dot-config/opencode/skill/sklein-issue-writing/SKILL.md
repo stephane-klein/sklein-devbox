@@ -1,6 +1,8 @@
 ---
 name: sklein-issue-writing
 description: "Conventions for writing issues — todo section formatting rules by sklein"
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-issue-writing

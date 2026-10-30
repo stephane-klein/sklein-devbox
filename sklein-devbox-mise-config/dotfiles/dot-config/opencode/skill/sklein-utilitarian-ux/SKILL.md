@@ -1,6 +1,8 @@
 ---
 name: sklein-utilitarian-ux
 description: "Construire des interfaces web dans le style de GoatCounter, Miniflux, Hacker News, Lobsters, Sourcehut et Pinboard : fonctionnelles d'abord, sans distraction, rapides et tranchées. Utiliser cette skill chaque fois que l'utilisateur veut une interface « boring », « minimal », « fast », « utility-first », « indie dev », « FOSS-style » ou « no-nonsense », ou mentionne explicitement des outils comme GoatCounter, Miniflux, Pinboard, Lobsters, Sourcehut, Craigslist, HN-style comme références esthétiques. L'utiliser aussi quand il dit des choses comme « I don't want flashy », « just show the data », « developer tool », « self-hosted tool » ou « everything else is noise »."
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # Utilitarian UX Skill

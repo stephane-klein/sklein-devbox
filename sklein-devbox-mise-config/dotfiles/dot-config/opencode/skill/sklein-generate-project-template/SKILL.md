@@ -1,6 +1,8 @@
 ---
 name: sklein-generate-project-template
 description: Génère le template (template/), le script generate.sh, le vars-example.yaml, et le SKILL.md d'un projet à partir d'un projet source existant. Use when user wants to create a project scaffolding template from an existing project.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-generate-project-template

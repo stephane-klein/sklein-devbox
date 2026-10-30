@@ -1,6 +1,8 @@
 ---
 name: sklein-text-review
 description: Révision et correction de textes — analyse grammaticale, logique et stylistique avec propositions de correction et version reformulée.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-text-review

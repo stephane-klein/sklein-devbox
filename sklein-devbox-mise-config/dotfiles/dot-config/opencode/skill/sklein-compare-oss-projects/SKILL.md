@@ -12,6 +12,8 @@ description: >
   Déclencher sur : "compare", "comparer", "choisir entre", "quel projet
   open source", "écosystème", ou toute demande d'évaluation d'alternatives
   open source.
+metadata:
+  opencode/autoinvoke: false
 ---
 
 # sklein-compare-oss-projects

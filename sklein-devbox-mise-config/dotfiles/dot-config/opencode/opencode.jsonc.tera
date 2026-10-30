@@ -56,16 +56,19 @@
           "EXA_API_KEY": "{{ secret(name="EXA_IA_OPENCODE_DEVBOX_APIKEY") }}"
         }
       },
-      "hindsight": {
-        "type": "remote",
-        "url": "https://api.hindsight.sklein.internal/mcp/",
-        "oauth": false,
-        "disabled": true,
-        "codemode": false,
-        "headers": {
-          "Authorization": "Bearer {{ secret(name="HINDSIGHT_MCP_TOKEN") }}"
-        }
-      },
+      // Commented out on 2026-10-30: broken, so it never contributes anything.
+      // The audit reports it as failed and it would fail the same way in a
+      // normal session. Uncomment once the chain is served correctly.
+      // "hindsight": {
+      //   "type": "remote",
+      //   "url": "https://api.hindsight.sklein.internal/mcp/",
+      //   "oauth": false,
+      //   "disabled": true,
+      //   "codemode": false,
+      //   "headers": {
+      //     "Authorization": "Bearer <HINDSIGHT_MCP_TOKEN>"
+      //   }
+      // },
       "playwright": {
         "type": "local",
         "command": ["mise", "exec", "--cd", "/", "--", "playwright-mcp", "--no-sandbox"],
@@ -75,16 +78,18 @@
           "PLAYWRIGHT_MCP_CDP_ENDPOINT": "http://127.0.0.1:9222"
         }
       },
-      "browser-control": {
-        "type": "local",
-        "command": ["node", "{{ env.HOME }}/.local/share/browser-control-mcp/mcp-server/dist/server.js"],
-        "disabled": true,
-        "codemode": false,
-        "environment": {
-          "EXTENSION_SECRET": "{{ secret(name="BROWSER_CONTROL_MCP_EXTENSION_SECRET") }}",
-          "EXTENSION_PORT": "8090"
-        }
-      },
+      // Commented out on 2026-10-30: the module path does not exist on this
+      // instance, so the server dies at startup. Uncomment after installing it.
+      // "browser-control": {
+      //   "type": "local",
+      //   "command": ["node", "{{ env.HOME }}/.local/share/browser-control-mcp/mcp-server/dist/server.js"],
+      //   "disabled": true,
+      //   "codemode": false,
+      //   "environment": {
+      //     "EXTENSION_SECRET": "<BROWSER_CONTROL_MCP_EXTENSION_SECRET>",
+      //     "EXTENSION_PORT": "8090"
+      //   }
+      // },
       "toggl-pg-mirror-readonly": {
         "type": "remote",
         "url": "https://memex.sklein.xyz/mcp/readonly",

@@ -37,11 +37,11 @@ uvx = false
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = { version = "1.43.0", workflow = "release.yml" }
+fnox = { version = "1.44.0", workflow = "release.yml" }
 tmux = "3.7c"
 fzf = "0.74.5"
-atuin = "18.24.2"
-pitchfork = { version = "2.32.3", workflow = "release.yml@refs/heads/main" }
+atuin = "18.24.3"
+pitchfork = { version = "2.32.4", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
@@ -61,17 +61,17 @@ starship = "1.27.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.18.7"
+pipx = "1.18.9"
 "pipx:petname" = "2.9"
 
-opencode = { version = "2.2.0", allow_builds = ["@opencode/cli"] }
+opencode = { version = "2.2.3", allow_builds = ["@opencode/cli"] }
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.5"
 
 ripgrep = "15.2.0"
 fd = "10.5.0"
-node = "24.14.1"
+node = "26.13.0"
 go = "latest"
 neovim = "0.12.6"
 tree-sitter = "0.27.1"
@@ -103,7 +103,7 @@ lsd = "1.2.0"
 
 # Tooling for OpenCode
 "npm:@upstash/context7-mcp" = "4.4.4"
-"pipx:mcp-server-fetch" = "2026.10.24"
+"pipx:mcp-server-fetch" = "2026.10.28"
 "npm:tavily-mcp" = "0.2.22"
 "npm:exa-mcp-server" = "3.4.2"
 "npm:cc-safety-net" = "2.7.0"

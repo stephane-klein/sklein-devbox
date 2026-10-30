@@ -138,14 +138,25 @@ fi
 # `supervisor run --boot`, the only mode where daemons marked `boot_start` start
 # with the supervisor; without it, a supervisor reload leaves the OpenCode
 # server down and nothing brings it back. Re-running `enable` keeps the recorded
-# executable path current.
+# executable path current and rewrites the unit file, so reload systemd right
+# after it: without a reload systemd keeps the old definition and later reports
+# "the unit file changed on disk".
 #
-# The running server keeps the old binary, the old plugin modules and the old
-# daemon environment until it restarts, so restart it at the end of every apply:
-# that keeps the process in sync with what was just deployed. Apply from a plain
-# SSH shell — this kills any running OpenCode session. On a fresh bootstrap the
-# pitchfork supervisor may not be up yet; the call then fails silently and the
-# daemon starts later with the current config.
+# The supervisor keeps the binary, the plugin modules and the daemon
+# environment it started with. `mise install` above moves `latest` under that
+# live process, so restart the supervisor itself (not just a daemon) at the end
+# of every apply: that also restarts every `boot_start` daemon, OpenCode
+# included, and keeps the processes in sync with what was just deployed. Apply
+# from a plain SSH shell — this kills any running OpenCode session.
+#
+# Grant the bind capability again before that restart. The capability lives on
+# the binary's inode and `mise install` replaces the binary, so a freshly
+# installed pitchfork cannot bind :443: the proxy dies with "Permission denied"
+# and every ingress URL stops answering, while the DNS daemon keeps running and
+# hides the cause. `pitchfork proxy setup` is the only thing that grants it. The
+# getcap test keeps sudo off the common path, and `sudo -n` keeps a password
+# prompt from hanging a non-interactive apply.
+#
 # systemd starts the user unit at boot only when lingering is enabled. Without
 # it the unit waits for the first login, and the boot_start daemons stay down
 # after a reboot. Enabling linger for your own account needs no authentication
@@ -154,8 +165,25 @@ fi
   loginctl enable-linger "$USER" >/dev/null 2>&1 || true
 
 if command -v pitchfork >/dev/null 2>&1; then
+  if ! getcap "$(readlink -f "$(command -v pitchfork)")" 2>/dev/null |
+    grep -q cap_net_bind_service &&
+    sudo -n true 2>/dev/null; then
+    pitchfork proxy setup --yes >/dev/null 2>&1 || true
+  fi
   pitchfork boot enable >/dev/null 2>&1 || true
-  pitchfork restart global/opencode-server >/dev/null 2>&1 || true
+  # `systemctl --user` resolves the user bus from XDG_RUNTIME_DIR, and the foot
+  # host's ssh client leaks a foreign value (/tmp) into the instance: pin it the
+  # way ~/bin/sklein-devbox-ingress does.
+  if [ -d "/run/user/$(id -u)" ]; then
+    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  fi
+  if systemctl --user cat pitchfork >/dev/null 2>&1; then
+    systemctl --user daemon-reload
+    systemctl --user restart pitchfork ||
+      echo "post-dotfiles: the pitchfork supervisor did not restart; the ingress proxy stays down until it does" >&2
+  else
+    pitchfork restart global/opencode-server >/dev/null 2>&1 || true
+  fi
 fi
 '''
 

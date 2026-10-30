@@ -366,8 +366,12 @@ unit:
   That is what makes peers send the queries to dnsmasq.
 
 The only privileged step is `pitchfork proxy setup` (bind capability for
-`:443`, CA trust into the system store), run by `up` and re-run after a
-pitchfork upgrade. Everything else runs as `devbox`.
+`:443`, CA trust into the system store). `up` runs it, and so does the driver's
+`post-dotfiles` hook when `getcap` finds no `cap_net_bind_service` on the
+installed pitchfork binary: the capability lives on the file's inode and
+`mise install` replaces the binary, so an upgrade would otherwise leave the
+supervisor unable to bind `:443` — and the DNS daemon still answers, which
+hides the cause. Everything else runs as `devbox`.
 
 ### Why the namespace is not the host FQDN
 

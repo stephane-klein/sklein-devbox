@@ -154,12 +154,16 @@ The container's configuration is the **deployed** form of this repo's
   scripts. `auth.json` is no longer used.
 - Plugins are server-side (`plugins` in `~/.config/opencode/opencode.jsonc`);
   TUI-only settings live in `~/.config/opencode/cli.json`. `tui.json` is gone.
-- `mise dot apply` ends with `pitchfork restart global/opencode-server`, because
-  the running process keeps the old binary, plugin modules and daemon
-  environment. The apply therefore kills running OpenCode sessions: run it from
-  a plain SSH shell, never from an OpenCode tool call. Configuration files under
-  `~/.config/opencode` are hot-reloaded by the server and need no restart; a TUI
-  plugin change only requires reopening the TUI.
+- `mise dot apply` ends with `systemctl --user restart pitchfork`, because the
+  supervisor and the daemons keep the binary, plugin modules and environment
+  they started with. The hook re-runs `pitchfork proxy setup --yes` first when
+  the capability check (`getcap` on the binary `latest` resolves to) fails:
+  `mise install` replaces the binary and the inode loses `cap_net_bind_service`,
+  so a restarted supervisor would fail to bind `:443` and every ingress URL
+  would stop answering. The apply therefore kills running OpenCode sessions: run
+  it from a plain SSH shell, never from an OpenCode tool call. Configuration
+  files under `~/.config/opencode` are hot-reloaded by the server and need no
+  restart; a TUI plugin change only requires reopening the TUI.
 
 ## If you are already inside the container
 

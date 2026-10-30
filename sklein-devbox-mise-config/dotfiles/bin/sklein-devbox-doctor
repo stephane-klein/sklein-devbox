@@ -14,7 +14,8 @@
 # The homelab CA is checked too: the anchor in the Fedora trust store, its
 # freshness against gopass, and two functional probes (curl and Node) against a
 # `*.sklein.internal` host, plus the NODE_OPTIONS the opencode server needs to
-# read that store.
+# read that store. The pitchfork proxy CA is compared with the copy pinned in
+# gopass, so a reinstall that lost it shows up here.
 #
 # The GPG signing chain (git, jj -> gpg-agent -> pinentry-tmux -> tmux popup)
 # is checked by the companion gpg-signing-doctor: --with-gpg runs it in this
@@ -371,6 +372,15 @@ find_install_ca() {
   command -v install-homelab-ca 2>/dev/null
 }
 
+find_install_pitchfork_ca() {
+  local dir cand
+  dir="$(cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)" || dir=""
+  for cand in ${dir:+"$dir/install-pitchfork-ca"} "$HOME/bin/install-pitchfork-ca"; do
+    [ -x "$cand" ] && { printf '%s\n' "$cand"; return 0; }
+  done
+  command -v install-pitchfork-ca 2>/dev/null
+}
+
 # probe_curl URL -> prints the HTTP status, returns curl's exit code. 60 and 77
 # mean "certificate not trusted", 6 "does not resolve", 7/28 "unreachable".
 probe_curl() { curl -sS -o /dev/null --max-time 5 -w '%{http_code}' "$1" 2>/dev/null; }
@@ -478,13 +488,43 @@ check_ca_daemon_env() {
   fi
 }
 
+check_pitchfork_ca_pinned() {
+  local installer out rc
+  if ! (( RUN_CA_FRESHNESS )); then
+    record_skip "pitchfork CA pinning needs gopass (--skip-ca-freshness)"
+    return
+  fi
+  if ! installer="$(find_install_pitchfork_ca)" || [ -z "$installer" ]; then
+    record_skip "install-pitchfork-ca not found (expected ~/bin/install-pitchfork-ca)"
+    return
+  fi
+  out="$("$installer" status 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    record_pass "${out#*: }"
+    return
+  fi
+  # Not pinned yet is a choice, not a fault: the CA only needs pinning once the
+  # user wants it stable across reinstalls. A stored copy that no longer matches
+  # is the case worth reporting.
+  case "$out" in
+    *"cannot read"* | *"gopass not found"* | *"absent:"*)
+      record_skip "pitchfork CA not pinned yet (run: $installer seed)"
+      ;;
+    *)
+      record_fail "${out#*: }${out:+ (run: $installer)}"
+      ;;
+  esac
+}
+
 test_homelab_ca() {
-  step "TLS trust (homelab CA)"
+  step "TLS trust"
   check_ca_anchor || return
   check_ca_freshness
   check_ca_system_store
   check_ca_node
   check_ca_daemon_env
+  check_pitchfork_ca_pinned
 }
 
 env_summary() {

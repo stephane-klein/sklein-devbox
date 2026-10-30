@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# install-pitchfork-ca - keep the pitchfork proxy CA stable across reinstalls.
+#
+# Pitchfork generates its proxy CA at $PITCHFORK_STATE_DIR/proxy/ca.pem plus
+# ca-key.pem, and only when the pair is missing (`ensure_ca` in
+# src/proxy/server.rs). `pitchfork proxy setup` behaves the same way and leaves
+# existing files alone. So pinning the CA is enough to keep it: the files are
+# restored from gopass before the proxy starts again after a reinstall.
+#
+# `seed` records the CA of this instance into gopass, `install` (the default)
+# restores it with the original permissions (0644 for the certificate, 0600 for
+# the key), and `status` compares the two without writing anything.
+#
+# Pinning the CA does not change it, so the certificate installed in browsers
+# stays valid across reinstalls: only the per-hostname leaves are re-signed, into
+# a cache keyed by the CA certificate, which rebuilds itself.
+#
+# The bootstrap hook ignores a failure of this script, so a locked gopass store
+# never blocks an apply. Pitchfork then quietly generates a new CA, which is why
+# `~/bin/sklein-devbox-doctor` compares the two and reports the drift.
+#
+# Usage:
+#   install-pitchfork-ca            restore the CA from gopass (default)
+#   install-pitchfork-ca seed       record the current CA into gopass
+#   install-pitchfork-ca status     compare, change nothing
+#   install-pitchfork-ca -h         show this help
+#
+# Options:
+#   --force    with `seed`, overwrite secrets that already exist
+
+set -u -o pipefail
+
+PROG="${0##*/}"
+SECRET_CERT=pitchfork/ca.crt
+SECRET_KEY=pitchfork/ca.key
+STATE_DIR="${PITCHFORK_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pitchfork}"
+CERT_PATH="$STATE_DIR/proxy/ca.pem"
+KEY_PATH="$STATE_DIR/proxy/ca-key.pem"
+
+usage() {
+  cat <<EOF
+$PROG - keep the pitchfork proxy CA stable across reinstalls.
+
+Stores the CA pair in gopass ($SECRET_CERT, $SECRET_KEY) and restores it to
+$STATE_DIR/proxy before pitchfork starts.
+
+Usage:
+  $PROG           Restore the CA from gopass (default)
+  $PROG seed      Record the current CA into gopass (--force to overwrite)
+  $PROG status    Compare the instance CA with gopass, change nothing
+  $PROG -h        Show this help
+EOF
+}
+
+# The bootstrap hook runs with mise's own environment, which may not expose the
+# gopass shim on PATH, hence the explicit fallbacks.
+find_gopass() {
+  local candidate
+  if candidate="$(command -v gopass 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  for candidate in \
+    "$HOME/.local/share/mise/installs/gopass/latest/gopass" \
+    "$HOME/.local/bin/gopass" \
+    /usr/bin/gopass; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+read_secret() { # read_secret NAME -> the secret on stdout
+  local gopass value
+  if ! gopass="$(find_gopass)"; then
+    echo "$PROG: gopass not found" >&2
+    return 1
+  fi
+  value="$("$gopass" show "$1" 2>/dev/null)" || value=""
+  if [ -z "$value" ]; then
+    echo "$PROG: cannot read $1 from gopass" >&2
+    return 1
+  fi
+  printf '%s\n' "$value"
+}
+
+secret_exists() {
+  local gopass
+  gopass="$(find_gopass)" || return 1
+  "$gopass" show "$1" >/dev/null 2>&1
+}
+
+matches() { [ -f "$2" ] && printf '%s\n' "$1" | cmp -s - "$2"; }
+
+write_secret() { # write_secret CONTENT PATH MODE
+  local tmp="$2.tmp.$$"
+  (umask 077 && printf '%s\n' "$1" >"$tmp") || {
+    echo "$PROG: cannot write $tmp" >&2
+    rm -f "$tmp"
+    return 1
+  }
+  chmod "$3" "$tmp" || {
+    rm -f "$tmp"
+    echo "$PROG: cannot chmod $tmp" >&2
+    return 1
+  }
+  mv -f "$tmp" "$2" || {
+    rm -f "$tmp"
+    echo "$PROG: cannot move $tmp to $2" >&2
+    return 1
+  }
+}
+
+do_install() {
+  local cert key changed=0
+  cert="$(read_secret "$SECRET_CERT")" || return 1
+  key="$(read_secret "$SECRET_KEY")" || return 1
+  mkdir -p "$(dirname -- "$CERT_PATH")" || return 1
+  if ! matches "$cert" "$CERT_PATH"; then
+    write_secret "$cert" "$CERT_PATH" 0644 || return 1
+    changed=1
+  fi
+  if ! matches "$key" "$KEY_PATH"; then
+    write_secret "$key" "$KEY_PATH" 0600 || return 1
+    changed=1
+  fi
+  if ((changed)); then
+    echo "$PROG: pinned CA restored to $STATE_DIR/proxy (restart pitchfork to use it)"
+  else
+    echo "$PROG: $STATE_DIR/proxy already holds the pinned CA"
+  fi
+}
+
+do_seed() {
+  local force="${1:-}" cert key gopass
+  if ! gopass="$(find_gopass)"; then
+    echo "$PROG: gopass not found" >&2
+    return 1
+  fi
+  [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ] || {
+    echo "$PROG: no CA pair at $STATE_DIR/proxy, nothing to record" >&2
+    return 1
+  }
+  if [ "$force" != "--force" ] &&
+    { secret_exists "$SECRET_CERT" || secret_exists "$SECRET_KEY"; }; then
+    echo "$PROG: $SECRET_CERT or $SECRET_KEY already exists in gopass (--force to overwrite)" >&2
+    return 1
+  fi
+  # `insert -f` reads the value from stdin and skips the recipient prompt. The
+  # commit may ask gpg-agent for the passphrase: run this from an interactive
+  # shell so the pinentry popup can open.
+  "$gopass" insert -f "$SECRET_CERT" <"$CERT_PATH" || return 1
+  "$gopass" insert -f "$SECRET_KEY" <"$KEY_PATH" || return 1
+  if matches "$(read_secret "$SECRET_CERT")" "$CERT_PATH" &&
+    matches "$(read_secret "$SECRET_KEY")" "$KEY_PATH"; then
+    echo "$PROG: recorded the CA in $SECRET_CERT and $SECRET_KEY"
+    return 0
+  fi
+  echo "$PROG: gopass does not hold what was recorded, check the store" >&2
+  return 1
+}
+
+do_status() {
+  if [ ! -f "$CERT_PATH" ] || [ ! -f "$KEY_PATH" ]; then
+    echo "$PROG: absent: no CA pair at $STATE_DIR/proxy"
+    return 1
+  fi
+  local cert key
+  cert="$(read_secret "$SECRET_CERT")" || return 1
+  key="$(read_secret "$SECRET_KEY")" || return 1
+  if matches "$cert" "$CERT_PATH" && matches "$key" "$KEY_PATH"; then
+    echo "$PROG: pitchfork CA matches gopass ($CERT_PATH)"
+    return 0
+  fi
+  echo "$PROG: pitchfork CA differs from gopass $SECRET_CERT"
+  return 1
+}
+
+action="${1:-install}"
+shift || true
+case "$action" in
+  install)
+    [ $# -eq 0 ] || { usage >&2; exit 2; }
+    do_install
+    ;;
+  seed) do_seed "${1:-}" ;;
+  status) do_status ;;
+  -h | --help | help) usage ;;
+  *)
+    echo "$PROG: unknown action: $action" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

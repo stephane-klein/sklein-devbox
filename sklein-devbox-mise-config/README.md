@@ -491,6 +491,32 @@ what makes the daemon pick it up.
 anchor up to date with gopass, `curl` and Node probes on the SearXNG host, and
 `NODE_OPTIONS` on the supervised daemon. Use `--only-ca` for that section alone.
 
+### Pinning the pitchfork proxy CA
+
+Pitchfork generates the CA behind its per-hostname proxy certificates at
+`~/.local/state/pitchfork/proxy/ca.pem` and `ca-key.pem`, and only when the pair
+is missing. Nothing under `~/.local/state` survives a recreated instance, so
+`~/bin/install-pitchfork-ca` keeps the pair in gopass (`pitchfork/ca.crt`,
+`pitchfork/ca.key`) and the `post-dotfiles` hook restores it before the
+supervisor restarts.
+
+```sh
+~/bin/install-pitchfork-ca seed     # record the current CA, once
+~/bin/install-pitchfork-ca status   # is the instance CA the pinned one?
+```
+
+With the CA pinned, the certificate imported in a browser stays valid across
+reinstalls: only the leaves are re-signed, into a cache keyed by the CA
+certificate hash, which rebuilds itself. A CA that drifted from gopass means the
+store was locked during an apply and pitchfork generated a fresh pair; the
+doctor reports it.
+
+Pitchfork cannot sign with the homelab CA instead. Its TLS stack (`ring`) signs
+ECDSA or Ed25519 only, and the homelab root is RSA 4096; it also serves the leaf
+alone, without the CA certificate, so a certificate issued by an intermediate
+under the homelab root would not validate in a browser that trusts only the
+root.
+
 ## Rules of thumb
 
 - Global tools go in `dotfiles/dot-config/mise/config.toml`, never in the driver.

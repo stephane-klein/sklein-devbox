@@ -113,6 +113,14 @@ if [ -x "$HOME/bin/install-homelab-ca" ]; then
   "$HOME/bin/install-homelab-ca" || true
 fi
 
+# Keep the pitchfork proxy CA stable across reinstalls. Pitchfork generates its
+# CA only when the pair is missing, so restoring it from gopass before the
+# supervisor restarts below is enough: the certificate already installed in
+# browsers keeps signing the per-hostname leaves instead of a fresh one.
+if [ -x "$HOME/bin/install-pitchfork-ca" ]; then
+  "$HOME/bin/install-pitchfork-ca" || true
+fi
+
 # OpenCode 2: pitchfork supervises `opencode serve --service`, which registers
 # itself as the shared service so every client discovers its URL and password
 # without flags. Pin port/hostname/password here. `service set` stops a running
@@ -263,6 +271,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
 "~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
 "~/bin/install-homelab-ca"          = { mode = "copy", permissions = "0755" }
+"~/bin/install-pitchfork-ca"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
 
 # Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and the

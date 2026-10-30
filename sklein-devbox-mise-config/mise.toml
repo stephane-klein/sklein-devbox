@@ -224,6 +224,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
 "~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
 
 # Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and the
 # `opencode-port-free` pitchfork oneshot runs before opencode-server.

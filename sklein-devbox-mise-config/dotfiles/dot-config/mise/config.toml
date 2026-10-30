@@ -110,6 +110,12 @@ lsd = "1.2.0"
 "npm:@playwright/mcp" = "0.0.83"
 "npm:@openchamber/web" = "2.5.3"
 
+# `ttok` (tiktoken) counts the tokens of the system blocks captured by
+# ~/bin/sklein-generate-opencode-context-report. No tokenizer is published for
+# the models themselves, so the report counts with o200k_base and rescales the
+# block estimates onto the total the provider actually billed.
+"pipx:ttok" = "1.0"
+
 # Kubernetes
 kubectl = "1.37.2"
 helm = "4.3.1"

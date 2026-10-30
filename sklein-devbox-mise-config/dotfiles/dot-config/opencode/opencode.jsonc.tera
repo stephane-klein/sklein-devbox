@@ -103,9 +103,13 @@
     }
   },
   // OpenCode 2: one entry loads both the server and the TUI parts of a plugin.
+  // `sklein-context-dump` is a local plugin, inert unless a run is armed by
+  // `~/bin/sklein-generate-opencode-context-report`: it then enables the MCP
+  // servers and captures the request assembled for the audited session.
   "plugins": [
     "@slkiser/opencode-quota@5.0.3",
     "cc-safety-net@2.6.19",
+    "{{ env.HOME }}/.config/opencode/plugins/sklein-context-dump",
   ],
   // Todos are off by default in OpenCode 2.
   "experimental": {

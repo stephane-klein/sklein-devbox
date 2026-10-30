@@ -237,6 +237,68 @@ Useful options: `--only-config`, `--only-fallback`, `--only-timeout`,
 runs it in the same pass and aggregates its result; `sklein-devbox-doctor
 --only-gpg` delegates to it entirely.
 
+## OpenCode context report
+
+`dotfiles/bin/sklein-generate-opencode-context-report` is deployed to
+`~/bin/sklein-generate-opencode-context-report`. It answers one question: how
+many tokens does the configuration cost before the first word of a conversation,
+and what does that cost in dollars?
+
+```sh
+~/bin/sklein-generate-opencode-context-report
+```
+
+The result is written to `~/.config/opencode/context-audit.md`, in English, and
+translated to `~/.config/opencode/context-audit.fr.md` in the same run.
+
+- **The total is measured, not estimated.** The script creates a throwaway
+  session, sends one minimal prompt and reads the first assistant message: its
+  `tokens.input + tokens.cache.read` is what the provider billed for carrying
+  the configuration.
+- **The breakdown comes from a plugin.** `sklein-context-dump` (in
+  `dot-config/opencode/plugins/`) is loaded with every server start and its hook
+  is always registered. It only writes when `~/.cache/sklein-context-audit/run.json`
+  names the audited session, and it captures `system` blocks and `tools` only:
+  no conversation, no message.
+- **MCP servers are connected at runtime.** The script calls
+  `POST /api/experimental/mcp/{server}/connect` for every configured server,
+  including the ones disabled by default, since their cost is the question worth
+  answering. That endpoint overrides the configuration without touching a file,
+  and the servers this script connected are disconnected again on the way out,
+  including when it fails. Nothing reloads the shared server, so the audit can
+  run from any shell, a session OpenCode included.
+- **Block counts are estimates.** No tokenizer is published for DeepSeek, so
+  `ttok` counts with `o200k_base` and the script rescales the blocks onto the
+  measured total. Proportions are right, per-block values are within a few
+  percent. The report states the factor it applied.
+- **The report separates your configuration from OpenCode's own text.** Every
+  row carries an `Origine` of `config` or `OpenCode`, and the summary gives both
+  totals. Only `config` rows can be trimmed: they are the ones with a file you
+  can open, or the skill list you control. The rest is produced by the binary.
+- **Each `OpenCode` block comes with an extract and its source.** The three first
+  non-empty lines are quoted under the table, next to a link to the file that
+  generates them in the OpenCode repository, pinned to the tag of the running
+  server rather than to `dev`, so the link still matches what was measured.
+- **Cache froid et cache chaud sont deux lignes séparées.** DeepSeek caches the
+  prefix automatically without publishing a lifetime, and a cache hit costs
+  fifty times less than a cold input token on `deepseek-flash`. Reporting a
+  single figure would be wrong most of the time.
+- **The French version is a translation of the English one, produced by the same
+  model** through `/api/experimental/generate/text`, which runs without a
+  session and without tools. The prompt forbids touching numbers, paths, URLs,
+  identifiers and blockquotes, and the English file is written first: a failed
+  translation leaves it in place and says so instead of failing the audit. The
+  cost is one extra model call, about a minute.
+
+Two things the first attempts got wrong, worth remembering: a plugin cannot
+observe its own registries during `setup` — `mcp.list()` and `tool.list()` both
+answer with empty lists while the location is not materialised — and arming a
+plugin through `opencode reload` kills the session that runs the audit.
+
+Options: `--directory DIR` (default `$HOME`), `--agent NAME` (default `plan`),
+`--model fournisseur/modèle` (default `opencode-go/deepseek-v4.1-flash`),
+`--output FILE`, `--keep-dump`.
+
 
 
 ## Updating the global tools

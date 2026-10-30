@@ -1,0 +1,764 @@
+#!/usr/bin/env bash
+# sklein-generate-opencode-context-report - write a report on what the OpenCode
+# configuration costs in context tokens before the first word of a
+# conversation, and what that costs in dollars.
+#
+# The point is not to guess: the total is measured. The script creates a
+# throwaway session, sends one minimal prompt and reads the first assistant
+# message. Its `tokens.input + tokens.cache.read` is exactly what the provider
+# billed for carrying the configuration. The breakdown by source comes from
+# `sklein-context-dump`, a local plugin that captures the request OpenCode
+# assembles (`system` blocks and `tools`), and each block is counted with
+# `ttok`. Block counts are therefore estimates rescaled onto the measured
+# total; only the total is exact.
+#
+# The audit connects every configured MCP server for the duration of the run,
+# including the ones disabled by default, because their cost is the question
+# most worth answering. `POST /api/experimental/mcp/{server}/connect` overrides
+# the configuration at runtime: no file is touched and the servers that were
+# already connected are left alone. The ones this script connected are
+# disconnected again on the way out, including when it fails.
+#
+# Nothing reloads the shared server, so the audit can run from any shell. The
+# plugin is already loaded and stays inert except for the session named in
+# ~/.cache/sklein-context-audit/run.json.
+#
+# The report is written in English to ~/.config/opencode/context-audit.md, then
+# translated once by the same model and written to context-audit.fr.md. A failed
+# translation leaves the English file in place and says so; it never fails the
+# audit. Override the English path with --output; the French one is derived by
+# inserting `.fr` before the extension.
+
+set -euo pipefail
+
+PROG="${0##*/}"
+
+XDG_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+XDG_CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE_DIR="$XDG_CACHE/sklein-context-audit"
+RUN_FILE="$STATE_DIR/run.json"
+DUMP_FILE="$STATE_DIR/dump.json"
+WORK_DIR="$STATE_DIR/work"
+
+DIRECTORY="$HOME"
+AGENT="plan"
+MODEL_REF="opencode-go/deepseek-v4.1-flash"
+OUTPUT="$XDG_CONF/opencode/context-audit.md"
+KEEP_DUMP=0
+
+# SID is set once the throwaway session exists, encoded_dir once the directory
+# is resolved; the cleanup path needs both to undo what the audit connected.
+SID=""
+DONE=0
+encoded_dir=""
+
+usage() {
+  cat <<EOF
+$PROG - report what the OpenCode configuration costs in context tokens.
+
+Creates a throwaway session in OpenCode, connects the configured MCP servers at
+runtime (no file is touched), sends one minimal prompt and reads the tokens the
+first assistant message was billed for. It then breaks that total down between
+system blocks and tools, using the request captured by the sklein-context-dump
+plugin. Servers that were disabled are disconnected on the way out.
+
+The report is written in English to context-audit.md, then translated to French
+to context-audit.fr.md by the same model, in one extra call.
+
+Usage:
+  $PROG [options]
+
+Options:
+  -h, --help           Show this help
+      --directory DIR  Directory measured (default: \$HOME)
+      --agent NAME     Agent measured (default: plan)
+      --model REF      Model as provider/model
+                       (default: opencode-go/deepseek-v4.1-flash)
+      --output FILE    English report (default: ~/.config/opencode/context-audit.md).
+                       The French report is written next to it, with .fr
+                       inserted before the extension.
+      --keep-dump      Keep the request dump in $DUMP_FILE
+
+Nothing reloads the server: the audit can run from any shell, an OpenCode
+session included.
+EOF
+}
+
+die() { printf '%s: erreur: %s\n' "$PROG" "$*" >&2; exit 2; }
+step() { printf '\n== %s\n' "$*" >&2; }
+info() { printf '   %s\n' "$*" >&2; }
+
+cleanup() {
+  local rc=$? server
+  # Put back the servers that were disabled before the audit. The connect
+  # endpoint overrides the configuration at runtime, so the configuration file
+  # is never touched and a restart restores it anyway.
+  if [ -s "$STATE_DIR/reconnect.txt" ]; then
+    while IFS= read -r server; do
+      [ -n "$server" ] || continue
+      opencode api post \
+        "/api/experimental/mcp/$server/disconnect?location%5Bdirectory%5D=$encoded_dir" \
+        >/dev/null 2>&1 || true
+    done <"$STATE_DIR/reconnect.txt"
+    rm -f "$STATE_DIR/reconnect.txt"
+  fi
+  rm -f "$RUN_FILE"
+  if [ -n "$SID" ]; then
+    if [ "$DONE" = 1 ]; then
+      opencode api delete "/api/session/$SID" >/dev/null 2>&1 || true
+    else
+      printf '   session %s kept for inspection\n' "$SID" >&2
+    fi
+  fi
+  if [ "$KEEP_DUMP" = 0 ] && [ "$rc" = 0 ]; then
+    rm -f "$DUMP_FILE"
+  fi
+  return $rc
+}
+trap cleanup EXIT
+
+# --- formatting --------------------------------------------------------------
+
+# fr_int 12345 -> "12 345"
+fr_int() { printf '%s' "$1" | sed -E ':a; s/^(-?[0-9]+)([0-9]{3})/\1 \2/; ta'; }
+
+# fr_dec VALUE DIGITS -> "0,0043"
+fr_dec() {
+  awk -v v="$1" -v d="$2" 'BEGIN { printf "%.*f", d, v }' | sed 's/\./,/'
+}
+
+# money VALUE -> "0,00426 $" with a precision that never prints 0,00
+money() {
+  local v
+  v=$(awk -v value="$1" 'BEGIN {
+    if (value < 0.01)   printf "%.5f", value
+    else if (value < 1) printf "%.4f", value
+    else                printf "%.2f", value
+  }' | sed 's/\./,/')
+  printf '%s $' "$v"
+}
+
+# --- arguments ---------------------------------------------------------------
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --directory) [ $# -ge 2 ] || die "--directory needs a path"; DIRECTORY="$2"; shift 2 ;;
+    --agent) [ $# -ge 2 ] || die "--agent needs a name"; AGENT="$2"; shift 2 ;;
+    --model) [ $# -ge 2 ] || die "--model needs provider/model"; MODEL_REF="$2"; shift 2 ;;
+    --output) [ $# -ge 2 ] || die "--output needs a path"; OUTPUT="$2"; shift 2 ;;
+    --keep-dump) KEEP_DUMP=1; shift ;;
+    *) die "unknown option: $1 (see --help)" ;;
+  esac
+done
+
+for bin in opencode jq ttok; do
+  command -v "$bin" >/dev/null 2>&1 || die "$bin not found in PATH"
+done
+
+[ -d "$DIRECTORY" ] || die "no such directory: $DIRECTORY"
+DIRECTORY=$(cd "$DIRECTORY" && pwd)
+
+case "$MODEL_REF" in
+  */*) ;;
+  *) die "--model expects provider/model, got: $MODEL_REF" ;;
+esac
+PROVIDER="${MODEL_REF%%/*}"
+MODEL_ID="${MODEL_REF#*/}"
+
+# --- state dir ---------------------------------------------------------------
+
+# `opencode api` loses the tail of a large response when its output goes to a
+# pipe that jq reads slowly: the process exits before the stream is flushed.
+# Every sizeable response is therefore written to a file first, then parsed.
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+rm -rf "$WORK_DIR"
+mkdir -p "$WORK_DIR"
+rm -f "$DUMP_FILE"
+
+# One audit at a time: two runs would overwrite run.json and dump.json, and the
+# second one's cleanup would disconnect the servers the first is still using.
+exec 9>"$STATE_DIR/lock"
+flock -n 9 || die "another audit is already running (lock: $STATE_DIR/lock)"
+
+api_get_file() { opencode api get "$1" >"$2"; }
+
+# --- model -------------------------------------------------------------------
+
+# Fail early and clearly when the shared server is not answering, instead of
+# letting the first jq call report a parse error.
+opencode api get /api/info >/dev/null 2>&1 ||
+  die "the OpenCode server does not answer (opencode service status)"
+
+# The measuring session runs on the priced model, so the tokens counted and the
+# prices applied speak about the same tokenizer.
+step "Model $MODEL_REF"
+api_get_file /api/model "$WORK_DIR/models.json"
+model_row=$(jq -c --arg p "$PROVIDER" --arg m "$MODEL_ID" \
+  'first(.data[] | select(.providerID == $p and .id == $m))' "$WORK_DIR/models.json")
+[ -n "$model_row" ] && [ "$model_row" != "null" ] || die "this server does not know that model: $MODEL_REF"
+price_in=$(jq -r '.cost[0].input // 0' <<<"$model_row")
+price_cache=$(jq -r '.cost[0].cache.read // 0' <<<"$model_row")
+ctx_limit=$(jq -r '.limit.context // empty' <<<"$model_row")
+info "input $price_in \$/M, cache $price_cache \$/M"
+
+api_get_file /api/info "$WORK_DIR/info.json"
+version=$(jq -r '.version // "inconnue"' "$WORK_DIR/info.json")
+
+# --- arm ---------------------------------------------------------------------
+
+api_get_file /api/mcp "$WORK_DIR/mcp.json"
+servers_json=$(jq -c '[.data[].name]' "$WORK_DIR/mcp.json")
+server_count=$(jq 'length' <<<"$servers_json")
+[ "$server_count" -gt 0 ] || die "no MCP server configured"
+disabled_before=$(jq '[.data[] | select(.status.status == "disabled")] | length' "$WORK_DIR/mcp.json")
+
+step "Throwaway session in $DIRECTORY"
+create_body=$(jq -nc --arg agent "$AGENT" --arg p "$PROVIDER" --arg m "$MODEL_ID" \
+  --arg dir "$DIRECTORY" --arg title "Audit du contexte $(date '+%Y-%m-%d %H:%M')" \
+  '{agent: $agent, model: {id: $m, providerID: $p}, location: {directory: $dir}, title: $title}')
+SID=$(opencode api post /api/session --data "$create_body" | jq -r '.data.id')
+[ -n "$SID" ] && [ "$SID" != "null" ] || die "cannot create a session"
+info "session $SID"
+
+step "Connecting the $server_count MCP servers"
+jq -n --arg sid "$SID" --arg dir "$DIRECTORY" --argjson servers "$servers_json" \
+  --arg at "$(date -Iseconds)" \
+  '{sessionID: $sid, directory: $dir, armedAt: $at, servers: $servers}' >"$RUN_FILE"
+
+encoded_dir=$(jq -rn --arg d "$DIRECTORY" '$d | @uri')
+
+# `connect` overrides the configured `disabled: true` at runtime and touches no
+# file. The servers that were disabled are remembered so the cleanup can put
+# them back; the ones already connected are left alone.
+: >"$STATE_DIR/reconnect.txt"
+while IFS= read -r server; do
+  [ -n "$server" ] || continue
+  state=$(jq -r --arg n "$server" '.data[] | select(.name == $n) | .status.status' \
+    "$WORK_DIR/mcp.json")
+  if [ "$state" = "connected" ]; then
+    continue
+  fi
+  printf '%s\n' "$server" >>"$STATE_DIR/reconnect.txt"
+  opencode api post \
+    "/api/experimental/mcp/$server/connect?location%5Bdirectory%5D=$encoded_dir" \
+    >/dev/null 2>&1 || true
+done < <(jq -r '.[]' <<<"$servers_json")
+
+deadline=$((SECONDS + 120))
+last_report=-15
+while :; do
+  api_get_file "/api/mcp?location%5Bdirectory%5D=$encoded_dir" "$WORK_DIR/mcp-armed.json"
+  connected=$(jq '[.data[] | select(.status.status == "connected")] | length' \
+    "$WORK_DIR/mcp-armed.json")
+  # Only `pending` means a server is still starting. Waiting for a `failed` one
+  # would burn two minutes for an answer that never comes.
+  pending=$(jq '[.data[] | select(.status.status == "pending")] | length' \
+    "$WORK_DIR/mcp-armed.json")
+  [ "$connected" -ge "$server_count" ] && break
+  [ "$pending" -eq 0 ] && break
+  [ "$SECONDS" -ge "$deadline" ] && break
+  if [ $((SECONDS - last_report)) -ge 15 ]; then
+    last_report=$SECONDS
+    info "MCP connections: $connected/$server_count (${SECONDS} s)"
+  fi
+  sleep 2
+done
+
+failed=$(jq -r '
+  [ .data[]
+    | select(.status.status != "connected")
+    | { name,
+        why: ((.status.error // .status.status) | tostring | split("\n")[0] | .[0:100]) }
+    | "\(.name) — \(.why)" ]
+  | join(" ; ")' "$WORK_DIR/mcp-armed.json")
+info "$connected/$server_count connected${failed:+ — failures: $failed}"
+if [ "$connected" -eq 0 ]; then
+  info "MCP server state:"
+  jq -c '[.data[] | {name, status: .status.status}]' "$WORK_DIR/mcp-armed.json" >&2
+  die "no MCP server connected: the measurement would cover a truncated configuration"
+fi
+
+# --- measure -----------------------------------------------------------------
+
+step "Measurement request"
+opencode api post "/api/session/$SID/prompt" \
+  --data '{"text":"Reply with: ok"}' >/dev/null
+
+timeout 180 opencode api post "/api/experimental/session/$SID/wait" >/dev/null 2>&1 || true
+
+[ -f "$DUMP_FILE" ] || die "the plugin did not write $DUMP_FILE"
+
+# --- tokenize ----------------------------------------------------------------
+
+step "Counting blocks"
+
+# A system block is not one thing. OpenCode concatenates the base prompt, the
+# instructions files, the skills listing and the environment into a single
+# `system` part, so labelling the whole part with the first file it contains
+# hides most of the cost. Each block is therefore split on its known markers and
+# against the files on disk; what remains is reported as the rest of the block.
+
+# extract_region FILE START END - print from the line holding START to the line
+# holding END, both included.
+extract_region() {
+  awk -v s="$2" -v e="$3" '
+    index($0, s) { inside = 1 }
+    inside { print }
+    inside && index($0, e) { exit }
+  ' "$1"
+}
+
+add_row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "${4:-}" "${5:-}" >>"$WORK_DIR/system.tsv"; }
+
+: >"$WORK_DIR/system.tsv"
+system_n=$(jq '.system | length' "$DUMP_FILE")
+i=0
+while [ "$i" -lt "$system_n" ]; do
+  jq -r ".system[$i].text // \"\"" "$DUMP_FILE" >"$WORK_DIR/block.txt"
+  block_tokens=$(ttok -m gpt-4o <"$WORK_DIR/block.txt")
+  # Three non-empty lines, kept for the extract shown under the table. `awk`
+  # stops on its own, so there is no SIGPIPE to trip pipefail, and it marks a
+  # line it had to shorten instead of cutting it mid-word.
+  awk 'NF {
+    line = $0
+    if (length(line) > 100) line = substr(line, 1, 100) "…"
+    print line
+    if (++n == 3) exit
+  }' "$WORK_DIR/block.txt" >"$WORK_DIR/extract-$i.txt"
+  covered=0
+
+  if grep -q '<available_skills>' "$WORK_DIR/block.txt" &&
+    grep -q '</available_skills>' "$WORK_DIR/block.txt"; then
+    extract_region "$WORK_DIR/block.txt" '<available_skills>' '</available_skills>' \
+      >"$WORK_DIR/region.txt"
+    region_tokens=$(ttok -m gpt-4o <"$WORK_DIR/region.txt")
+    add_row 'Skills listing' "$region_tokens" config - "$i"
+    covered=$((covered + region_tokens))
+  fi
+
+  if grep -q '<env>' "$WORK_DIR/block.txt" && grep -q '</env>' "$WORK_DIR/block.txt"; then
+    extract_region "$WORK_DIR/block.txt" '<env>' '</env>' >"$WORK_DIR/region.txt"
+    region_tokens=$(ttok -m gpt-4o <"$WORK_DIR/region.txt")
+    add_row 'OpenCode environment' "$region_tokens" OpenCode - "$i"
+    covered=$((covered + region_tokens))
+  fi
+
+  block_text=$(cat "$WORK_DIR/block.txt")
+  for candidate in \
+    "$XDG_CONF/opencode/AGENTS.md" \
+    "$DIRECTORY/AGENTS.md" \
+    "$DIRECTORY/.opencode/AGENTS.md"; do
+    [ -f "$candidate" ] || continue
+    [ -s "$candidate" ] || continue
+    content=$(cat "$candidate")
+    if [[ "$block_text" == *"$content"* ]]; then
+      file_tokens=$(ttok -m gpt-4o <"$candidate")
+      case "$candidate" in
+        "$XDG_CONF/opencode/AGENTS.md") label="AGENTS.md global" ;;
+        "$DIRECTORY/AGENTS.md") label="AGENTS.md project" ;;
+        "$DIRECTORY/.opencode/AGENTS.md") label="AGENTS.md project (.opencode)" ;;
+        *) label=$(basename "$candidate") ;;
+      esac
+      add_row "$label" "$file_tokens" config "$candidate" "$i"
+      covered=$((covered + file_tokens))
+      break
+    fi
+  done
+
+  rest=$((block_tokens - covered))
+  if [ "$rest" -gt 20 ]; then
+    # Naming only: a wrong guess changes a label, never a number. What the
+    # configuration cannot explain is OpenCode's own text.
+    case "$block_text" in
+      *"You are an AI agent running in OpenCode"*) label="Base prompt" ;;
+      *"# Your Model"*) label="Model" ;;
+      *"# Code Mode"*) label="Code Mode" ;;
+      *"When you create a worktree"*) label="Worktree note" ;;
+      *) label=$(head -1 "$WORK_DIR/block.txt" | cut -c1-60) ;;
+    esac
+    [ -n "$label" ] || label="block $((i + 1))"
+    add_row "$label" "$rest" OpenCode - "$i"
+  fi
+
+  i=$((i + 1))
+done
+
+: >"$WORK_DIR/tools.tsv"
+skills_in_tool=""
+skills_in_tool_tokens=0
+tool_n=$(jq '.tools | length' "$DUMP_FILE")
+i=0
+while [ "$i" -lt "$tool_n" ]; do
+  jq -r ".tools[$i] | (.name // \"\") + \"\n\" + (.description // \"\") + \"\n\" + ((.input // {}) | tojson)" \
+    "$DUMP_FILE" >"$WORK_DIR/tool.txt"
+  count=$(ttok -m gpt-4o <"$WORK_DIR/tool.txt")
+  name=$(jq -r ".tools[$i].name // \"inconnu\"" "$DUMP_FILE")
+  # OpenCode 2 carries the skill list in a tool description rather than in a
+  # system part; the audit has to find it where it actually is.
+  if grep -q '<available_skills>' "$WORK_DIR/tool.txt"; then
+    skills_in_tool="$name"
+    skills_in_tool_tokens="$count"
+  fi
+  group=""
+  while IFS= read -r server; do
+    [ -n "$server" ] || continue
+    case "$name" in
+      "${server}_"*) group="$server"; break ;;
+    esac
+  done < <(jq -r '.[]' <<<"$servers_json")
+  [ -n "$group" ] || group="__builtin__"
+  printf '%s\t%s\n' "$group" "$count" >>"$WORK_DIR/tools.tsv"
+  i=$((i + 1))
+done
+
+# Aggregate tools by group, keeping each group's tool count and its origin:
+# built-in tools belong to OpenCode, MCP servers to the configuration.
+awk -F'\t' '{
+  n[$1]++; t[$1] += $2
+}
+END {
+  for (g in t)
+    printf "%s\t%d\t%d\t%s\n", g, n[g], t[g], (g == "__builtin__" ? "OpenCode" : "config")
+}' "$WORK_DIR/tools.tsv" >"$WORK_DIR/groups.tsv"
+
+# The dump is authoritative: it is the request the provider actually received.
+# A server can be "connected" and still contribute no tool, and a connection
+# can complete after the request left.
+mcp_tool_tokens=$(awk -F'\t' '$1 != "__builtin__" { s += $3 } END { print s + 0 }' \
+  "$WORK_DIR/groups.tsv")
+if [ "$mcp_tool_tokens" -eq 0 ]; then
+  info "MCP server state when the request left:"
+  jq -c '[.data[] | {name, status: .status.status}]' "$WORK_DIR/mcp-armed.json" >&2
+  die "no MCP tool in the request: the measurement would cover a truncated configuration"
+fi
+mcp_servers_with_tools=$(awk -F'\t' '$1 != "__builtin__" { n++ } END { print n + 0 }' \
+  "$WORK_DIR/groups.tsv")
+info "MCP tools: $(fr_int "$mcp_tool_tokens") tokens across $mcp_servers_with_tools servers"
+
+est_system=$(awk -F'\t' '{ s += $2 } END { print s + 0 }' "$WORK_DIR/system.tsv")
+est_tools=$(awk -F'\t' '{ s += $3 } END { print s + 0 }' "$WORK_DIR/groups.tsv")
+est_total=$((est_system + est_tools))
+[ "$est_total" -gt 0 ] || die "empty dump, nothing to break down"
+
+# --- total -------------------------------------------------------------------
+
+# The session can also produce auxiliary requests (a title, for instance). They
+# write assistant messages with tokens, but no dump. A real request carries at
+# least the system blocks and tools captured above, so a message whose input is
+# below half that estimate is not the one being measured.
+step "Reading the billed total"
+messages_file="$WORK_DIR/messages.json"
+first=""
+min_input=$((est_total / 2))
+deadline=$((SECONDS + 60))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  api_get_file "/api/session/$SID/message" "$messages_file"
+  first=$(jq -c --argjson min "$min_input" \
+    '[.data[] | select(.type == "assistant" and .tokens != null)
+      | select((.tokens.input // 0) + (.tokens.cache.read // 0) >= $min)] | .[0]' "$messages_file")
+  if [ -n "$first" ] && [ "$first" != "null" ]; then
+    break
+  fi
+  sleep 1
+done
+if [ -z "$first" ] || [ "$first" = "null" ]; then
+  first=$(jq -c '[.data[] | select(.type == "assistant" and .tokens != null)] | .[0]' "$messages_file")
+fi
+[ "$first" != "null" ] && [ -n "$first" ] || die "no assistant message carrying tokens"
+
+tok_in=$(jq -r '(.tokens.input // 0) + (.tokens.cache.read // 0)' <<<"$first")
+tok_cached=$(jq -r '.tokens.cache.read // 0' <<<"$first")
+cost_real=$(jq -r '.cost // 0' <<<"$first")
+DONE=1
+info "$(fr_int "$tok_in") input tokens billed, $(fr_int "$tok_cached") of them served from cache"
+
+# Rescale the estimates onto the measured total: the sum becomes exact, the
+# proportions keep the tokenizer's accuracy.
+factor=$(awk -v real="$tok_in" -v est="$est_total" 'BEGIN { printf "%.6f", real / est }')
+info "raw estimate $(fr_int "$est_total") tokens, rescaling factor $factor"
+
+# --- report ------------------------------------------------------------------
+
+step "Writing $OUTPUT"
+mkdir -p "$(dirname "$OUTPUT")"
+
+skills_line=$(awk -F'\t' '$1 == "Skills listing" { print $2 }' "$WORK_DIR/system.tsv")
+api_get_file /api/skill "$WORK_DIR/skills.json"
+skills_count=$(jq '.data | length' "$WORK_DIR/skills.json")
+
+pct() { fr_dec "$(awk -v a="$1" -v b="$2" 'BEGIN { print 100 * a / b }')" "${3:-1}"; }
+scaled() { awk -v c="$1" -v f="$factor" 'BEGIN { printf "%d", c * f + 0.5 }'; }
+
+# Source links are pinned to the tag of the running server, not to `dev`, so a
+# report read six months from now still points at the code it measured.
+repo_blob="https://github.com/anomalyco/opencode/blob/v${version}"
+
+# Split the fixed context between what the configuration brings and what
+# OpenCode generates. Only a `config` row carries a file to open and shorten;
+# everything else is the binary's own text and cannot be trimmed.
+sum_config=0
+sum_opencode=0
+while IFS=$'\t' read -r _label count origin _file; do
+  value=$(scaled "$count")
+  if [ "$origin" = "config" ]; then
+    sum_config=$((sum_config + value))
+  else
+    sum_opencode=$((sum_opencode + value))
+  fi
+done <"$WORK_DIR/system.tsv"
+while IFS=$'\t' read -r _group _n count origin; do
+  value=$(scaled "$count")
+  if [ "$origin" = "config" ]; then
+    sum_config=$((sum_config + value))
+  else
+    sum_opencode=$((sum_opencode + value))
+  fi
+done <"$WORK_DIR/groups.tsv"
+sum_rest=$((tok_in - sum_config - sum_opencode))
+[ "$sum_rest" -lt 0 ] && sum_rest=0
+
+{
+  printf '# OpenCode context audit — %s\n\n' "$(date '+%Y-%m-%d %H:%M')"
+  printf "What the OpenCode configuration costs in tokens before the first word of a\n"
+  printf "conversation, and what that costs in dollars.\n\n"
+
+  printf '## Summary\n\n| | |\n| --- | --- |\n'
+  printf '| Fixed context | **%s tokens** |\n' "$(fr_int "$tok_in")"
+  printf '| of which your configuration | %s tokens (%s %%) |\n' \
+    "$(fr_int "$sum_config")" "$(pct "$sum_config" "$tok_in")"
+  printf '| of which OpenCode | %s tokens (%s %%) |\n' \
+    "$(fr_int "$sum_opencode")" "$(pct "$sum_opencode" "$tok_in")"
+  printf '| unattributed | %s tokens (%s %%) |\n' \
+    "$(fr_int "$sum_rest")" "$(pct "$sum_rest" "$tok_in")"
+  if [ -n "$ctx_limit" ]; then
+    printf '| Share of the %s-token window | %s %% |\n' \
+      "$(fr_int "$ctx_limit")" "$(pct "$tok_in" "$ctx_limit" 2)"
+  fi
+  printf '| Model used for pricing | `%s` |\n' "$MODEL_REF"
+  printf '| Per request, cold cache | **%s** |\n' \
+    "$(money "$(awk -v t="$tok_in" -v p="$price_in" 'BEGIN { print t * p / 1000000 }')")"
+  printf '| Per request, warm cache | **%s** |\n' \
+    "$(money "$(awk -v t="$tok_in" -v p="$price_cache" 'BEGIN { print t * p / 1000000 }')")"
+  printf '| For 1 000 requests | %s / %s |\n' \
+    "$(money "$(awk -v t="$tok_in" -v p="$price_in" 'BEGIN { print 1000 * t * p / 1000000 }')")" \
+    "$(money "$(awk -v t="$tok_in" -v p="$price_cache" 'BEGIN { print 1000 * t * p / 1000000 }')")"
+  printf '\n'
+  printf "DeepSeek publishes no lifetime for its cache: an unused entry is cleared\n"
+  printf "\"within hours to days\". The two columns are therefore two real regimes,\n"
+  printf "not an optimistic and a pessimistic bound.\n\n"
+
+  printf '## Measurement conditions\n\n| | |\n| --- | --- |\n'
+  printf '| Directory | `%s` |\n' "${DIRECTORY/#$HOME/~}"
+  printf '| Agent | `%s` |\n' "$AGENT"
+  printf '| OpenCode | %s |\n' "$version"
+  printf '| MCP servers | %s enabled for the measurement, %s disabled normally |\n' \
+    "$server_count" "$disabled_before"
+  if [ -n "$failed" ]; then
+    printf '| Failed connections | %s |\n' "$failed"
+  fi
+  printf '| Cache observed during the measurement | %s tokens served from cache |\n' \
+    "$(fr_int "$tok_cached")"
+  if [ "$(awk -v c="$cost_real" 'BEGIN { print (c > 0) ? 1 : 0 }')" = 1 ]; then
+    printf '| Cost billed for the measurement | %s |\n' "$(money "$cost_real")"
+  else
+    printf '| Cost billed for the measurement | not reported by the provider |\n'
+  fi
+  printf '\n'
+  if [ -n "$failed" ]; then
+    printf "Failing servers contribute no tool, so their cost is not in the total.\n"
+    printf "Their presence here means they do not work in a normal session either,\n"
+    printf "and that their configuration line should be fixed or removed.\n\n"
+  fi
+  printf "The total is measured: it is \`tokens.input + tokens.cache.read\` of the\n"
+  printf "session's first assistant message, the one the provider billed. The\n"
+  printf "breakdown is estimated block by block with \`ttok\`'s \`o200k_base\` tokenizer,\n"
+  printf "then rescaled onto that total (factor %s). Proportions are right; per-block\n" "$factor"
+  printf "values are within a few percent.\n\n"
+
+  printf '## System blocks\n\n'
+  printf '| Block | Origin | File | Tokens | Share |\n'
+  printf '| --- | --- | --- | ---: | ---: |\n'
+  sum_system=0
+  while IFS=$'\t' read -r label count origin file _idx; do
+    value=$(scaled "$count")
+    sum_system=$((sum_system + value))
+    label=${label//|/\\|}
+    case "$label" in
+      "Code Mode")
+        display="[Code Mode]($repo_blob/packages/codemode/README.md)"
+        ;;
+      *) display="$label" ;;
+    esac
+    if [ "$file" = "-" ]; then
+      file="—"
+    else
+      case "$file" in
+        "$HOME"/*) file="~/${file#"$HOME"/}" ;;
+      esac
+      file=${file//|/\\|}
+    fi
+    printf '| %s | `%s` | %s | %s | %s %% |\n' \
+      "$display" "$origin" "$file" "$(fr_int "$value")" "$(pct "$value" "$tok_in")"
+  done <"$WORK_DIR/system.tsv"
+  printf '| **System blocks total** | | | **%s** | %s %% |\n\n' \
+    "$(fr_int "$sum_system")" "$(pct "$sum_system" "$tok_in")"
+  printf "Code Mode is a restricted interpreter for a JavaScript-like language: the\n"
+  printf "model calls catalog tools instead of invoking them one by one. Only blocks of\n"
+  printf "origin \`config\` can be trimmed; the others are produced by the binary.\n\n"
+
+  printf '### Extracts\n\n'
+  while IFS=$'\t' read -r elabel _ecount eorigin _efile eidx; do
+    [ "$eorigin" = "OpenCode" ] || continue
+    [ -s "$WORK_DIR/extract-$eidx.txt" ] || continue
+    # Each block is generated by one file in the OpenCode source. The path is
+    # shown as the link text: it tells where the text lives even unclicked.
+    case "$elabel" in
+      "Base prompt") esrc="packages/core/src/session/runner/prompt/system.txt" ;;
+      "Model") esrc="packages/core/src/plugin/identity.ts" ;;
+      "Code Mode") esrc="packages/core/src/codemode/instructions.ts" ;;
+      "OpenCode environment") esrc="packages/core/src/instructions/builtins.ts" ;;
+      "Worktree note") esrc="packages/core/src/tool/plugin/opencode.ts" ;;
+      *) esrc="" ;;
+    esac
+    if [ -n "$esrc" ]; then
+      printf '**%s** — [%s](%s/%s)\n' "$elabel" "$esrc" "$repo_blob" "$esrc"
+    else
+      printf '**%s**\n' "$elabel"
+    fi
+    sed 's/^/> /' "$WORK_DIR/extract-$eidx.txt"
+    printf '\n'
+  done <"$WORK_DIR/system.tsv"
+
+  printf '## Tools\n\n| Item | Origin | Tools | Tokens | Share |\n'
+  printf '| --- | --- | ---: | ---: | ---: |\n'
+  sum_tools=0
+  while IFS=$'\t' read -r group n count origin; do
+    if [ "$group" = "__builtin__" ]; then
+      label="Built-in tools"
+    else
+      label="\`$group\`"
+    fi
+    value=$(scaled "$count")
+    sum_tools=$((sum_tools + value))
+    printf '| %s | `%s` | %s | %s | %s %% |\n' \
+      "$label" "$origin" "$n" "$(fr_int "$value")" "$(pct "$value" "$tok_in")"
+  done < <(sort -t$'\t' -k3,3nr "$WORK_DIR/groups.tsv")
+  printf '| **Tools total** | | | **%s** | %s %% |\n\n' \
+    "$(fr_int "$sum_tools")" "$(pct "$sum_tools" "$tok_in")"
+
+  rest=$((tok_in - sum_system - sum_tools))
+  [ "$rest" -lt 0 ] && rest=0
+  printf '## Breakdown\n\n| | Tokens | Share |\n| --- | ---: | ---: |\n'
+  printf '| System blocks | %s | %s %% |\n' "$(fr_int "$sum_system")" "$(pct "$sum_system" "$tok_in")"
+  printf '| Tools | %s | %s %% |\n' "$(fr_int "$sum_tools")" "$(pct "$sum_tools" "$tok_in")"
+  printf '| Unattributed | %s | %s %% |\n' "$(fr_int "$rest")" "$(pct "$rest" "$tok_in")"
+  printf '| **Measured total** | **%s** | 100 %% |\n\n' "$(fr_int "$tok_in")"
+  printf "The unattributed part holds the measurement prompt, the framing OpenCode adds\n"
+  printf "around blocks, and the gap between the local tokenizer and the provider's.\n\n"
+
+  printf '## Skills\n\n'
+  if [ -n "$skills_in_tool" ]; then
+    printf "The listing of %s skills is carried by the \`%s\` tool description:\n" \
+      "$skills_count" "$skills_in_tool"
+    printf '%s tokens, already counted in the "Built-in tools" row. A `SKILL.md`\n' \
+      "$(fr_int "$(scaled "$skills_in_tool_tokens")")"
+    printf "body is only paid when a skill is invoked and is not part of this total.\n\n"
+  elif [ -n "$skills_line" ] && [ "$skills_count" -gt 0 ]; then
+    printf '%s skills are registered. Their listing costs %s measured tokens, which\n' \
+      "$skills_count" "$(fr_int "$(scaled "$skills_line")")"
+    printf "is %s tokens per registered skill. A \`SKILL.md\` body is only paid when a\n" \
+      "$(fr_int "$(awk -v a="$skills_line" -v f="$factor" -v b="$skills_count" \
+        'BEGIN { printf "%d", a * f / b + 0.5 }')")"
+    printf "skill is invoked and is not part of this total.\n\n"
+  else
+    printf "No skill listing was found in the request.\n\n"
+  fi
+
+  printf '## Recommendations\n\n'
+  {
+    while IFS=$'\t' read -r label count _origin _file; do
+      printf 'block\t%s\t%s\n' "$label" "$count"
+    done <"$WORK_DIR/system.tsv"
+    while IFS=$'\t' read -r group n count _origin; do
+      if [ "$group" = "__builtin__" ]; then
+        printf 'tools\tBuilt-in tools\t%s\n' "$count"
+      else
+        printf 'mcp\t%s\t%s\n' "$group" "$count"
+      fi
+    done <"$WORK_DIR/groups.tsv"
+  } | awk -F'\t' -v f="$factor" '{ printf "%.0f\t%s\t%s\n", $3 * f, $1, $2 }' |
+    sort -nr | awk 'NR <= 3' |
+    while IFS=$'\t' read -r value kind name; do
+      share=$(pct "$value" "$tok_in")
+      case "$kind" in
+        mcp)
+          printf -- '- `%s`: %s tokens, %s %% of the context. Paid only while that\n' \
+            "$name" "$(fr_int "$value")" "$share"
+          printf "  server is active.\n"
+          ;;
+        tools)
+          printf -- '- %s: %s tokens, %s %% of the context. These are the tools\n' \
+            "$name" "$(fr_int "$value")" "$share"
+          printf '  `%s` can call.\n' "$AGENT"
+          ;;
+        *)
+          printf -- '- `%s`: %s tokens, %s %% of the context, sent in full on every\n' \
+            "$name" "$(fr_int "$value")" "$share"
+          printf "  request.\n"
+          ;;
+      esac
+    done
+} >"$OUTPUT"
+
+# --- french version ----------------------------------------------------------
+
+# The report is written in English, then translated once by the same model
+# through `generate/text`, which runs without a session, without tools and
+# without touching the conversation. The instructions are strict about what must
+# survive untouched: a translated number or path would make the report lie.
+fr_output="${OUTPUT%.md}.fr.md"
+
+step "Translating to $fr_output"
+# The document is injected with `jq --rawfile`: a shell heredoc would expand the
+# backticks of the report as command substitutions.
+translation_prompt=$(jq -n --rawfile doc "$OUTPUT" '
+  "Translate the Markdown document below from English to French.\n\n"
+  + "Rules, in order of importance:\n"
+  + "- Keep unchanged: every number, every file path, every URL, every identifier\n"
+  + "  between backticks, the table cells config and OpenCode, the words tokens,\n"
+  + "  skills and Code Mode, and every line starting with > . Those blockquotes quote the\n"
+  + "  English text OpenCode sends verbatim: translating them would misrepresent\n"
+  + "  what the report measured. The document is a measurement report; a changed\n"
+  + "  figure makes it wrong.\n"
+  + "- Keep the Markdown structure identical: same headings, same tables, same\n"
+  + "  number of rows and columns, same blank lines.\n"
+  + "- Translate the prose, the table headers, the link labels and the prose\n"
+  + "  cells.\n"
+  + "- Output the translated document only. No preamble, no commentary, no code\n"
+  + "  fence.\n\n"
+  + "--- DOCUMENT START ---\n"
+  + $doc
+  + "\n--- DOCUMENT END ---"')
+
+translation_body=$(jq -n --arg prompt "$translation_prompt" --arg p "$PROVIDER" \
+  --arg m "$MODEL_ID" '{prompt: $prompt, model: {providerID: $p, id: $m}}')
+
+translated=""
+if timeout 240 opencode api post /api/experimental/generate/text \
+  --data "$translation_body" >"$WORK_DIR/translation.json" 2>/dev/null; then
+  translated=$(jq -r '.data.text // empty' "$WORK_DIR/translation.json" 2>/dev/null || true)
+fi
+
+if [ -z "$translated" ]; then
+  info "translation unavailable: $OUTPUT is written, $fr_output is not"
+else
+  # A model sometimes wraps its answer in a code fence despite the instruction.
+  translated=$(printf '%s\n' "$translated" | sed -e '1{/^```/d}' -e '${/^```$/d}')
+  printf '%s\n' "$translated" >"$fr_output"
+  info "$fr_output"
+fi
+
+step "Report written"
+info "$OUTPUT"

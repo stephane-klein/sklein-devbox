@@ -11,6 +11,11 @@
 # perceived, so a transport failure (missing socket, no carrier) is reported
 # apart from a perception one.
 #
+# The homelab CA is checked too: the anchor in the Fedora trust store, its
+# freshness against gopass, and two functional probes (curl and Node) against a
+# `*.sklein.internal` host, plus the NODE_OPTIONS the opencode server needs to
+# read that store.
+#
 # The GPG signing chain (git, jj -> gpg-agent -> pinentry-tmux -> tmux popup)
 # is checked by the companion gpg-signing-doctor: --with-gpg runs it in this
 # pass and aggregates its result, --only-gpg delegates to it entirely.
@@ -23,11 +28,19 @@ set -u
 PROG="${0##*/}"
 SOUND_DEFAULT="${XDG_DATA_HOME:-$HOME/.local/share}/sklein-devbox/sounds/door-bell.ogg"
 URL_DEFAULT="https://github.com/stephane-klein/sklein-devbox"
+# Any host behind the homelab CA works; SearXNG is the one the SearXNG MCP
+# server and `webfetch` use every day.
+CA_PROBE_DEFAULT="https://searxng.sklein.internal/"
+CA_ANCHOR=/etc/pki/ca-trust/source/anchors/homelab-ca.crt
 
 SOUND="$SOUND_DEFAULT"
 URL="$URL_DEFAULT"
+CA_PROBE="$CA_PROBE_DEFAULT"
 RUN_MISE_DOCTOR=1
 RUN_GPG_DOCTOR=0
+# The freshness check reads the CA from gopass, which may open the pinentry
+# popup when the agent cache is cold. --skip-ca-freshness turns it off.
+RUN_CA_FRESHNESS=1
 # Empty runs every check; otherwise the name of the single check to run.
 ONLY=""
 
@@ -50,9 +63,10 @@ $PROG - check the sklein-devbox remote-desktop link from inside the instance.
 
 Runs \`mise doctor\`, compares the version of the running pitchfork supervisor
 and of the supervised opencode server and OpenChamber with the version on PATH,
-then guides you through the link checks (a desktop notification, an audio
-playback and opening a URL) and a clipboard (OSC 52) check, asking after each
-whether you perceived the effect on the foot host.
+checks the homelab CA (trust store, gopass, curl and Node probes, daemon
+NODE_OPTIONS), then guides you through the link checks (a desktop notification,
+an audio playback and opening a URL) and a clipboard (OSC 52) check, asking
+after each whether you perceived the effect on the foot host.
 
 Usage:
   $PROG [options]
@@ -61,8 +75,11 @@ Options:
   -h, --help              Show this help
       --url URL           URL to open (default: $URL_DEFAULT)
       --sound FILE        Audio file to play (default: $SOUND_DEFAULT)
+      --ca-url URL        Host used for the CA probes (default: $CA_PROBE_DEFAULT)
       --skip-mise         Do not run \`mise doctor\`
       --only-mise         Run only \`mise doctor\`
+      --only-ca           Run only the homelab CA checks
+      --skip-ca-freshness Do not read the CA from gopass (avoids the pinentry popup)
       --only-notification Run only the notification check
       --only-sound        Run only the sound check
       --only-url          Run only the opening-URL check
@@ -71,6 +88,7 @@ Options:
       --only-gpg          Run only the GPG signing doctor
 
 See also:
+  ~/bin/install-homelab-ca  Homelab CA: install and compare with gopass
   ~/bin/gpg-signing-doctor  GPG signing: agent, popup, fail-fast, real signature
 EOF
 }
@@ -339,6 +357,136 @@ test_versions() {
   check_openchamber_version
 }
 
+# --- TLS trust (homelab CA) ---------------------------------------------------
+# The CA lives in gopass and is installed into the Fedora trust store by
+# ~/bin/install-homelab-ca (called by the driver's post-dotfiles hook). Nothing
+# is read from /etc/pki/ca-trust/extracted: the trusted bundles are checked
+# through their consumers, curl and Node, which is what actually has to work.
+find_install_ca() {
+  local dir cand
+  dir="$(cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)" || dir=""
+  for cand in ${dir:+"$dir/install-homelab-ca"} "$HOME/bin/install-homelab-ca"; do
+    [ -x "$cand" ] && { printf '%s\n' "$cand"; return 0; }
+  done
+  command -v install-homelab-ca 2>/dev/null
+}
+
+# probe_curl URL -> prints the HTTP status, returns curl's exit code. 60 and 77
+# mean "certificate not trusted", 6 "does not resolve", 7/28 "unreachable".
+probe_curl() { curl -sS -o /dev/null --max-time 5 -w '%{http_code}' "$1" 2>/dev/null; }
+
+# probe_node URL -> prints the HTTP status or the error code, returns 0 on a
+# successful fetch. It runs with the same NODE_OPTIONS the opencode server
+# carries, so a pass here is also a pass for the MCP servers.
+probe_node() {
+  NODE_OPTIONS=--use-openssl-ca node -e '
+    fetch(process.argv[1]).then(
+      (r) => { console.log(r.status); process.exit(0); },
+      (e) => { console.log(e.cause?.code || e.message); process.exit(1); },
+    );
+  ' "$1" 2>&1
+}
+
+check_ca_anchor() {
+  if [ -f "$CA_ANCHOR" ]; then
+    record_pass "anchor installed: $CA_ANCHOR"
+    return 0
+  fi
+  record_fail "homelab CA missing from the trust store (run: ~/bin/install-homelab-ca, or mise dot apply)"
+  return 1
+}
+
+check_ca_freshness() {
+  local installer out rc
+  if ! (( RUN_CA_FRESHNESS )); then
+    record_skip "gopass comparison disabled (--skip-ca-freshness)"
+    return
+  fi
+  if ! installer="$(find_install_ca)" || [ -z "$installer" ]; then
+    record_skip "install-homelab-ca not found (expected ~/bin/install-homelab-ca)"
+    return
+  fi
+  out="$("$installer" status 2>&1)"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    record_pass "${out#*: }"
+  else
+    record_fail "${out#*: }${out:+ (run: $installer)}"
+  fi
+}
+
+check_ca_system_store() {
+  local status rc
+  if ! command -v curl >/dev/null 2>&1; then
+    record_skip "curl not found, cannot probe $CA_PROBE"
+    return
+  fi
+  status="$(probe_curl "$CA_PROBE")"
+  rc=$?
+  case "$rc" in
+    0) record_pass "system store trusts $CA_PROBE (HTTP $status)" ;;
+    60 | 77)
+      record_fail "system store does not trust $CA_PROBE (curl exit $rc): a homelab host should validate once the anchor and update-ca-trust are in place"
+      ;;
+    6) record_skip "$CA_PROBE does not resolve (NetBird down?)" ;;
+    7 | 28) record_skip "$CA_PROBE unreachable (connection refused or timeout)" ;;
+    *) record_skip "curl failed with exit $rc on $CA_PROBE" ;;
+  esac
+}
+
+check_ca_node() {
+  local out rc
+  if ! command -v node >/dev/null 2>&1; then
+    record_skip "node not found, cannot check --use-openssl-ca"
+    return
+  fi
+  out="$(probe_node "$CA_PROBE")"
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    record_pass "node --use-openssl-ca trusts $CA_PROBE (HTTP $out)"
+    return
+  fi
+  case "$out" in
+    *UNABLE_TO_VERIFY* | *SELF_SIGNED* | *CERT_* | *UNABLE_TO_GET_ISSUER*)
+      record_fail "node --use-openssl-ca does not trust $CA_PROBE ($out): the trust store lacks the CA"
+      ;;
+    ENOTFOUND | EAI_AGAIN | ECONNREFUSED | ETIMEDOUT | UND_ERR_CONNECT_TIMEOUT)
+      record_skip "node could not reach $CA_PROBE ($out)"
+      ;;
+    *) record_skip "node probe failed on $CA_PROBE ($out)" ;;
+  esac
+}
+
+check_ca_daemon_env() {
+  local pid env
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "opencode-server env: pitchfork not found in PATH"
+    return
+  fi
+  pid="$(daemon_pid opencode-server)"
+  if [ -z "$pid" ]; then
+    record_skip "opencode-server not supervised, NODE_OPTIONS unchecked"
+    return
+  fi
+  env="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null)"
+  if printf '%s\n' "$env" | grep -qx 'NODE_OPTIONS=--use-openssl-ca'; then
+    record_pass "opencode-server (pid $pid) carries NODE_OPTIONS=--use-openssl-ca"
+  elif [ -z "$env" ]; then
+    record_skip "cannot read the environment of opencode-server (pid $pid)"
+  else
+    record_fail "opencode-server (pid $pid) runs without NODE_OPTIONS=--use-openssl-ca (restart: systemctl --user restart pitchfork)"
+  fi
+}
+
+test_homelab_ca() {
+  step "TLS trust (homelab CA)"
+  check_ca_anchor || return
+  check_ca_freshness
+  check_ca_system_store
+  check_ca_node
+  check_ca_daemon_env
+}
+
 env_summary() {
   step "remote-desktop link environment"
   local missing=0
@@ -505,6 +653,9 @@ main() {
   # No `--only-versions`: the check is cheap, offline, and a stale supervisor or
   # server is exactly the kind of drift a manual pass should always reveal.
   test_versions
+  if want ca; then
+    test_homelab_ca
+  fi
   if (( RUN_GPG_DOCTOR )); then
     run_gpg_doctor
   fi
@@ -541,8 +692,12 @@ while (( $# )); do
     --url=*) URL="${1#*=}"; shift ;;
     --sound) SOUND="${2:?--sound requires a value}"; shift 2 ;;
     --sound=*) SOUND="${1#*=}"; shift ;;
+    --ca-url) CA_PROBE="${2:?--ca-url requires a value}"; shift 2 ;;
+    --ca-url=*) CA_PROBE="${1#*=}"; shift ;;
     --skip-mise) RUN_MISE_DOCTOR=0; shift ;;
     --only-mise) ONLY=mise; shift ;;
+    --only-ca) ONLY=ca; shift ;;
+    --skip-ca-freshness) RUN_CA_FRESHNESS=0; shift ;;
     --only-notification) ONLY=notification; shift ;;
     --only-sound) ONLY=sound; shift ;;
     --only-url) ONLY=url; shift ;;

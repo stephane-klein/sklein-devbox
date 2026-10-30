@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# install-homelab-ca - put the homelab private CA in the Fedora trust store.
+#
+# The CA lives in gopass (`homelab/certs/ca/ca.crt`) and is written to
+# /etc/pki/ca-trust/source/anchors/homelab-ca.crt; `update-ca-trust` then
+# regenerates the bundles that curl, git, dnf and pip read, so the
+# `*.sklein.internal` services validate for every user.
+#
+# Node never reads that store: the pitchfork `opencode-server` daemon carries
+# `NODE_OPTIONS=--use-openssl-ca`, which makes Node use the OpenSSL default
+# paths, and on Fedora those point at the ca-trust bundle. Without that flag the
+# SearXNG MCP server and `webfetch` reject the homelab certificates.
+#
+# The script is idempotent: `cmp` compares the anchor with the gopass value and
+# `update-ca-trust` only runs when they differ. `sudo` is called with `-n` so a
+# missing passwordless rule skips the install instead of hanging a
+# non-interactive `mise dot apply`; the post-dotfiles hook ignores the failure.
+#
+# Usage:
+#   install-homelab-ca           install or refresh the CA (default)
+#   install-homelab-ca status    report presence and freshness, change nothing
+#   install-homelab-ca -h        show this help
+
+set -u -o pipefail
+
+PROG="${0##*/}"
+ANCHOR=/etc/pki/ca-trust/source/anchors/homelab-ca.crt
+SECRET=homelab/certs/ca/ca.crt
+
+usage() {
+  cat <<EOF
+$PROG - install the homelab private CA in the Fedora trust store.
+
+Writes gopass $SECRET to $ANCHOR and runs update-ca-trust.
+
+Usage:
+  $PROG           Install or refresh the CA (idempotent)
+  $PROG status    Report presence and freshness, change nothing
+  $PROG -h        Show this help
+EOF
+}
+
+# `gopass show -o` returns an empty body for this secret, so print the whole
+# entry the way the CA was stored. The bootstrap hook runs with mise's own
+# environment, which may not expose the gopass shim on PATH, hence the explicit
+# fallbacks.
+find_gopass() {
+  local candidate
+  if candidate="$(command -v gopass 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  for candidate in \
+    "$HOME/.local/share/mise/installs/gopass/latest/gopass" \
+    "$HOME/.local/bin/gopass" \
+    /usr/bin/gopass; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+read_secret() {
+  local gopass cert
+  if ! gopass="$(find_gopass)"; then
+    echo "$PROG: gopass not found, cannot read $SECRET" >&2
+    return 1
+  fi
+  cert="$("$gopass" show "$SECRET" 2>/dev/null)" || cert=""
+  if [ -z "$cert" ]; then
+    echo "$PROG: cannot read $SECRET from gopass" >&2
+    return 1
+  fi
+  printf '%s\n' "$cert"
+}
+
+is_current() {
+  local cert=$1
+  printf '%s\n' "$cert" | cmp -s - "$ANCHOR"
+}
+
+do_install() {
+  local cert
+  cert="$(read_secret)" || return 1
+  if is_current "$cert"; then
+    echo "$PROG: $ANCHOR is already up to date"
+    return 0
+  fi
+  if ! sudo -n true 2>/dev/null; then
+    echo "$PROG: passwordless sudo unavailable, cannot write $ANCHOR" >&2
+    return 1
+  fi
+  printf '%s\n' "$cert" | sudo tee "$ANCHOR" >/dev/null || return 1
+  sudo update-ca-trust || return 1
+  echo "$PROG: installed the homelab CA in $ANCHOR"
+}
+
+do_status() {
+  if [ ! -f "$ANCHOR" ]; then
+    echo "$PROG: absent: $ANCHOR does not exist"
+    return 1
+  fi
+  local cert
+  cert="$(read_secret)" || return 1
+  if is_current "$cert"; then
+    echo "$PROG: present and up to date: $ANCHOR"
+    return 0
+  fi
+  echo "$PROG: present but stale: $ANCHOR differs from gopass $SECRET"
+  return 1
+}
+
+case "${1:-install}" in
+  install) do_install ;;
+  status) do_status ;;
+  -h | --help | help) usage ;;
+  *)
+    echo "$PROG: unknown action: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -199,10 +199,22 @@ This repository provides the **instance side** of the link:
 inside the instance to exercise the instance side of the link end to end:
 
 - it first runs `mise doctor`;
+- it compares the version of the running pitchfork supervisor, opencode server
+  and OpenChamber with the version on PATH, and checks the homelab CA: anchor in
+  the Fedora trust store, freshness against gopass, a `curl` and a Node
+  (`--use-openssl-ca`) probe on `https://searxng.sklein.internal/`, and the
+  `NODE_OPTIONS` the supervised opencode server carries (see
+  [TLS trust for the homelab CA](#tls-trust-for-the-homelab-ca));
 - then it walks through the link capabilities, asking after each whether you
   perceived the effect — a desktop notification (`notify-send`), a sound
   (`paplay`, default `~/.local/share/sklein-devbox/sounds/door-bell.ogg`) and a
   URL (`xdg-open`).
+
+The CA section takes `--only-ca`, `--ca-url URL` to point the probes at another
+homelab host, and `--skip-ca-freshness` to avoid reading gopass (and therefore
+opening the pinentry popup when the agent cache is cold). A network failure on
+the probe host is reported as a skip, not a failure: a CA that is not trusted
+and a NetBird link that is down look alike from the outside.
 
 A transport failure (missing socket, unreachable bus) is reported separately
 from a perception failure, and the exit status is non-zero when a check fails.
@@ -446,6 +458,38 @@ name, both anchored on the host FQDN. Neither is used anymore. After the first
 /dns/zones/<id>` and `DELETE /dns/nameservers/<id>`); the script deliberately
 keeps no migration code. Leaving the old zone in place would keep resolving
 `<slug>.<old fqdn>` to the instance while the proxy no longer routes that Host.
+
+## TLS trust for the homelab CA
+
+`dotfiles/bin/install-homelab-ca`, deployed to `~/bin/install-homelab-ca`, puts
+the homelab private CA in the Fedora trust store. The certificate is read from
+gopass (`homelab/certs/ca/ca.crt`) at apply time and written to
+`/etc/pki/ca-trust/source/anchors/homelab-ca.crt`; `update-ca-trust` then
+regenerates the bundles that curl, git, dnf and pip read. No copy of the CA is
+stored in this repository, so a CA that `scripts/setup-ca.sh` recreates in the
+homelab project only needs a fresh `mise dot apply`.
+
+```sh
+~/bin/install-homelab-ca status   # present? up to date with gopass?
+~/bin/install-homelab-ca          # install or refresh
+```
+
+The driver's `post-dotfiles` hook calls it after `mise install` and ignores a
+failure, so an instance where `gopass` is locked or `sudo` needs a password
+keeps working. The script itself stays idempotent: it compares the anchor with
+the secret and only rewrites the file, then runs `update-ca-trust`, when they
+differ.
+
+Node ignores the Fedora store, so the pitchfork `opencode-server` daemon sets
+`NODE_OPTIONS=--use-openssl-ca`; Node then uses the OpenSSL default paths,
+which on Fedora point at the ca-trust bundle. That is what lets the SearXNG MCP
+server and `webfetch` reach `https://searxng.sklein.internal`. The flag
+restarts nothing by itself: the supervisor restart at the end of an apply is
+what makes the daemon pick it up.
+
+`~/bin/sklein-devbox-doctor` checks the whole chain in one pass: anchor present,
+anchor up to date with gopass, `curl` and Node probes on the SearXNG host, and
+`NODE_OPTIONS` on the supervised daemon. Use `--only-ca` for that section alone.
 
 ## Rules of thumb
 

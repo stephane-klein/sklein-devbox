@@ -73,6 +73,7 @@ boot_start = true
 # Hand the daemon a PATH that contains ~/.local/bin so those commands resolve.
 [daemons.opencode-server.env]
 PATH = "{{ home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+NODE_OPTIONS = "--use-openssl-ca"
 
 [daemons.openchamber]
 run = """

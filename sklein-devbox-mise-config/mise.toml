@@ -103,6 +103,16 @@ EOF
 fi
 mise install
 
+# Homelab CA in the Fedora trust store, so curl, git, dnf and pip accept the
+# `*.sklein.internal` certificates. The CA is read from gopass at apply time, so
+# no copy of it lives in the dotfiles. The script compares the anchor with the
+# secret and only rewrites it, then runs `update-ca-trust`, when they differ.
+# Node never reads that store: the opencode-server daemon sets
+# NODE_OPTIONS=--use-openssl-ca for that reason.
+if [ -x "$HOME/bin/install-homelab-ca" ]; then
+  "$HOME/bin/install-homelab-ca" || true
+fi
+
 # OpenCode 2: pitchfork supervises `opencode serve --service`, which registers
 # itself as the shared service so every client discovers its URL and password
 # without flags. Pin port/hostname/password here. `service set` stops a running
@@ -252,6 +262,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
 "~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
+"~/bin/install-homelab-ca"          = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
 
 # Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and the
@@ -275,6 +286,11 @@ exclude = ["*.tera"]
 "~/.local/share/opencode/auth.json"  = { mode = "absent" }
 "~/.local/share/opencode/auth.json1" = { mode = "absent" }
 "~/.local/share/opencode/auth.json2" = { mode = "absent" }
+
+# The homelab CA used to be deployed as a dotfile under ~/.config/opencode; it
+# now lives in the Fedora trust store (see `~/bin/install-homelab-ca` and the
+# post-dotfiles hook). `apply` never deletes a file, so remove the old copy.
+"~/.config/opencode/certs/homelab-ca.crt" = { mode = "absent" }
 
 # Templates (sources end in .tera, excluded from the walk above; the source is
 # relative to the group root, i.e. dotfiles/).

@@ -8,6 +8,15 @@ He speaks French natively and has a modest level of English.
 Before starting a task, scan the available skills for a matching `sklein-*`
 skill and load it if applicable.
 
+## Web search
+
+Search the web with the `searxng_web_search` tool, which queries the SearXNG
+instance at <https://searxng.sklein.internal>. The built-in web search tool is
+disabled on this devbox, so never ask the model provider to run a search.
+
+The tool returns titles, URLs and snippets. Open a promising URL with `webfetch`
+or the `fetch` MCP server when the snippet is not enough.
+
 ## Writing rules
 
 Write as one person talking to another, not as compressed text. Rules:

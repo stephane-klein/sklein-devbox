@@ -2,6 +2,11 @@
   "$schema": "https://opencode.ai/config.json",
   "update": "disable",
   "default_agent": "chat",
+  // Web search goes through the homelab SearXNG instance, declared as the
+  // `searxng` MCP server below. OpenCode 2 only knows the exa, firecrawl,
+  // parallel, tavily and tinyfish providers, so its own tool cannot reach
+  // SearXNG at all; disable it instead of letting it pick a third party.
+  "websearch": false,
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "allow" },
     { "action": "external_directory", "resource": "/workspace/examples/**", "effect": "allow" },
@@ -29,6 +34,18 @@
         "codemode": false,
         "environment": {
           "DEFAULT_LIMIT": "0"
+        }
+      },
+      // SearXNG search on the homelab instance. The homelab CA is in the Fedora
+      // trust store, and the pitchfork daemon sets NODE_OPTIONS=--use-openssl-ca
+      // so Node reads that store; this child process inherits both. See the
+      // "Web search" section of AGENTS.md.
+      "searxng": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "mcp-searxng"],
+        "codemode": false,
+        "environment": {
+          "SEARXNG_URL": "https://searxng.sklein.internal"
         }
       },
       "context7": {

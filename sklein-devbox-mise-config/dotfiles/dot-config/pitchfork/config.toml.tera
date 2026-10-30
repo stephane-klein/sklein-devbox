@@ -73,6 +73,11 @@ boot_start = true
 # Hand the daemon a PATH that contains ~/.local/bin so those commands resolve.
 [daemons.opencode-server.env]
 PATH = "{{ home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+# Node does not read the Fedora trust store. `--use-openssl-ca` makes it use the
+# OpenSSL default paths, which on Fedora point at the ca-trust bundle, so the
+# `*.sklein.internal` certificates validate for `webfetch` and the SearXNG MCP
+# server. The CA itself is installed by `~/bin/install-homelab-ca` from gopass;
+# no copy of it is deployed with the dotfiles.
 NODE_OPTIONS = "--use-openssl-ca"
 
 [daemons.openchamber]

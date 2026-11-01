@@ -208,6 +208,36 @@ cmd_up() {
   fi
   unset DBUS_SESSION_BUS_ADDRESS
 
+  # Grant the :443 bind capability BEFORE the start/reload decision below.
+  # `mise install` replaces the pitchfork binary and wipes the capability from
+  # its inode, so a supervisor started between an upgrade and this setup dies
+  # on "Failed to bind proxy server to port 443: Permission denied" (seen on
+  # 2026-11-02) while the DNS daemon keeps running and hides the cause. Running
+  # setup here lets the capability take effect in this same run.
+  info "configuring the pitchfork proxy system bits (bind :443, trust CA; sudo)"
+  pitchfork proxy setup
+
+  # proxy_down - the pitchfork proxy has no listener on :443.
+  # The mtime test below misses the wiped-capability failure above: the config
+  # file is untouched in that story, so detect the dead listener directly. The
+  # 15353 stub resolver belongs to the same proxy subsystem, so a dead :443
+  # implies a dead resolver too.
+  proxy_down() {
+    ! ss -lntH 2>/dev/null | awk '{print $4}' | grep -qE ':443$'
+  }
+
+  # reload_supervisor REASON - restart the supervisor and say why.
+  reload_supervisor() {
+    info "reloading the pitchfork supervisor ($1)"
+    if $unit; then
+      systemctl --user restart pitchfork
+    else
+      info "(no systemd unit: boot_start daemons need an explicit start)"
+      pitchfork supervisor start --force
+      pitchfork start global/opencode-server global/openchamber || true
+    fi
+  }
+
   # The unit installed by `pitchfork boot enable` runs `supervisor run --boot`,
   # the only mode where daemons marked `boot_start` start with the supervisor.
   # A plain `supervisor start --force` is not boot mode: it stops every daemon
@@ -215,11 +245,11 @@ cmd_up() {
   # off after the 2026-10-28 reload. So reload through systemd when the unit
   # exists, and never leave a manual supervisor beside it.
   #
-  # Reload only when it is actually needed: the supervisor is not running, or
-  # the rendered config is newer than the running supervisor. `pitchfork proxy
-  # status` reads the config FILE, not the running proxy, so it cannot tell
-  # whether a reload is pending: the supervisor reads settings.proxy.tld once,
-  # at start, and keeps serving it.
+  # Reload only when it is actually needed: the supervisor is not running, the
+  # rendered config is newer than the running supervisor, or the proxy listener
+  # is dead (proxy_down). `pitchfork proxy status` reads the config FILE, not
+  # the running proxy, so it cannot tell whether a reload is pending: the
+  # supervisor reads settings.proxy.tld once, at start, and keeps serving it.
   local config_path="$HOME/.config/pitchfork/config.toml" sup_pid="" unit=false
   systemctl --user cat pitchfork >/dev/null 2>&1 && unit=true
 
@@ -236,21 +266,13 @@ cmd_up() {
   else
     sup_pid="$(pgrep -f 'pitchfork supervisor run' | head -1 || true)"
     if [ -n "$sup_pid" ] && [ "$config_path" -nt "/proc/${sup_pid}" ]; then
-      info "reloading the pitchfork supervisor (config newer than the running daemon)"
-      if $unit; then
-        systemctl --user restart pitchfork
-      else
-        info "(no systemd unit: boot_start daemons need an explicit start)"
-        pitchfork supervisor start --force
-        pitchfork start global/opencode-server global/openchamber || true
-      fi
+      reload_supervisor "config newer than the running daemon"
+    elif proxy_down; then
+      reload_supervisor "proxy listener absent on :443"
     else
       info "pitchfork supervisor up to date (no restart)"
     fi
   fi
-
-  info "configuring the pitchfork proxy system bits (bind :443, trust CA; sudo)"
-  pitchfork proxy setup
 
   pitchfork proxy doctor || true
 

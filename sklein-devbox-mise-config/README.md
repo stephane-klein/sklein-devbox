@@ -390,6 +390,17 @@ installed pitchfork binary: the capability lives on the file's inode and
 supervisor unable to bind `:443` — and the DNS daemon still answers, which
 hides the cause. Everything else runs as `devbox`.
 
+Recovery, when `status` reports the `:443` listener and the `127.0.0.1:15353`
+stub dead while dnsmasq keeps answering (and `system resolution` fails, because
+the resolved drop-in keeps pointing the system resolver at the dead stub): the
+running supervisor predates the capability, so grant it again and restart the
+supervisor — `pitchfork proxy setup --yes`, then `systemctl --user restart
+pitchfork`. `sklein-devbox-ingress up` does both: setup now runs *before* the
+start/reload decision, and the supervisor reloads whenever the `:443` listener
+is absent, not only when the config file is newer. The restart takes every
+`boot_start` daemon down with it, so run it from a plain SSH shell, not from an
+OpenCode session.
+
 ### Why the namespace is not the host FQDN
 
 The NetBird peer DNS domain (`homelab.stephane-klein.info`, Settings → Network →

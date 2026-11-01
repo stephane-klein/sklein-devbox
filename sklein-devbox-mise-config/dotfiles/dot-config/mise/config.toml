@@ -34,6 +34,28 @@ GNUPGHOME = "{{ env.HOME }}/.config/gnupg"
 [settings.pypi]
 uvx = false
 
+[settings.shims]
+# I exclude gopass from the shims to avoid an endless loop.
+# It happened to me from time to time when entering projects managed by mise.
+# It happens when a project declares a `_.source` without `tools = true`
+# and the script calls gopass.
+#
+# mise evaluates `_.source` before loading the tools. The gopass shim is
+# then on PATH. It calls mise again. mise evaluates `_.source` again,
+# and the loop goes on.
+#
+# With this exclusion, gopass has no shim any more. A project that forgets
+# `tools = true` prints "gopass: command not found".
+# This is intentional: the message points at the fix to make.
+#
+# Correct example in `.mise.toml`:
+#   [env]
+#   _.source = { path = ".secret.sh", tools = true }
+#
+# The `.secret.sh` script contains for example:
+#   export OPENAI_API_KEY=$(gopass show -o ...)
+exclude = ["gopass"]
+
 [tools]
 age = "latest"
 gopass = "latest"

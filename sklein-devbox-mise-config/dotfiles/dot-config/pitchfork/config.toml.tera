@@ -96,6 +96,12 @@ depends = ["opencode-server"]
 port = 3000
 boot_start = true
 
+[daemons.opentab]
+run = "{{ mise_bin }} exec -- opentab web --bind 0.0.0.0 --port=8321 --headless"
+retry = true
+port = 8321
+boot_start = false
+
 # --- sklein-devbox-ingress ---------------------------------------------------
 # Wildcard subdomains over NetBird + a per-hostname TLS reverse proxy in front
 # of the daemons above. Driven by ~/bin/sklein-devbox-ingress (up/down/status).
@@ -157,3 +163,4 @@ boot_start = true
 # advertised.
 [slugs]
 openchamber     = { dir = "~/.config/pitchfork", daemon = "openchamber" }
+opentab         = { dir = "~/.config/pitchfork", daemon = "opentab" }

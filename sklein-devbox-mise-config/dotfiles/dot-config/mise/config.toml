@@ -87,6 +87,7 @@ pipx = "1.18.11"
 "pipx:petname" = "2.9"
 
 opencode = { version = "2.2.5", allow_builds = ["@opencode/cli"] }
+"pipx:opentab-ai" = "v1.33.0"
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.5"

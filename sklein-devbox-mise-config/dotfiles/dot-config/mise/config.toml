@@ -59,16 +59,16 @@ exclude = ["gopass"]
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = { version = "1.44.0", workflow = "release.yml" }
+fnox = { version = "1.46.0", workflow = "release.yml" }
 tmux = "3.7c"
 fzf = "0.74.5"
-atuin = "18.24.3"
-pitchfork = { version = "2.32.4", workflow = "release.yml@refs/heads/main" }
+atuin = "18.24.4"
+pitchfork = { version = "2.33.0", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
 # Supported completers: https://carapace-sh.github.io/carapace-bin/completers.html
-carapace = "1.8.1"
+carapace = "1.8.2"
 
 jujutsu = "0.46.0"
 jjui = "0.10.12"
@@ -83,10 +83,10 @@ starship = "1.27.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.18.9"
+pipx = "1.18.11"
 "pipx:petname" = "2.9"
 
-opencode = { version = "2.2.3", allow_builds = ["@opencode/cli"] }
+opencode = { version = "2.2.5", allow_builds = ["@opencode/cli"] }
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.5"
@@ -97,12 +97,12 @@ node = "26.13.0"
 go = "latest"
 neovim = "0.12.6"
 tree-sitter = "0.27.1"
-usage = { version = "7.1.3", workflow = "publish-cli.yml" }
+usage = { version = "7.1.5", workflow = "publish-cli.yml" }
 delta = "0.20.1"
 rtk = "1.1.0"
 github-cli = "2.103.3"
 
-claude-code = "2.1.312"
+claude-code = "2.1.316"
 
 # Forgejo CLI (fj) + extension Actions (fj-ex)
 "forgejo:forgejo-contrib/forgejo-cli" = "0.7.0"
@@ -116,7 +116,7 @@ lsd = "1.2.0"
 "pipx:copier" = "9.19.1"
 "github:tassiovirginio/try-rs" = "1.7.11"
 "github:11happy/cpx" = "0.2.1"
-"github:mitsuhiko/minijinja" = "3.0.4"
+"github:mitsuhiko/minijinja" = "3.0.5"
 "github:laulauland/jj-hunk" = "0.5.1"
 "github:newren/git-filter-repo" = "2.47.0"
 
@@ -129,8 +129,8 @@ lsd = "1.2.0"
 "npm:tavily-mcp" = "0.2.22"
 "npm:mcp-searxng" = "2.9.0"
 "npm:exa-mcp-server" = "3.4.2"
-"npm:cc-safety-net" = "2.7.0"
-"npm:@playwright/mcp" = "0.0.83"
+"npm:cc-safety-net" = "2.7.1"
+"npm:@playwright/mcp" = "0.0.84"
 "npm:@openchamber/web" = "2.5.3"
 
 # `ttok` (tiktoken) counts the tokens of the system blocks captured by

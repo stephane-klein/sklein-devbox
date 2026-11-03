@@ -271,6 +271,7 @@ exclude = ["*.tera"]
 "~/bin/sklein-devbox-mise-upgrade"  = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-devbox-ingress"       = { mode = "copy", permissions = "0755" }
 "~/bin/import-opencode-credentials" = { mode = "copy", permissions = "0755" }
+"~/bin/import-opencode-v1-sessions" = { mode = "copy", permissions = "0755" }
 "~/bin/install-homelab-ca"          = { mode = "copy", permissions = "0755" }
 "~/bin/install-pitchfork-ca"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }

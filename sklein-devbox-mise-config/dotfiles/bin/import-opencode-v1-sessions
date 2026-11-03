@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+# import-opencode-v1-sessions - import OpenCode V1 session exports into V2.
+#
+# V1 exports are {info, messages: [{info, parts}]}. V2 imports a flat, typed
+# message list. This script converts each export and calls `opencode session
+# import`, using the project directory recorded in the export.
+#
+# Usage:
+#   import-opencode-v1-sessions <path>...
+#
+# <path> is a directory that contains manifest.json, or one or more V1 JSON
+# export files.
+#
+# Pass --replace to delete and re-import sessions that already exist. This is
+# destructive: the existing session and its messages are removed first.
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ZERO_TOKENS = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
+FINISH_VALUES = {"stop", "length", "tool-calls", "content-filter", "error", "unknown"}
+
+
+def die(message):
+    print(f"Error: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_session(path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read file ({exc})")
+    if not isinstance(data, dict) or "info" not in data or "messages" not in data:
+        raise ValueError("this file is not a V1 session export")
+    if not data["info"].get("id"):
+        raise ValueError("session has no id")
+    return data
+
+
+def resolve_target(source_dir):
+    """Map a source-machine path to a local project directory."""
+    if not source_dir:
+        return None
+
+    source = Path(source_dir)
+    if source.is_dir():
+        return source
+
+    # /home/<user>/... -> <local home>/...
+    parts = source.parts
+    if len(parts) > 3 and parts[1] == "home":
+        candidate = Path.home().joinpath(*parts[3:])
+        if candidate.is_dir():
+            return candidate
+
+    # Fallback for projects kept under ~/tries on both machines.
+    candidate = Path.home() / "tries" / source.name
+    if candidate.is_dir():
+        return candidate
+
+    return None
+
+
+def convert_info(info, target):
+    model = info.get("model") or {}
+    out = {
+        "id": info["id"],
+        "projectID": info["projectID"],
+        "cost": info.get("cost", 0),
+        "tokens": info.get("tokens") or ZERO_TOKENS,
+        "time": {
+            "created": info["time"]["created"],
+            "updated": info["time"].get("updated", info["time"]["created"]),
+        },
+        "title": info.get("title") or "Imported session",
+        "location": {"directory": str(target)},
+    }
+    if info.get("agent"):
+        out["agent"] = info["agent"]
+    if model:
+        out["model"] = {k: model[k] for k in ("id", "providerID", "variant") if k in model}
+    return out
+
+
+def convert_user(message):
+    info = message["info"]
+    text = ""
+    for part in message.get("parts") or []:
+        if part.get("type") == "text" and not part.get("synthetic"):
+            text = part.get("text", "")
+            break
+    return {
+        "id": info["id"],
+        "type": "user",
+        "time": {"created": info["time"]["created"]},
+        "text": text,
+    }
+
+
+def convert_tool(part, message_info, stamps):
+    state = part.get("state") or {}
+    status = state.get("status")
+    converted = {"status": status, "input": state.get("input") or {}}
+
+    if status == "completed":
+        converted["content"] = [{"type": "text", "text": state.get("output") or ""}]
+        if state.get("metadata") is not None:
+            converted["metadata"] = state["metadata"]
+    elif status == "error":
+        converted["error"] = {"type": "unknown", "message": str(state.get("error") or "")}
+    elif status in ("running", "streaming"):
+        if state.get("metadata") is not None:
+            converted["metadata"] = state["metadata"]
+
+    times = state.get("time") or {}
+    created = times.get("start") or message_info["time"]["created"]
+    completed = times.get("end")
+    item = {
+        "type": "tool",
+        "id": part.get("callID") or part["id"],
+        "name": part.get("tool") or "unknown",
+        "executed": False,
+        "state": converted,
+        "time": {"created": created},
+    }
+    if completed:
+        item["time"]["completed"] = completed
+    stamps.extend([created, completed or created])
+    return item
+
+
+def convert_assistant(message, fallback_agent):
+    info = message["info"]
+    parts = message.get("parts") or []
+    content = []
+    stamps = [info["time"]["created"]]
+
+    for part in parts:
+        kind = part.get("type")
+        if kind == "text":
+            content.append({"type": "text", "text": part.get("text", "")})
+        elif kind == "reasoning":
+            item = {"type": "reasoning", "text": part.get("text", "")}
+            times = part.get("time") or {}
+            if times:
+                start = times.get("start") or info["time"]["created"]
+                end = times.get("end") or start
+                item["time"] = {"created": start, "completed": end}
+                stamps.extend([start, end])
+            content.append(item)
+        elif kind == "tool":
+            content.append(convert_tool(part, info, stamps))
+        # step-start, step-finish, patch and file have no V2 content equivalent.
+
+    time = {"created": info["time"]["created"]}
+    time["completed"] = info["time"].get("completed") or max(stamps)
+
+    model = {"id": info.get("modelID"), "providerID": info.get("providerID")}
+    if not model["id"] or not model["providerID"]:
+        raise ValueError(f"message {info.get('id')} has no model")
+    if info.get("variant"):
+        model["variant"] = info["variant"]
+
+    out = {
+        "id": info["id"],
+        "type": "assistant",
+        "time": time,
+        "agent": info.get("agent") or fallback_agent or "build",
+        "model": model,
+        "content": content,
+    }
+    if info.get("cost") is not None:
+        out["cost"] = info["cost"]
+    if info.get("tokens"):
+        out["tokens"] = info["tokens"]
+    if info.get("finish") in FINISH_VALUES:
+        out["finish"] = info["finish"]
+    if info.get("error"):
+        error = info["error"]
+        out["error"] = {
+            "type": error.get("name") or "unknown",
+            "message": (error.get("data") or {}).get("message") or str(error),
+        }
+    return out
+
+
+def convert(session, target):
+    info = session["info"]
+    messages = []
+    for message in session["messages"]:
+        message_info = message.get("info") or {}
+        role = message_info.get("role")
+        if role == "user":
+            messages.append(convert_user(message))
+        elif role == "assistant":
+            messages.append(convert_assistant(message, info.get("agent")))
+        else:
+            print(f"  ! message {message_info.get('id')} skipped (role {role})", file=sys.stderr)
+    return {"info": convert_info(info, target), "messages": messages}
+
+
+def collect(paths):
+    files = []
+    for raw in paths:
+        path = Path(raw).expanduser()
+        if path.is_dir():
+            manifest_path = path / "manifest.json"
+            if not manifest_path.is_file():
+                die(f"{path} does not contain manifest.json")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for entry in manifest.get("sessions", []):
+                name = entry.get("file")
+                if name:
+                    files.append(path / name)
+        elif path.is_file():
+            files.append(path)
+        else:
+            die(f"path not found: {path}")
+    return files
+
+
+def order_sessions(items):
+    by_id = {data["info"]["id"]: (path, data) for path, data in items}
+    ordered, done = [], set()
+
+    def visit(session_id, stack):
+        if session_id in done or session_id in stack:
+            return
+        item = by_id.get(session_id)
+        if item is None:
+            return
+        parent = item[1]["info"].get("parentID")
+        if parent:
+            visit(parent, stack | {session_id})
+        done.add(session_id)
+        ordered.append(item)
+
+    for session_id in by_id:
+        visit(session_id, set())
+    return ordered
+
+
+def run_import(opencode, target, path):
+    result = subprocess.run(
+        [opencode, "session", "import", "--directory", str(target), str(path)],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+def run_delete(opencode, session_id):
+    result = subprocess.run(
+        [opencode, "session", "delete", session_id],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Import OpenCode V1 sessions into OpenCode V2."
+    )
+    parser.add_argument("paths", nargs="+", metavar="PATH")
+    parser.add_argument("-n", "--dry-run", action="store_true", help="convert without importing")
+    parser.add_argument(
+        "-r",
+        "--replace",
+        action="store_true",
+        help="delete and re-import sessions that already exist (destructive)",
+    )
+    args = parser.parse_args()
+
+    opencode = shutil.which("opencode")
+    if not opencode and not args.dry_run:
+        die("opencode binary not found in PATH")
+
+    files = collect(args.paths)
+    loaded = []
+    for path in files:
+        try:
+            loaded.append((path, load_session(path)))
+        except ValueError as exc:
+            die(f"{path}: {exc}")
+
+    print(f"Importing {len(loaded)} session(s)")
+
+    with tempfile.TemporaryDirectory(prefix="opencode-v1-import-") as tmpdir:
+        outdir = Path(tmpdir)
+        imported = replaced = skipped = failed = 0
+        last_target = None
+
+        for path, session in order_sessions(loaded):
+            title = session["info"].get("title") or path.stem
+            source_dir = session["info"].get("directory")
+            target = resolve_target(source_dir)
+            if target is None:
+                failed += 1
+                print(f"  ✗ {title}: project not found for {source_dir}")
+                continue
+
+            if target != last_target:
+                print(f"Target: {target}")
+                last_target = target
+
+            try:
+                converted = convert(session, target)
+            except (KeyError, ValueError) as exc:
+                failed += 1
+                print(f"  ✗ {title}: conversion failed ({exc})")
+                continue
+
+            destination = outdir / f"{path.stem}.v2.json"
+            destination.write_text(
+                json.dumps(converted, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            if args.dry_run:
+                imported += 1
+                print(f"  · {title} ({session['info']['id']}) would be imported")
+                continue
+
+            code, output = run_import(opencode, target, destination)
+            is_replacement = False
+
+            if code == 0 and "Session already exists" in output:
+                if not args.replace:
+                    skipped += 1
+                    print(f"  = {title}: already exists, skipped")
+                    continue
+
+                delete_code, delete_output = run_delete(opencode, session["info"]["id"])
+                if delete_code != 0:
+                    failed += 1
+                    first_line = delete_output.splitlines()[0] if delete_output else "failed"
+                    print(f"  ✗ {title}: delete failed ({first_line})")
+                    continue
+
+                is_replacement = True
+                code, output = run_import(opencode, target, destination)
+
+            if code != 0:
+                failed += 1
+                print(f"  ✗ {title}: {output.splitlines()[0] if output else 'failed'}")
+            elif "Imported session:" in output:
+                if is_replacement:
+                    replaced += 1
+                    print(f"  ↻ {title} ({session['info']['id']}) replaced")
+                else:
+                    imported += 1
+                    print(f"  ✓ {title} ({session['info']['id']})")
+            else:
+                failed += 1
+                print(f"  ✗ {title}: unexpected response ({output})")
+
+    print(
+        f"Done: {imported} imported, {replaced} replaced, "
+        f"{skipped} skipped, {failed} failed."
+    )
+
+
+if __name__ == "__main__":
+    main()

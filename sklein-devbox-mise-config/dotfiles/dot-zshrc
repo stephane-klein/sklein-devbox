@@ -29,6 +29,9 @@ eval "$(pitchfork activate zsh)"
 # carapace is a mise-managed tool: it must be on PATH, so load it after the
 # `mise activate` block above. It overrides the built-in completions of the
 # commands it covers; the ones it does not know fall back to zsh/bash.
+
+export CARAPACE_EXCLUDES=mise
+
 if command -v carapace &> /dev/null; then
     export CARAPACE_BRIDGES='zsh,bash'
     zstyle ':completion:*' format $'%{\e[2;37m%}Completing %d%{\e[m%}'

@@ -83,7 +83,7 @@ starship = "1.27.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.18.11"
+pipx = "1.18.12"
 "pipx:petname" = "2.9"
 
 opencode = { version = "2.2.5", allow_builds = ["@opencode/cli"] }
@@ -125,14 +125,14 @@ lsd = "1.2.0"
 "github:lxc/incus" = { version = "7.5", bin = "incus" }
 
 # Tooling for OpenCode
-"npm:@upstash/context7-mcp" = "4.4.4"
+"npm:@upstash/context7-mcp" = "4.5.0"
 "pipx:mcp-server-fetch" = "2026.10.28"
 "npm:tavily-mcp" = "0.2.22"
 "npm:mcp-searxng" = "2.9.0"
-"npm:exa-mcp-server" = "3.4.2"
-"npm:cc-safety-net" = "2.7.1"
+"npm:exa-mcp-server" = "3.4.3"
+"npm:cc-safety-net" = "2.7.2"
 "npm:@playwright/mcp" = "0.0.84"
-"npm:@openchamber/web" = "2.5.3"
+"npm:@openchamber/web" = "2.6.0"
 
 # `ttok` (tiktoken) counts the tokens of the system blocks captured by
 # ~/bin/sklein-generate-opencode-context-report. No tokenizer is published for

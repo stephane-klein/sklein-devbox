@@ -133,6 +133,7 @@ lsd = "1.2.0"
 "npm:cc-safety-net" = "2.7.2"
 "npm:@playwright/mcp" = "0.0.84"
 "npm:@openchamber/web" = "2.6.0"
+"pipx:opencode-history-mcp" = "latest"
 
 # `ttok` (tiktoken) counts the tokens of the system blocks captured by
 # ~/bin/sklein-generate-opencode-context-report. No tokenizer is published for

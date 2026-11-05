@@ -36,6 +36,11 @@
           "DEFAULT_LIMIT": "0"
         }
       },
+      "history": {
+        "type": "local",
+        "command": ["mise", "exec", "--cd", "/", "--", "opencode-history-mcp"],
+        "codemode": true
+      },
       // SearXNG search on the homelab instance. The homelab CA is in the Fedora
       // trust store, and the pitchfork daemon sets NODE_OPTIONS=--use-openssl-ca
       // so Node reads that store; this child process inherits both. See the

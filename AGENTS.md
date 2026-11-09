@@ -111,37 +111,59 @@ The container's configuration is the **deployed** form of this repo's
 
 ## OpenCode 2 server topology
 
-- The OpenCode server is supervised by pitchfork as a foreground process:
-  `opencode serve --service`. Service mode binds port 4096 and registers itself
-  in `~/.local/state/opencode/service.json` (URL + password); every client — TUI,
-  CLI subcommands, OpenChamber — discovers it, so no `--server` flag and no
-  password environment variable are needed. Note that `--server` is a
-  per-subcommand flag in V2, not a global one: `opencode --server … auth list`
-  fails, `opencode auth list --server …` works.
+- OpenChamber is the pitchfork `boot_start` daemon that owns the OpenCode
+  server. It launches `opencode serve` as a child, without `--service`:
+  `--service` takes OpenCode's single-writer lease, so another `--service`
+  server would displace the child. Every client — TUI, CLI subcommands,
+  scripts — discovers the child through
+  `~/.local/state/opencode/service.json` (URL + password), so no `--server`
+  flag and no password environment variable are needed. Note that `--server`
+  is a per-subcommand flag in V2, not a global one: `opencode --server … auth
+  list` fails, `opencode auth list --server …` works.
+- `opencode-service-publish` is a `boot_start` daemon and a dependency of
+  `openchamber`. Every two seconds it finds the process listening on port 4096,
+  reads its pid, version and password (`/proc/<pid>/environ`), and writes
+  `service.json` atomically. A `--service` server started by a client writes
+  the same file; the publisher overwrites it and the client server shuts itself
+  down within five seconds. The child is unaffected because it never reads the
+  file. Do not run `opencode service start` or `opencode serve --service` while
+  OpenChamber runs: the publisher wins and the client server stops.
+- `sklein-devbox-doctor` checks that `opencode-service-publish` runs, that the
+  child has no `--service`, and that `service.json` names the child's pid,
+  version and password.
 - Port, hostname and password are pinned by the bootstrap `post-dotfiles` hook
   (`opencode service set port 4096`, `hostname 127.0.0.1`, `password`), the
-  password coming from gopass `opencode/devbox/server-password`. Do not set
-  `disabled true` to stop clients from starting a server on port 4096: that flag
-  does not block a server, it makes every client behave like `--standalone`.
-  Each client then runs its own private server on an ephemeral port and stops
-  using the shared one, while OpenChamber keeps talking to 4096: several servers
-  on the same `opencode.db`. Keep the key at `false`; `set disabled false` does
-  not stop a running service, only `true` does.
+  password coming from gopass `opencode/devbox/server-password`. The child uses
+  `OPENCODE_PASSWORD`/`OPENCODE_SERVER_PASSWORD` from its environment, which
+  OpenChamber sets; the publisher copies that password into `service.json`. The
+  persisted config password is what `opencode service` commands and a
+  client-started service use. Do not set `disabled true` to stop clients from
+  starting a server on port 4096: that flag does not block a server, it makes
+  every client behave like `--standalone`. Each client then runs its own private
+  server on an ephemeral port and stops using the shared one, while OpenChamber
+  keeps talking to 4096: several servers on the same `opencode.db`. Keep the key
+  at `false`; `set disabled false` does not stop a running service, only `true`
+  does.
 - The pitchfork supervisor belongs to systemd: a user unit created by
   `pitchfork boot enable` runs `supervisor run --boot`, the only mode that
   starts the daemons marked `boot_start`. The `post-dotfiles` hook also enables
   linger (`loginctl enable-linger "$USER"`), so the unit starts at boot without
   a login. A manual `pitchfork supervisor start --force` is not boot mode: it
-  stops every daemon and leaves them down, which is how the OpenCode server
-  stayed off after the 2026-10-28 reload and let a client take port 4096. Reload
-  with `systemctl --user restart pitchfork`; `~/bin/sklein-devbox-ingress up`
-  does exactly that.
-- `global/opencode-port-free` is a oneshot dependency of `opencode-server`: it
-  runs before every start and stops an unsupervised `opencode` process holding
-  port 4096, so a client that took the port during a restart cannot block the
-  next `pitchfork start`. It never touches a process supervised by pitchfork,
-  because `pitchfork start` on a running daemon runs its dependencies first. It
-  normally shows `completed` in `pitchfork list`.
+  stops every daemon and leaves them down, which is how OpenChamber and its
+  OpenCode child stayed off after the 2026-10-28 reload and let a client take
+  port 4096. Reload with `systemctl --user restart pitchfork`;
+  `~/bin/sklein-devbox-ingress up` does exactly that.
+- `global/opencode-port-free` is a oneshot dependency of `openchamber`: it runs
+  before every start and stops an unsupervised `opencode` process holding port
+  4096, so a client that took the port during a restart cannot block the child.
+  It never touches a process in the pitchfork tree: the OpenChamber child sits
+  below the supervised `openchamber` process, and `pitchfork start` on a running
+  daemon runs its dependencies first. It normally shows `completed` in
+  `pitchfork list`.
+- The child inherits `NODE_OPTIONS=--use-openssl-ca` and a PATH that contains
+  `~/.local/bin` from the `openchamber` daemon. Without them the SearXNG MCP
+  server and `webfetch` fail on the homelab CA, and MCP servers declared as
+  `mise exec -- …` fail with `NotFound: ChildProcess.spawn`.
 - Provider credentials live in the SQLite database. `~/.local/share/opencode/credentials.json`
   (rendered from gopass) is the source of truth: `~/bin/import-opencode-credentials`
   runs at the end of the bootstrap hook and logs the managed accounts out,

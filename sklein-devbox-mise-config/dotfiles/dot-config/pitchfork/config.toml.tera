@@ -31,60 +31,36 @@ chromium-browser --headless=new  --remote-debugging-port=9222  --remote-debuggin
 retry = true
 
 [daemons.opencode-port-free]
-# Pitchfork checks `port = 4096` before it spawns a daemon, so an unsupervised
-# `opencode serve --service` started by a client during a restart makes every
-# later start fail (seen on 2026-10-29). This oneshot runs before
-# opencode-server and clears the port. Pitchfork runs a oneshot again on every
-# start of its dependent, so this covers start, restart, boot start and proxy
-# auto-start without any call site in the mise hook or the ingress script.
+# OpenChamber launches its OpenCode child with `OPENCODE_PORT=4096`, but
+# pitchfork watches port 3000 (the OpenChamber UI), not 4096. An unsupervised
+# `opencode serve` started by a client during a restart makes the child fail to
+# bind (seen on 2026-10-29). This oneshot runs before openchamber and clears
+# the port. Pitchfork runs a oneshot again on every start of its dependent, so
+# this covers start, restart, boot start and proxy auto-start without any call
+# site in the mise hook or the ingress script.
 #
-# The script leaves a process supervised by pitchfork alone: `pitchfork start`
-# on an already running daemon runs its dependencies first, and killing the
-# server there would leave the daemon errored.
+# The script leaves a process in the pitchfork tree alone: the OpenChamber
+# child sits below the supervised `openchamber` process, and `pitchfork start`
+# on an already running daemon runs its dependencies first.
 run = "{{ home }}/.local/libexec/sklein-devbox/opencode-port-free"
 oneshot = true
 
-[daemons.opencode-server]
-depends = ["opencode-port-free"]
-# OpenCode 2: `serve --service` runs the shared server in the foreground and
-# registers it in ~/.local/state/opencode/service.json, so every client (TUI,
-# CLI, OpenChamber) discovers its URL and password without any flag. Port,
-# hostname and password come from `opencode service set` (see the mise
-# post-dotfiles hook); pitchfork keeps the process supervised and logs it.
+[daemons.openchamber]
+# OpenChamber owns the OpenCode server. It launches `opencode serve` as a
+# child, without `--service`: `--service` takes OpenCode's single-writer lease,
+# so another `--service` server would displace the child. The
+# `opencode-service-publish` daemon mirrors the child into
+# ~/.local/state/opencode/service.json instead, so the TUI and CLI discover it
+# without a client-side flag or password variable.
 #
 # `mise` is spelled out because systemd starts the supervisor without the
 # shell's PATH: ~/.local/bin is absent from the unit environment, so a bare
-# `mise` would not resolve at boot.
-run = "{{ mise_bin }} exec -- opencode serve --service"
-retry = true
-# Readiness: pitchfork starts dependents (openchamber) once the port listens.
-port = 4096
-# `boot_start` only applies when the supervisor runs in boot mode
-# (`supervisor run --boot`), which is what the systemd unit created by
-# `pitchfork boot enable` passes. A manual `supervisor start --force` is not
-# boot mode and leaves this daemon down; reload through systemd instead
-# (`systemctl --user restart pitchfork`).
-boot_start = true
-
-# The run command above calls mise by absolute path, so opencode itself starts.
-# Its children do not: `mise exec` prepends the tool install directories to PATH
-# but never ~/.local/bin, where the `mise` binary lives. Every MCP server
-# declared as `mise exec -- …` then fails with `NotFound: ChildProcess.spawn`.
-# Hand the daemon a PATH that contains ~/.local/bin so those commands resolve.
-[daemons.opencode-server.env]
-PATH = "{{ home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-# Node does not read the Fedora trust store. `--use-openssl-ca` makes it use the
-# OpenSSL default paths, which on Fedora point at the ca-trust bundle, so the
-# `*.sklein.internal` certificates validate for `webfetch` and the SearXNG MCP
-# server. The CA itself is installed by `~/bin/install-homelab-ca` from gopass;
-# no copy of it is deployed with the dotfiles.
-NODE_OPTIONS = "--use-openssl-ca"
-
-[daemons.openchamber]
+# `mise` would not resolve at boot. The PATH below also lets MCP servers
+# declared as `mise exec -- …` resolve ~/.local/bin.
 run = """
 export XDG_RUNTIME_DIR=/tmp/user/1000
 export GOPASS_AGE_NO_CONFIRM=1
-export OPENCODE_SKIP_START=true
+export PATH="{{ home }}/.local/bin:$PATH"
 export OPENCODE_PORT=4096
 export OPENCODE_SERVER_PASSWORD={{ secret(name="OPENCODE_SERVER_PASSWORD") }}
 OPENCHAMBER_UI_PASSWORD={{ secret(name="OPENCHAMBER_UI_PASSWORD") }}
@@ -92,8 +68,29 @@ export OPENCHAMBER_UI_PASSWORD
 exec {{ mise_bin }} exec -- openchamber --lan --port 3000 --foreground
 """
 retry = true
-depends = ["opencode-server"]
+depends = ["opencode-port-free", "opencode-service-publish"]
 port = 3000
+boot_start = true
+
+[daemons.openchamber.env]
+# Node does not read the Fedora trust store. `--use-openssl-ca` makes it use the
+# OpenSSL default paths, which on Fedora point at the ca-trust bundle, so the
+# `*.sklein.internal` certificates validate for `webfetch` and the SearXNG MCP
+# server. The CA itself is installed by `~/bin/install-homelab-ca` from gopass;
+# no copy of it is deployed with the dotfiles. The OpenCode child inherits this
+# variable from OpenChamber.
+NODE_OPTIONS = "--use-openssl-ca"
+
+[daemons.opencode-service-publish]
+# Publish the OpenCode server OpenChamber launches, so the TUI and CLI discover
+# it through ~/.local/state/opencode/service.json. The child runs without
+# `--service`, so it never takes OpenCode's single-writer lease. The daemon
+# reads the child's pid, port, version and password, writes the registration
+# atomically, and overwrites a registration written by a client `--service`
+# server. It has no port of its own; pitchfork starts it before openchamber
+# because openchamber depends on it.
+run = "{{ home }}/.local/libexec/sklein-devbox/opencode-service-publish --watch"
+retry = true
 boot_start = true
 
 [daemons.opentab]

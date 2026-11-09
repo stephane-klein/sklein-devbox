@@ -234,16 +234,16 @@ cmd_up() {
     else
       info "(no systemd unit: boot_start daemons need an explicit start)"
       pitchfork supervisor start --force
-      pitchfork start global/opencode-server global/openchamber || true
+      pitchfork start global/openchamber || true
     fi
   }
 
   # The unit installed by `pitchfork boot enable` runs `supervisor run --boot`,
   # the only mode where daemons marked `boot_start` start with the supervisor.
   # A plain `supervisor start --force` is not boot mode: it stops every daemon
-  # and leaves the boot_start ones down, which is how the OpenCode server stayed
-  # off after the 2026-10-28 reload. So reload through systemd when the unit
-  # exists, and never leave a manual supervisor beside it.
+  # and leaves the boot_start ones down, which is how OpenChamber and its
+  # OpenCode child stayed off after the 2026-10-28 reload. So reload through
+  # systemd when the unit exists, and never leave a manual supervisor beside it.
   #
   # Reload only when it is actually needed: the supervisor is not running, the
   # rendered config is newer than the running supervisor, or the proxy listener

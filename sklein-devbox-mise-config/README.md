@@ -204,11 +204,13 @@ This repository provides the **instance side** of the link:
 inside the instance to exercise the instance side of the link end to end:
 
 - it first runs `mise doctor`;
-- it compares the version of the running pitchfork supervisor, opencode server
-  and OpenChamber with the version on PATH, and checks the homelab CA: anchor in
-  the Fedora trust store, freshness against gopass, a `curl` and a Node
-  (`--use-openssl-ca`) probe on `https://searxng.sklein.internal/`, and the
-  `NODE_OPTIONS` the supervised opencode server carries (see
+- it compares the version of the running pitchfork supervisor, the OpenCode
+  child OpenChamber launches and OpenChamber with the version on PATH, checks
+  that `opencode-service-publish` runs and that `service.json` names that
+  child, and checks the homelab CA: anchor in the Fedora trust store, freshness
+  against gopass, a `curl` and a Node (`--use-openssl-ca`) probe on
+  `https://searxng.sklein.internal/`, and the `NODE_OPTIONS` the `openchamber`
+  daemon carries (see
   [TLS trust for the homelab CA](#tls-trust-for-the-homelab-ca));
 - then it walks through the link capabilities, asking after each whether you
   perceived the effect — a desktop notification (`notify-send`), a sound
@@ -496,16 +498,16 @@ keeps working. The script itself stays idempotent: it compares the anchor with
 the secret and only rewrites the file, then runs `update-ca-trust`, when they
 differ.
 
-Node ignores the Fedora store, so the pitchfork `opencode-server` daemon sets
-`NODE_OPTIONS=--use-openssl-ca`; Node then uses the OpenSSL default paths,
-which on Fedora point at the ca-trust bundle. That is what lets the SearXNG MCP
-server and `webfetch` reach `https://searxng.sklein.internal`. The flag
-restarts nothing by itself: the supervisor restart at the end of an apply is
-what makes the daemon pick it up.
+Node ignores the Fedora store, so the `openchamber` daemon sets
+`NODE_OPTIONS=--use-openssl-ca` and its OpenCode child inherits it. Node then
+uses the OpenSSL default paths, which on Fedora point at the ca-trust bundle.
+That is what lets the SearXNG MCP server and `webfetch` reach
+`https://searxng.sklein.internal`. The flag restarts nothing by itself: the
+supervisor restart at the end of an apply is what makes the daemon pick it up.
 
 `~/bin/sklein-devbox-doctor` checks the whole chain in one pass: anchor present,
 anchor up to date with gopass, `curl` and Node probes on the SearXNG host, and
-`NODE_OPTIONS` on the supervised daemon. Use `--only-ca` for that section alone.
+`NODE_OPTIONS` on the `openchamber` daemon. Use `--only-ca` for that section alone.
 
 ### Pinning the pitchfork proxy CA
 

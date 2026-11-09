@@ -108,8 +108,8 @@ mise install
 # `*.sklein.internal` certificates. The CA is read from gopass at apply time, so
 # no copy of it lives in the dotfiles. The script compares the anchor with the
 # secret and only rewrites it, then runs `update-ca-trust`, when they differ.
-# Node never reads that store: the opencode-server daemon sets
-# NODE_OPTIONS=--use-openssl-ca for that reason.
+# Node never reads that store: the openchamber daemon sets
+# NODE_OPTIONS=--use-openssl-ca and its OpenCode child inherits it.
 if [ -x "$HOME/bin/install-homelab-ca" ]; then
   "$HOME/bin/install-homelab-ca" || true
 fi
@@ -122,10 +122,13 @@ if [ -x "$HOME/bin/install-pitchfork-ca" ]; then
   "$HOME/bin/install-pitchfork-ca" || true
 fi
 
-# OpenCode 2: pitchfork supervises `opencode serve --service`, which registers
-# itself as the shared service so every client discovers its URL and password
-# without flags. Pin port/hostname/password here. `service set` stops a running
-# service, so only write when the value differs.
+# OpenCode 2: OpenChamber launches `opencode serve` as a child, without
+# `--service` (that flag takes OpenCode's single-writer lease). The
+# `opencode-service-publish` daemon writes the child in
+# ~/.local/state/opencode/service.json, so every client discovers its URL and
+# password without a flag. Pin port/hostname/password here. `service set` stops
+# the registered service, which is now the OpenChamber child, so only write when
+# the value differs.
 if command -v opencode >/dev/null 2>&1; then
   [ "$(opencode service get port 2>/dev/null)" = "4096" ] ||
     opencode service set port 4096 >/dev/null 2>&1 || true
@@ -155,18 +158,19 @@ fi
 
 # Register the supervisor with systemd (user unit). The unit runs
 # `supervisor run --boot`, the only mode where daemons marked `boot_start` start
-# with the supervisor; without it, a supervisor reload leaves the OpenCode
-# server down and nothing brings it back. Re-running `enable` keeps the recorded
-# executable path current and rewrites the unit file, so reload systemd right
-# after it: without a reload systemd keeps the old definition and later reports
-# "the unit file changed on disk".
+# with the supervisor; without it, a supervisor reload leaves OpenChamber and
+# its OpenCode child down and nothing brings them back. Re-running `enable`
+# keeps the recorded executable path current and rewrites the unit file, so
+# reload systemd right after it: without a reload systemd keeps the old
+# definition and later reports "the unit file changed on disk".
 #
 # The supervisor keeps the binary, the plugin modules and the daemon
 # environment it started with. `mise install` above moves `latest` under that
 # live process, so restart the supervisor itself (not just a daemon) at the end
-# of every apply: that also restarts every `boot_start` daemon, OpenCode
-# included, and keeps the processes in sync with what was just deployed. Apply
-# from a plain SSH shell — this kills any running OpenCode session.
+# of every apply: that also restarts every `boot_start` daemon, OpenChamber and
+# its OpenCode child included, and keeps the processes in sync with what was
+# just deployed. Apply from a plain SSH shell — this kills any running OpenCode
+# session.
 #
 # Grant the bind capability again before that restart. The capability lives on
 # the binary's inode and `mise install` replaces the binary, so a freshly
@@ -201,7 +205,8 @@ if command -v pitchfork >/dev/null 2>&1; then
     systemctl --user restart pitchfork ||
       echo "post-dotfiles: the pitchfork supervisor did not restart; the ingress proxy stays down until it does" >&2
   else
-    pitchfork restart global/opencode-server >/dev/null 2>&1 || true
+    # No systemd unit: start the boot_start daemons explicitly.
+    pitchfork start global/openchamber >/dev/null 2>&1 || true
   fi
 fi
 '''
@@ -276,10 +281,12 @@ exclude = ["*.tera"]
 "~/bin/install-pitchfork-ca"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
 
-# Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and the
-# `opencode-port-free` pitchfork oneshot runs before opencode-server.
+# Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, the
+# `opencode-port-free` oneshot runs before openchamber, and
+# `opencode-service-publish` makes the OpenCode child discoverable.
 "~/.local/libexec/sklein-devbox/pinentry-tmux"      = { mode = "copy", permissions = "0755" }
 "~/.local/libexec/sklein-devbox/opencode-port-free" = { mode = "copy", permissions = "0755" }
+"~/.local/libexec/sklein-devbox/opencode-service-publish" = { mode = "copy", permissions = "0755" }
 
 # Moved from ~/bin to ~/.local/libexec/sklein-devbox: `apply` never deletes a
 # file, so remove the old copies explicitly; they were reachable from PATH.

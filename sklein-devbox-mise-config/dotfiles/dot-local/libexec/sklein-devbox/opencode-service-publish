@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# opencode-service-publish - publish the OpenCode server OpenChamber launches
+# in ~/.local/state/opencode/service.json.
+#
+# OpenChamber starts `opencode serve` without `--service`: `--service` takes
+# OpenCode's single-writer lease, so another `--service` server would displace
+# the managed child. This daemon finds the process listening on the OpenCode
+# port, reads its pid, version and password, and writes the registration itself
+# so the TUI and CLI can discover the child.
+#
+# A `--service` server started by a client writes the same file; this daemon
+# overwrites it on its next pass, and the client server shuts itself down. The
+# managed child is unaffected because it never reads the file.
+#
+# Deployed to ~/.local/libexec/sklein-devbox/opencode-service-publish. It runs
+# as a pitchfork daemon with `--watch`; `--once` is for tests and diagnostics.
+
+set -u
+
+port="${OPENCODE_SERVICE_PORT:-4096}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/opencode"
+state_file="$state_dir/service.json"
+config_file="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/service.json"
+lock_file="$state_dir/.publish.lock"
+last_published=""
+
+listener_pid() {
+  ss -ltnpH "sport = :$port" 2>/dev/null |
+    sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n1
+}
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+file_pid() {
+  [ -r "$state_file" ] || return 1
+  sed -n 's/.*"pid": *\([0-9]\+\).*/\1/p' "$state_file" 2>/dev/null | head -n1
+}
+
+remove_stale_registration() {
+  local pid
+  pid="$(file_pid)" || return 0
+  [ -n "$pid" ] || return 0
+  if kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$state_file"
+  last_published=""
+  echo "opencode-service-publish: removed stale registration (pid $pid)"
+}
+
+publish_once() {
+  local pid comm version password prev_pid prev_id id url tmp
+  pid="$(listener_pid)"
+  if [ -z "$pid" ]; then
+    remove_stale_registration
+    return 0
+  fi
+  comm="$(ps -o comm= -p "$pid" 2>/dev/null || true)"
+  case "$comm" in
+    *opencode*) ;;
+    *)
+      remove_stale_registration
+      return 0
+      ;;
+  esac
+  version="$(/proc/"$pid"/exe --version 2>/dev/null | awk 'NR==1 { print $NF }')"
+  version="${version#v}"
+  [ -n "$version" ] || return 0
+  password="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null |
+    sed -n 's/^OPENCODE_PASSWORD=//p' | head -n1)"
+  if [ -z "$password" ]; then
+    password="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null |
+      sed -n 's/^OPENCODE_SERVER_PASSWORD=//p' | head -n1)"
+  fi
+  if [ -z "$password" ] && [ -r "$config_file" ]; then
+    password="$(sed -n 's/.*"password": *"\([^"]*\)".*/\1/p' "$config_file" | head -n1)"
+  fi
+  [ -n "$password" ] || return 0
+  url="http://127.0.0.1:$port"
+  prev_pid="$(file_pid || true)"
+  prev_id="$(sed -n 's/.*"id": *"\([^"]*\)".*/\1/p' "$state_file" 2>/dev/null | head -n1)"
+  if [ "$prev_pid" = "$pid" ] && [ -n "$prev_id" ]; then
+    id="$prev_id"
+  else
+    id="$(cat /proc/sys/kernel/random/uuid)"
+  fi
+  mkdir -p "$state_dir"
+  umask 077
+  tmp="$(mktemp "$state_dir/.service.json.XXXXXX")" || return 1
+  printf '{"id":"%s","version":"%s","url":"%s","pid":%s,"password":"%s"}\n' \
+    "$id" "$version" "$url" "$pid" "$(json_escape "$password")" >"$tmp" || {
+    rm -f "$tmp"
+    return 1
+  }
+  mv -f "$tmp" "$state_file"
+  if [ "$pid:$version" != "$last_published" ]; then
+    echo "opencode-service-publish: pid $pid, $url, version $version"
+    last_published="$pid:$version"
+  fi
+}
+
+case "${1-}" in
+  --once)
+    mkdir -p "$state_dir"
+    exec 9>"$lock_file"
+    flock -w 2 9 || exit 0
+    publish_once
+    ;;
+  --watch)
+    mkdir -p "$state_dir"
+    exec 9>"$lock_file"
+    flock -n 9 || {
+      echo "opencode-service-publish: another instance holds $lock_file" >&2
+      exit 1
+    }
+    while :; do
+      publish_once || true
+      sleep 2
+    done
+    ;;
+  *)
+    echo "usage: $0 --once|--watch" >&2
+    exit 2
+    ;;
+esac

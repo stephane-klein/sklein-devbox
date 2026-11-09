@@ -3,8 +3,8 @@
 # remote-desktop link (the foot host -> instance reverse carrier).
 #
 # Runs `mise doctor`, then compares the version of the running pitchfork
-# supervisor and of the supervised opencode server and OpenChamber with the
-# version on PATH, then walks through the capabilities the link provides: a
+# supervisor and of the OpenCode child OpenChamber launches and OpenChamber with
+# the version on PATH, then walks through the capabilities the link provides: a
 # desktop notification, audio playback and URL opening -- plus a
 # transport-aware clipboard (OSC 52) check, which does not depend on the link
 # carrier. For each it runs the command and asks whether the effect was
@@ -13,7 +13,7 @@
 #
 # The homelab CA is checked too: the anchor in the Fedora trust store, its
 # freshness against gopass, and two functional probes (curl and Node) against a
-# `*.sklein.internal` host, plus the NODE_OPTIONS the opencode server needs to
+# `*.sklein.internal` host, plus the NODE_OPTIONS the openchamber daemon needs to
 # read that store. The pitchfork proxy CA is compared with the copy pinned in
 # gopass, so a reinstall that lost it shows up here.
 #
@@ -63,11 +63,11 @@ usage() {
 $PROG - check the sklein-devbox remote-desktop link from inside the instance.
 
 Runs \`mise doctor\`, compares the version of the running pitchfork supervisor
-and of the supervised opencode server and OpenChamber with the version on PATH,
-checks the homelab CA (trust store, gopass, curl and Node probes, daemon
-NODE_OPTIONS), then guides you through the link checks (a desktop notification,
-an audio playback and opening a URL) and a clipboard (OSC 52) check, asking
-after each whether you perceived the effect on the foot host.
+and of the OpenCode child OpenChamber launches and OpenChamber with the version
+on PATH, checks the homelab CA (trust store, gopass, curl and Node probes,
+daemon NODE_OPTIONS), then guides you through the link checks (a desktop
+notification, an audio playback and opening a URL) and a clipboard (OSC 52)
+check, asking after each whether you perceived the effect on the foot host.
 
 Usage:
   $PROG [options]
@@ -282,41 +282,110 @@ check_pitchfork_version() {
   fi
 }
 
+opencode_child_pid() {
+  local oc_pid
+  oc_pid="$(daemon_pid openchamber)"
+  [ -n "$oc_pid" ] || return 1
+  pgrep -P "$oc_pid" -f 'opencode.*serve' 2>/dev/null | head -n1
+}
+
 check_opencode_version() {
-  local pid ver cli svc stale
+  local oc_pid pid ver cli svc svc_pid stale svc_file
   if ! command -v pitchfork >/dev/null 2>&1; then
-    record_skip "opencode-server: pitchfork not found in PATH"
+    record_skip "opencode: pitchfork not found in PATH"
     return
   fi
-  pid="$(daemon_pid opencode-server)"
+  oc_pid="$(daemon_pid openchamber)"
+  if [ -z "$oc_pid" ]; then
+    record_skip "opencode: openchamber not supervised by pitchfork"
+    return
+  fi
+  pid="$(opencode_child_pid)"
   if [ -z "$pid" ]; then
-    record_skip "opencode-server not supervised by pitchfork"
+    record_skip "opencode: no managed child under openchamber (pid $oc_pid)"
     return
   fi
-  # The supervised process is the opencode binary itself and carries no file
-  # capability, so its own executable is readable here.
+  # The child is the opencode binary itself and carries no file capability, so
+  # its own executable is readable here.
   ver="$(/proc/"$pid"/exe --version 2>/dev/null | awk 'NR==1 { print $NF }')"
   ver="${ver#v}"
   if [ -z "$ver" ]; then
-    record_skip "cannot read the version of opencode-server (pid $pid)"
+    record_skip "cannot read the version of the OpenCode child (pid $pid)"
     return
   fi
-  # A stale service.json means the running server never registered this pid:
-  # clients then reuse an old URL and password.
-  svc="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' \
-         "${XDG_STATE_HOME:-$HOME/.local/state}/opencode/service.json" 2>/dev/null | head -n1)"
+  if tr '\0' '\n' < /proc/"$pid"/cmdline 2>/dev/null | grep -qx -- '--service'; then
+    record_fail "OpenCode child (pid $pid) runs with --service; it takes OpenCode's single-writer lease (expected plain serve)"
+    return
+  fi
+  # A stale service.json means the child never registered this pid: clients
+  # then reuse an old URL and password.
+  svc_file="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/service.json"
+  if [ ! -r "$svc_file" ]; then
+    record_fail "service.json is missing; clients cannot discover the OpenCode child (restart: pitchfork restart global/openchamber)"
+    return
+  fi
+  svc="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$svc_file" 2>/dev/null | head -n1)"
+  svc_pid="$(sed -n 's/.*"pid": *\([0-9]\{1,\}\).*/\1/p' "$svc_file" 2>/dev/null | head -n1)"
   stale=""
   if [ -n "$svc" ] && [ "$svc" != "$ver" ]; then
-    stale=", service.json still says $svc"
+    stale=", service.json says version $svc"
+  fi
+  if [ -n "$svc_pid" ] && [ "$svc_pid" != "$pid" ]; then
+    stale="$stale, service.json says pid $svc_pid"
   fi
   cli="$(opencode --version 2>/dev/null | awk 'NR==1 { print $NF }')"
   cli="${cli#v}"
   if [ -z "$cli" ]; then
-    record_pass "opencode server $ver (pid $pid, no CLI in PATH$stale)"
+    record_pass "opencode child $ver (pid $pid, no CLI in PATH$stale)"
   elif [ "$cli" = "$ver" ]; then
-    record_pass "opencode $ver (pid $pid, CLI == server$stale)"
+    record_pass "opencode $ver (pid $pid, CLI == child$stale)"
   else
-    record_fail "opencode: server $ver (pid $pid), CLI $cli$stale (restart: pitchfork restart opencode-server, ends running sessions)"
+    record_fail "opencode: child $ver (pid $pid), CLI $cli$stale (restart: pitchfork restart global/openchamber, ends running sessions)"
+  fi
+}
+
+check_opencode_password() {
+  local pid file_pw env_pw svc_file
+  pid="$(opencode_child_pid)"
+  if [ -z "$pid" ]; then
+    record_skip "opencode password: no managed child under openchamber"
+    return
+  fi
+  svc_file="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/service.json"
+  file_pw="$(sed -n 's/.*"password": *"\([^"]*\)".*/\1/p' "$svc_file" 2>/dev/null | head -n1)"
+  env_pw="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null \
+    | sed -n 's/^OPENCODE_PASSWORD=//p' | head -n1)"
+  if [ -z "$env_pw" ]; then
+    env_pw="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null \
+      | sed -n 's/^OPENCODE_SERVER_PASSWORD=//p' | head -n1)"
+  fi
+  if [ -z "$file_pw" ] || [ -z "$env_pw" ]; then
+    record_skip "opencode password: service.json or the child environment is missing a password"
+    return
+  fi
+  if [ "$file_pw" = "$env_pw" ]; then
+    record_pass "opencode: service.json password matches the OpenCode child environment"
+  else
+    record_fail "opencode: service.json password differs from the OpenCode child environment (check opencode-service-publish)"
+  fi
+}
+
+check_opencode_publisher() {
+  local pid svc_file
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "opencode publisher: pitchfork not found in PATH"
+    return
+  fi
+  pid="$(daemon_pid opencode-service-publish)"
+  if [ -z "$pid" ]; then
+    record_fail "opencode-service-publish not supervised by pitchfork (start: pitchfork start global/opencode-service-publish)"
+    return
+  fi
+  svc_file="${XDG_STATE_HOME:-$HOME/.local/state}/opencode/service.json"
+  if [ -r "$svc_file" ]; then
+    record_pass "opencode-service-publish is running (pid $pid) and service.json exists"
+  else
+    record_fail "opencode-service-publish is running (pid $pid) but service.json is missing (check its log)"
   fi
 }
 
@@ -355,6 +424,8 @@ test_versions() {
   step "versions"
   check_pitchfork_version
   check_opencode_version
+  check_opencode_password
+  check_opencode_publisher
   check_openchamber_version
 }
 
@@ -470,21 +541,21 @@ check_ca_node() {
 check_ca_daemon_env() {
   local pid env
   if ! command -v pitchfork >/dev/null 2>&1; then
-    record_skip "opencode-server env: pitchfork not found in PATH"
+    record_skip "openchamber env: pitchfork not found in PATH"
     return
   fi
-  pid="$(daemon_pid opencode-server)"
+  pid="$(daemon_pid openchamber)"
   if [ -z "$pid" ]; then
-    record_skip "opencode-server not supervised, NODE_OPTIONS unchecked"
+    record_skip "openchamber not supervised, NODE_OPTIONS unchecked"
     return
   fi
   env="$(tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null)"
   if printf '%s\n' "$env" | grep -qx 'NODE_OPTIONS=--use-openssl-ca'; then
-    record_pass "opencode-server (pid $pid) carries NODE_OPTIONS=--use-openssl-ca"
+    record_pass "openchamber (pid $pid) carries NODE_OPTIONS=--use-openssl-ca; its OpenCode child inherits it"
   elif [ -z "$env" ]; then
-    record_skip "cannot read the environment of opencode-server (pid $pid)"
+    record_skip "cannot read the environment of openchamber (pid $pid)"
   else
-    record_fail "opencode-server (pid $pid) runs without NODE_OPTIONS=--use-openssl-ca (restart: systemctl --user restart pitchfork)"
+    record_fail "openchamber (pid $pid) runs without NODE_OPTIONS=--use-openssl-ca (restart: systemctl --user restart pitchfork)"
   fi
 }
 

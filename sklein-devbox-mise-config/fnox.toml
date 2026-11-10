@@ -27,6 +27,8 @@ EXA_IA_OPENCODE_DEVBOX_APIKEY              = { provider = "gopass", value = "exa
 HINDSIGHT_MCP_TOKEN                        = { provider = "gopass", value = "hindsight/mcp_token" }
 BROWSER_CONTROL_MCP_EXTENSION_SECRET       = { provider = "gopass", value = "browser-control-mcp/EXTENSION_SECRET" }
 MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN = { provider = "gopass", value = "memex.sklein.xyz/mcp-reader/opencode_token" }
+HOMELAB_THE_ARTIFACT_MCP_TOKEN             = { provider = "gopass", value = "homelab/the-artifact/mcp-token" }
+
 
 # NetBird PAT, used by sklein-devbox-ingress to auto-configure the wildcard DNS
 # zone and nameserver through the public API.

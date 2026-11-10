@@ -121,6 +121,16 @@
         "headers": {
           "Authorization": "Bearer {{ secret(name="MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN") }}"
         }
+      },
+      "artifact": {
+        "type": "remote",
+        "url": "https://artifact.stephane-klein.info/mcp",
+        "oauth": false,
+        "disabled": true,
+        "codemode": true,
+        "headers": {
+          "Authorization": "Bearer {{ secret(name="HOMELAB_THE_ARTIFACT_MCP_TOKEN") }}"
+        }
       }
     }
   },

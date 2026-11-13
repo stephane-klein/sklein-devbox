@@ -1,0 +1,10 @@
+# Thème catppuccin/glamour (mocha) pour la commande `glow` et pour l'aperçu
+# `:Glow` de Neovim, qui lit le même fichier.
+#
+# Chemin absolu obligatoire : avec `~/…`, glow valide le style (stat) puis le
+# rouvre sans étendre le `~` et échoue sur « error reading file ».
+#
+# Le fichier de style est une copie de catppuccin/glamour, plus
+# code_block.chroma.text.background_color = "#313244" (surface0), que le thème
+# ne fournit pas.
+style: /home/devbox/.config/glow/catppuccin-mocha.json

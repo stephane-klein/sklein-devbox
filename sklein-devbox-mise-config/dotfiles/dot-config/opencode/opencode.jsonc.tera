@@ -131,6 +131,18 @@
         "headers": {
           "Authorization": "Bearer {{ secret(name="HOMELAB_THE_ARTIFACT_MCP_TOKEN") }}"
         }
+      },
+      "browse": {
+        "type": "local",
+        "command": [
+          "browse",
+          "mcp"
+        ],
+        "cwd": "~",
+        "pool": true,
+        "environment": {
+          "OPENCODE_BROWSER_RUNTIME": "auto-update"
+        }
       }
     }
   },

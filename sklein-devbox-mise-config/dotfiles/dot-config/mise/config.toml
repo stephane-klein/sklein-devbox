@@ -73,7 +73,7 @@ gopass = "latest"
 fnox = { version = "1.48.0", workflow = "release.yml" }
 tmux = "3.8"
 fzf = "0.75.0"
-atuin = "18.24.6"
+atuin = "18.24.8"
 pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
@@ -82,7 +82,7 @@ pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main" }
 carapace = "1.8.2"
 
 jujutsu = "0.47.1"
-jjui = "0.10.12"
+jjui = "0.10.13"
 
 starship = "1.27.0"
 "github:dmmulroy/jj-starship" = {
@@ -97,7 +97,7 @@ starship = "1.27.0"
 pipx = "1.18.16"
 "pipx:petname" = "2.9"
 
-opencode = { version = "2.2.7", allow_builds = ["@opencode/cli"] }
+opencode = { version = "2.3.0", allow_builds = ["@opencode/cli"] }
 "pipx:opentab-ai" = "v1.35.0"
 
 # https://github.com/Shlomob/ocmonitor-share
@@ -112,7 +112,7 @@ tree-sitter = "0.27.2"
 usage = { version = "7.3.0", workflow = "publish-cli.yml" }
 delta = "0.20.1"
 rtk = "1.2.0"
-github-cli = "2.103.3"
+github-cli = "2.104.0"
 
 claude-code = "2.1.319"
 
@@ -136,14 +136,14 @@ lsd = "1.2.0"
 "github:lxc/incus" = { version = "7.6", bin = "incus" }
 
 # Tooling for OpenCode
-"npm:@upstash/context7-mcp" = "4.6.0"
+"npm:@upstash/context7-mcp" = "4.7.0"
 "pipx:mcp-server-fetch" = "2026.11.11"
 "npm:tavily-mcp" = "0.2.22"
-"npm:mcp-searxng" = "2.10.0"
+"npm:mcp-searxng" = "2.10.1"
 "npm:exa-mcp-server" = "3.4.3"
-"npm:cc-safety-net" = "2.7.12"
+"npm:cc-safety-net" = "2.7.13"
 "npm:@playwright/mcp" = "0.0.85"
-"npm:@openchamber/web" = "2.7.0"
+"npm:@openchamber/web" = "2.7.2"
 "pipx:opencode-history-mcp" = "latest"
 
 # `ttok` (tiktoken) counts the tokens of the system blocks captured by
@@ -154,9 +154,9 @@ lsd = "1.2.0"
 
 # Kubernetes
 kubectl = "1.37.2"
-helm = "4.3.1"
+helm = "4.3.2"
 kubectx = "0.11.0"
 kubens = "0.11.0"
-helmfile = { version = "1.8.3", workflow = "releaser.yaml" }
+helmfile = { version = "1.8.4", workflow = "releaser.yaml" }
 k9s = "0.51.0"
 qdns = "0.19.12"

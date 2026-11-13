@@ -63,7 +63,7 @@ mise run bootstrap-all   # -> fnox exec -- mise bootstrap --yes
 ```
 
 Both use `raw_args = true`, so subcommands, targets and flags pass through
-verbatim: `mise run dot status`, `mise run dot diff ~/.config/atuin`,
+verbatim: `mise run dot status`, `mise run dot diff '~/.config/nvim'`,
 `mise run dot apply --force`, `mise run bootstrap-all --dry-run`, ...
 
 Without fnox (e.g. an attended one-off run), mise can prompt for the values
@@ -98,6 +98,7 @@ The global config defines shortcuts so you never have to type the driver path:
 [shell_alias]
 devbox-cd        = "cd \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\""
 devbox-dot       = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot"
+devbox-dot-file  = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run dot-file"
 devbox-bootstrap = "mise -C \"$HOME/.local/share/sklein-devbox/sklein-devbox-mise-config\" run bootstrap-all"
 ```
 
@@ -113,6 +114,9 @@ whole instance — `[bootstrap.packages]`, `[bootstrap.files]`, services, then t
 dotfiles and `[tools]`. Use it whenever a change touches any `[bootstrap.*]`
 section: `devbox-dot apply` applies only the `[dotfiles]` entries (and installs
 `[tools]`), never `[bootstrap.packages]`.
+
+`devbox-dot-file <target>` runs `mise dot apply <target>` with
+`MISE_NO_HOOKS=1`, so it deploys one entry without the bootstrap hooks.
 
 ## Shell completions
 
@@ -132,7 +136,7 @@ container:
 ```sh
 devbox-cd                      # cd into the driver
 mise run dot status
-mise run dot diff ~/.config/atuin
+mise run dot diff '~/.config/nvim'
 mise run dot apply
 ```
 
@@ -140,9 +144,27 @@ or, without changing directory:
 
 ```sh
 devbox-dot status
-devbox-dot diff ~/.config/atuin
+devbox-dot diff '~/.config/nvim'
 devbox-dot apply
 ```
+
+To deploy a single entry, name its target: the key of a `[dotfiles]` or
+`[dotfile_groups.<group>.entries]` entry, not a path inside `dotfiles/`.
+
+```sh
+devbox-dot-file '~/.config/nvim'
+```
+
+The whole home tree is one group entry (`[dotfile_groups.home]`, target `~`), so
+most files cannot be named one by one; `~/.config/nvim` has its own entry for
+that reason. The comparison is exact, so a source path such as
+`dotfiles/dot-config/nvim` matches nothing and mise answers « no dotfiles
+matched target filter ».
+
+`devbox-dot-file` sets `MISE_NO_HOOKS=1`. Without it, `mise dot apply` runs the
+`pre-dotfiles` and `post-dotfiles` hooks even for one target, and the
+`post-dotfiles` hook installs the tools, refreshes the CAs and restarts
+pitchfork.
 
 Falling back to the explicit form always works (the fnox wrapper supplies the
 bootstrap secrets):
@@ -157,7 +179,9 @@ global config. The driver declares a `post-dotfiles` bootstrap hook with
 `run = "mise install"`; `mise dot apply` runs it (see
 [hooks](https://mise.jdx.dev/bootstrap.html#hooks)), so a new entry in
 `dotfiles/dot-config/mise/config.toml` takes effect without a manual
-`mise install`.
+`mise install`. Each hook declares a `description`, which mise prints instead of
+the command's first line; `--verbose` prints the command. `MISE_NO_HOOKS=1`
+skips both hook phases, and with them the `mise install`.
 
 ## Remote-desktop link
 

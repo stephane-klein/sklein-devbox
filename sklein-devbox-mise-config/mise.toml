@@ -85,6 +85,10 @@ run = "sudo chsh -s /bin/zsh devbox"
 # fetch them the first time the dotfiles are applied, before they are copied to
 # ~/.config/tmux and ~/.config/zsh. The directories are empty only on a fresh
 # machine, so this is a no-op afterwards.
+#
+# `description` prints this line instead of the command's first line; `--verbose`
+# prints the command.
+description = "vendor the missing tmux and zsh plugins"
 run = '''
 if [ -z "$(ls -A "{{ config_root }}/dotfiles/dot-config/tmux/plugins/catppuccin/tmux" 2>/dev/null)" ]; then
   bash "{{ config_root }}/scripts/sync-catppuccin-tmux.sh"
@@ -95,6 +99,8 @@ fi
 '''
 
 [bootstrap.hooks.post-dotfiles]
+# Replaces the first line of the script in the output (`--verbose` shows it).
+description = "finish the machine setup: tools, CAs and pitchfork"
 run = '''
 if [ ! -f "$HOME/.kube/config.d/00-current.kubeconfig" ]; then
   mkdir -p "$HOME/.kube/config.d"
@@ -231,6 +237,14 @@ description = "Run `mise dot` with the bootstrap secrets injected by fnox"
 raw_args = true
 run = "fnox -c fnox.toml exec -- mise dot"
 
+# A targeted apply still runs the pre- and post-dotfiles hooks, and the
+# post-dotfiles one installs the tools and restarts pitchfork. `MISE_NO_HOOKS`
+# skips both when only one entry is being deployed.
+[tasks.dot-file]
+description = "Apply dotfile targets without the bootstrap hooks"
+raw_args = true
+run = "MISE_NO_HOOKS=1 fnox -c fnox.toml exec -- mise dot apply"
+
 [tasks.bootstrap-all]
 description = "Run the full mise bootstrap with fnox-provided secrets"
 raw_args = true
@@ -262,6 +276,12 @@ dot_prefix = true
 exclude = ["*.tera"]
 
 [dotfile_groups.home.entries]
+# Named so this subtree can be re-applied on its own:
+# `mise dot apply '~/.config/nvim'`. The source (`dot-config/nvim`), the
+# `copy` mode and `dot_prefix` are inherited from the group, and the group's
+# walk leaves the subtree to this entry.
+"~/.config/nvim"                    = {}
+
 # Permissions the plain copy walk cannot express.
 "~/.ssh/config"                     = { mode = "copy", permissions = "0600" }
 

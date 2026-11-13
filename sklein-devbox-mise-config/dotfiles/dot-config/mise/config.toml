@@ -110,7 +110,7 @@ ripgrep = "15.2.0"
 fd = "10.5.2"
 node = "26.13.1"
 go = "latest"
-neovim = "0.12.6"
+neovim = "nightly"
 glow = "3.0.0"
 tree-sitter = "0.27.2"
 usage = { version = "7.3.0", workflow = "publish-cli.yml" }

@@ -7,6 +7,21 @@
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 
+-- Conceal du markdown. Avec Neovim >= 0.13, 'wrap' tient compte de la largeur
+-- des caractères masqués : la ligne visuelle se remplit jusqu'au bord au lieu
+-- de s'arrêter au milieu, ce qui était le cas tant que les `**` et les
+-- backticks comptaient encore dans la largeur.
+-- `concealcursor = "n"` sans le `c` : la ligne du curseur reste révélée, donc
+-- une URL de lien redevient lisible quand on pose le curseur dessus.
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("markdown_conceal", { clear = true }),
+  pattern = "markdown",
+  callback = function()
+    vim.opt_local.conceallevel = 2
+    vim.opt_local.concealcursor = "n"
+  end,
+})
+
 -- Disable window-local directories
 vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
   pattern = "*",

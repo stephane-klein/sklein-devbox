@@ -94,7 +94,8 @@ if os.getenv("TERM_PROGRAM") == "WezTerm" then
 end
 -- }}}
 
-vim.g.lazyvim_markdown_conceallevel = 0
+-- Le conceal du markdown est réglé par une autocmd (lua/config/autocmds.lua) :
+-- `vim.g.lazyvim_markdown_conceallevel` n'est plus lu par LazyVim.
 
 vim.opt.clipboard = "unnamedplus"
 

@@ -118,6 +118,7 @@ boot_start = false
 # `pitchfork proxy setup` (re-run by the script's `up`).
 [settings.proxy]
 enable = true
+auto_start = false
 https = true
 tld = "{{ tld }}"
 wildcard = true

@@ -17,6 +17,7 @@ GITHUB_CLI_TOKEN                           = { provider = "gopass", value = "git
 # OpenCode providers
 OPENCODE_GO_APIKEY                         = { provider = "gopass", value = "opencode-go/apikey" }
 OPENROUTER_SKLEIN_DEVBOX_APIKEY            = { provider = "gopass", value = "openrouter/sklein-devbox/apikey" }
+OPENROUTER_SKLEIN_DEVBOX_APIKEY_2          = { provider = "gopass", value = "openrouter/sklein-devbox/apikey2" }
 DEEPSEEK_COM_OPENCODE_SKLEIN_DEVBOX_APIKEY = { provider = "gopass", value = "deepseek.com/opencode-sklein-devbox/apikey" }
 OPENCODE_GO_ACCOUNT2_APIKEY                = { provider = "gopass", value = "opencode-go/account2/apikey" }
 

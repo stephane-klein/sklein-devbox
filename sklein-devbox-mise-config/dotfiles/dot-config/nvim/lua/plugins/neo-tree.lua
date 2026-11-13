@@ -234,6 +234,9 @@ return {
           expander_expanded = "",
           expander_highlight = "NeoTreeExpander",
         },
+        file_size = { enabled = false },
+        type = { enabled = false },
+        last_modified = { enabled = false },
         git_status = {
           symbols = {
             unstaged = "󰄱",

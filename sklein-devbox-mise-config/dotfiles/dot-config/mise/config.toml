@@ -31,6 +31,17 @@ GNUPGHOME = "{{ env.HOME }}/.config/gnupg"
 # and mise reinstalls the tool into a new `~uv~<digest>` directory forever
 # (`mise doctor` exits 1, the `pipx:*` tool shows as missing). pipx keeps the
 # plain `<version>` install path, which is stable. `pipx` is required for this.
+#
+# Quarantine applied to newly published versions, for every backend and for
+# the dependencies of `npm:` tools. mise's default is 24h.
+#
+# 24h blocked the encodeurl 2.0.3 release (published 18:15 UTC, still 15h old
+# at upgrade time), so aube fell back to 2.0.2, a manual publish without
+# provenance, and `trustPolicy=no-downgrade` refused it. 4h keeps a short
+# buffer and lets a fix published in the morning be installed the same day.
+[settings]
+minimum_release_age = "4h"
+
 [settings.pypi]
 uvx = false
 
@@ -59,11 +70,11 @@ exclude = ["gopass"]
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = { version = "1.47.0", workflow = "release.yml" }
+fnox = { version = "1.48.0", workflow = "release.yml" }
 tmux = "3.8"
 fzf = "0.75.0"
-atuin = "18.24.5"
-pitchfork = { version = "2.33.1", workflow = "release.yml@refs/heads/main" }
+atuin = "18.24.6"
+pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
@@ -86,7 +97,7 @@ starship = "1.27.0"
 pipx = "1.18.16"
 "pipx:petname" = "2.9"
 
-opencode = { version = "2.2.6", allow_builds = ["@opencode/cli"] }
+opencode = { version = "2.2.7", allow_builds = ["@opencode/cli"] }
 "pipx:opentab-ai" = "v1.35.0"
 
 # https://github.com/Shlomob/ocmonitor-share
@@ -94,7 +105,7 @@ opencode = { version = "2.2.6", allow_builds = ["@opencode/cli"] }
 
 ripgrep = "15.2.0"
 fd = "10.5.2"
-node = "26.13.0"
+node = "26.13.1"
 go = "latest"
 neovim = "0.12.6"
 tree-sitter = "0.27.2"
@@ -111,11 +122,11 @@ claude-code = "2.1.319"
 
 zoxide = "0.10.0"
 jq = "1.8.2"
-yq = "4.54.2"
+yq = "4.54.3"
 yazi = "26.9.1"
 lsd = "1.2.0"
 "pipx:copier" = "9.19.1"
-"github:tassiovirginio/try-rs" = "1.7.13"
+"github:tassiovirginio/try-rs" = "1.7.14"
 "github:11happy/cpx" = "0.2.1"
 "github:mitsuhiko/minijinja" = "3.1.0"
 "github:laulauland/jj-hunk" = "0.5.1"
@@ -125,13 +136,13 @@ lsd = "1.2.0"
 "github:lxc/incus" = { version = "7.6", bin = "incus" }
 
 # Tooling for OpenCode
-"npm:@upstash/context7-mcp" = "4.5.1"
-"pipx:mcp-server-fetch" = "2026.11.4"
+"npm:@upstash/context7-mcp" = "4.6.0"
+"pipx:mcp-server-fetch" = "2026.11.11"
 "npm:tavily-mcp" = "0.2.22"
 "npm:mcp-searxng" = "2.10.0"
 "npm:exa-mcp-server" = "3.4.3"
-"npm:cc-safety-net" = "2.7.6"
-"npm:@playwright/mcp" = "0.0.84"
+"npm:cc-safety-net" = "2.7.12"
+"npm:@playwright/mcp" = "0.0.85"
 "npm:@openchamber/web" = "2.7.0"
 "pipx:opencode-history-mcp" = "latest"
 

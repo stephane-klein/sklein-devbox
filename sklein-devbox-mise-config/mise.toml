@@ -17,6 +17,7 @@ INCUS_PRIVATE_CLIENT_CRT = "INCUS_PRIVATE_CLIENT_CRT"
 INCUS_PRIVATE_CLIENT_KEY = "INCUS_PRIVATE_CLIENT_KEY"
 HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG = "HOMELAB_STEPHANE_KLEIN_INFO_K3S_KUBECONFIG"
 GITHUB_CLI_TOKEN = "GITHUB_CLI_TOKEN"
+FORGEJO_CLI_TOKEN = "FORGEJO_CLI_TOKEN"
 
 # OpenCode MCP
 CONTEXT7_APIKEY = "CONTEXT7_APIKEY"
@@ -438,6 +439,8 @@ exclude = ["*.tera"]
 "~/.config/gh/hosts.yml"             = { source = "dot-config/gh/hosts.yml.tera", mode = "template" }
 "~/.config/opencode/opencode.jsonc"  = { source = "dot-config/opencode/opencode.jsonc.tera", mode = "template" }
 "~/.local/share/opencode/credentials.json" = { source = "dot-local/share/opencode/credentials.json.tera", mode = "template", permissions = "0600" }
+# Application token of the Forgejo CLI (`fj`), read from this file at startup.
+"~/.local/share/forgejo-cli/keys.json" = { source = "dot-local/share/forgejo-cli/keys.json.tera", mode = "template", permissions = "0600" }
 "~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = { source = "dot-kube/config.d/homelab-stephane-klein-info.kubeconfig.tera", mode = "template", permissions = "0600" }
 
 # Entries whose source lives outside the group root, or that use inline content.

@@ -332,3 +332,13 @@ export GPG_TTY="$(tty)"
 # ~/.local/state/opencode/service.json. Clients discover its URL and password
 # there, so no flag or extra env is needed here.
 alias opencode='TMUX= command opencode'
+
+# fj always targets the default Forgejo instance, whatever the current git
+# remote. Pass your own -H/--host (or use `command fj`) to override.
+fj() {
+  if [[ "$*" == *"-H"* || "$*" == *"--host"* ]]; then
+    command fj "$@"
+  else
+    command fj -H forgejo.sklein.internal "$@"
+  fi
+}

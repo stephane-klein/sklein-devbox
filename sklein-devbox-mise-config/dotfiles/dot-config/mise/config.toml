@@ -25,6 +25,10 @@ KUBECONFIG = "{{ env.HOME }}/.kube/config.d/00-current.kubeconfig:{{ env.HOME }}
 # signing fails with "No secret key".
 GNUPGHOME = "{{ env.HOME }}/.config/gnupg"
 
+# Default Forgejo instance for `fj` (forgejo-cli). Without it, fj guesses the
+# host from the current git remote and fails outside a Forgejo checkout.
+FJ_FALLBACK_HOST = "https://forgejo.sklein.internal"
+
 # Install the Python CLI tools with pipx instead of uv. mise's uv
 # dependency-graph locking names the install directory after a digest of the
 # freshly resolved uv.lock; uv stamps that lock with a fresh `exclude-newer`

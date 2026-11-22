@@ -1,0 +1,12 @@
+{
+  "hosts": {
+    "forgejo.sklein.internal": {
+      "type": "Application",
+      "token": "{{ secret(name="FORGEJO_CLI_TOKEN") }}"
+    }
+  },
+  "aliases": {
+    "forgejo.sklein.internal:32222": "forgejo.sklein.internal"
+  },
+  "default_ssh": []
+}

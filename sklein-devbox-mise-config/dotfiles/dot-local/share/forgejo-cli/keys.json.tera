@@ -8,5 +8,7 @@
   "aliases": {
     "forgejo.sklein.internal:32222": "forgejo.sklein.internal"
   },
-  "default_ssh": []
+  "default_ssh": [
+    "forgejo.sklein.internal"
+  ]
 }

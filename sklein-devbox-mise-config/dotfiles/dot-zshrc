@@ -321,7 +321,7 @@ export EDITOR="nvim"
 # signing commits (git/jj). Evaluated per TTY, so it belongs in the shell rc.
 export GPG_TTY="$(tty)"
 
-# OpenChamber launches the OpenCode server, and `opencode-service-publish`
-# mirrors it into ~/.local/state/opencode/service.json. Clients discover its
-# URL and password there, so no flag or extra env is needed here.
+# `opencode-server` runs `opencode serve --service` and registers itself in
+# ~/.local/state/opencode/service.json. Clients discover its URL and password
+# there, so no flag or extra env is needed here.
 alias opencode='TMUX= command opencode'

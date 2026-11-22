@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Deployed to ~/.local/libexec/sklein-devbox/opencode-port-free, off PATH: it
-# runs as a pitchfork oneshot dependency, no human types its name.
+# Deployed to ~/.local/libexec/sklein-devbox/opencode-port-free, off PATH: it is
+# the first command of the `opencode-server` daemon's run script, no human types
+# its name.
 #
-# opencode-port-free - give port 4096 back to OpenChamber before it starts its
-# OpenCode child.
+# opencode-port-free - give port 4096 back to the shared OpenCode server before
+# it starts.
 #
-# OpenChamber launches the child with `OPENCODE_PORT=4096`, but pitchfork
-# watches port 3000 (the OpenChamber UI), not 4096. An unsupervised server
-# started by a client during a restart makes the child fail to bind (seen on
-# 2026-10-29). This script runs as a oneshot dependency of the `openchamber`
-# daemon and clears the port first.
+# A server started by a client can still hold the port when pitchfork starts the
+# daemon (seen on 2026-10-29), and `opencode serve` then exits. This script
+# stops the holder before the server is exec'd.
 #
-# It never touches a process in the pitchfork tree: the OpenChamber child sits
-# below the supervised `openchamber` process, and `pitchfork start` on an
-# already running daemon runs its dependencies first.
+# It leaves a process in the pitchfork tree alone: when the supervisor restarts
+# the daemon, the old server is either gone or still its child, and killing it
+# here would make the new one fail to bind for no reason.
 set -u
 
 port=4096

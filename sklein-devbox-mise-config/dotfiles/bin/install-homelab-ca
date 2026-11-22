@@ -6,9 +6,9 @@
 # regenerates the bundles that curl, git, dnf and pip read, so the
 # `*.sklein.internal` services validate for every user.
 #
-# Node never reads that store: the `openchamber` daemon carries
-# `NODE_OPTIONS=--use-openssl-ca`, and its OpenCode child inherits it. That
-# makes Node use the OpenSSL default paths, and on Fedora those point at the
+# Node never reads that store: the `opencode-server` daemon carries
+# `NODE_OPTIONS=--use-openssl-ca` for the MCP servers and `webfetch` it hosts.
+# That makes Node use the OpenSSL default paths, and on Fedora those point at the
 # ca-trust bundle. Without that flag the SearXNG MCP server and `webfetch`
 # reject the homelab certificates.
 #

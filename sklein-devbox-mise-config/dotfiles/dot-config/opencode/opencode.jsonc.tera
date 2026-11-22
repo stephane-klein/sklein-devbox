@@ -1,3 +1,5 @@
+{%- set openchamber_plugin = env.HOME ~ "/.config/openchamber/plugins/openchamber" -%}
+{%- set has_openchamber_plugin = exec(command="test -d " ~ openchamber_plugin ~ " && printf yes || true") -%}
 {
   "$schema": "https://opencode.ai/config.json",
   "update": "disable",
@@ -19,7 +21,7 @@
       "mise": {
         "type": "local",
         "command": ["mise", "mcp"],
-        "disabled": true,
+        "disabled": false,
         "codemode": false
       },
       "pitchfork": {
@@ -56,7 +58,7 @@
       "context7": {
         "type": "local",
         "command": ["mise", "exec", "--cd", "/", "--", "context7-mcp", "--api-key", "{{ secret(name="CONTEXT7_APIKEY") }}"],
-        "disabled": true,
+        "disabled": false,
         "codemode": false
       },
       "tavily": {
@@ -72,7 +74,7 @@
       "exa": {
         "type": "local",
         "command": ["mise", "exec", "--cd", "/", "--", "exa-mcp-server"],
-        "disabled": true,
+        "disabled": false,
         "codemode": false,
         "environment": {
           "EXA_API_KEY": "{{ secret(name="EXA_IA_OPENCODE_DEVBOX_APIKEY") }}"
@@ -150,10 +152,18 @@
   // `sklein-context-dump` is a local plugin, inert unless a run is armed by
   // `~/bin/sklein-generate-opencode-context-report`: it then enables the MCP
   // servers and captures the request assembled for the audited session.
+  //
+  // The OpenChamber plugin carries its agent tools into the shared
+  // `opencode serve --service` server, which OpenChamber no longer launches
+  // itself. It reads ~/.config/openchamber/runtime-bridge.json and stays
+  // dormant while OpenChamber is down. The entry is written only once
+  // OpenChamber has created the directory, which happens the first time it
+  // connects to a local OpenCode server.
   "plugins": [
     "@slkiser/opencode-quota@5.0.3",
     "cc-safety-net@2.6.19",
-    "{{ env.HOME }}/.config/opencode/plugins/sklein-context-dump",
+    "{{ env.HOME }}/.config/opencode/plugins/sklein-context-dump"{% if has_openchamber_plugin == "yes" %},
+    "{{ openchamber_plugin }}"{% endif %},
   ],
   // Todos are off by default in OpenCode 2.
   "experimental": {

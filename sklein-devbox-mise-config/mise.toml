@@ -116,8 +116,8 @@ mise install
 # `*.sklein.internal` certificates. The CA is read from gopass at apply time, so
 # no copy of it lives in the dotfiles. The script compares the anchor with the
 # secret and only rewrites it, then runs `update-ca-trust`, when they differ.
-# Node never reads that store: the openchamber daemon sets
-# NODE_OPTIONS=--use-openssl-ca and its OpenCode child inherits it.
+# Node never reads that store: the opencode-server daemon sets
+# NODE_OPTIONS=--use-openssl-ca for the MCP servers and webfetch it hosts.
 if [ -x "$HOME/bin/install-homelab-ca" ]; then
   "$HOME/bin/install-homelab-ca" || true
 fi
@@ -130,13 +130,13 @@ if [ -x "$HOME/bin/install-pitchfork-ca" ]; then
   "$HOME/bin/install-pitchfork-ca" || true
 fi
 
-# OpenCode 2: OpenChamber launches `opencode serve` as a child, without
-# `--service` (that flag takes OpenCode's single-writer lease). The
-# `opencode-service-publish` daemon writes the child in
-# ~/.local/state/opencode/service.json, so every client discovers its URL and
-# password without a flag. Pin port/hostname/password here. `service set` stops
-# the registered service, which is now the OpenChamber child, so only write when
-# the value differs.
+# OpenCode 2: one shared server for the TUI, the CLI and OpenChamber.
+# `opencode serve --service` registers itself in
+# ~/.local/state/opencode/service.json, so clients discover its URL and password
+# without a flag; the single-writer lease that comes with `--service` keeps a
+# second client from starting another one. Pin port/hostname/password here.
+# `service set` stops the registered service, which pitchfork then restarts
+# through the `opencode-server` daemon, so only write when the value differs.
 if command -v opencode >/dev/null 2>&1; then
   [ "$(opencode service get port 2>/dev/null)" = "4096" ] ||
     opencode service set port 4096 >/dev/null 2>&1 || true
@@ -166,8 +166,8 @@ fi
 
 # Register the supervisor with systemd (user unit). The unit runs
 # `supervisor run --boot`, the only mode where daemons marked `boot_start` start
-# with the supervisor; without it, a supervisor reload leaves OpenChamber and
-# its OpenCode child down and nothing brings them back. Re-running `enable`
+# with the supervisor; without it, a supervisor reload leaves the OpenCode
+# server and OpenChamber down and nothing brings them back. Re-running `enable`
 # keeps the recorded executable path current and rewrites the unit file, so
 # reload systemd right after it: without a reload systemd keeps the old
 # definition and later reports "the unit file changed on disk".
@@ -175,8 +175,8 @@ fi
 # The supervisor keeps the binary, the plugin modules and the daemon
 # environment it started with. `mise install` above moves `latest` under that
 # live process, so restart the supervisor itself (not just a daemon) at the end
-# of every apply: that also restarts every `boot_start` daemon, OpenChamber and
-# its OpenCode child included, and keeps the processes in sync with what was
+# of every apply: that also restarts every `boot_start` daemon, the OpenCode
+# server and OpenChamber included, and keeps the processes in sync with what was
 # just deployed. Apply from a plain SSH shell — this kills any running OpenCode
 # session.
 #
@@ -268,7 +268,7 @@ if command -v pitchfork >/dev/null 2>&1; then
     # A supervisor may run outside the unit: an on-demand client auto-start
     # (`pitchfork cd` from the shell hook, `pitchfork list`, ...) or a manual
     # `pitchfork supervisor start --force`. It runs without `--boot`, so the
-    # boot_start daemons (openchamber, the OpenCode publisher, the ingress DNS)
+    # boot_start daemons (the OpenCode server, openchamber, the ingress DNS)
     # stay down while the proxy answers, and every ingress URL returns 502 "No
     # daemon found for host". Hand that supervisor over to systemd instead of
     # leaving two: the unit is `Restart=on-failure` and sees a clean exit when
@@ -307,7 +307,7 @@ if command -v pitchfork >/dev/null 2>&1; then
   else
     # No systemd unit: start the boot_start daemons explicitly, in dependency
     # order, the way boot mode would.
-    for d in opencode-service-publish sklein-devbox-ingress-dns openchamber; do
+    for d in sklein-devbox-ingress-dns opencode-server openchamber; do
       "$pf_bin" start "global/$d" >/dev/null 2>&1 || true
     done
   fi
@@ -398,12 +398,14 @@ exclude = ["*.tera"]
 "~/bin/install-pitchfork-ca"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
 
-# Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, the
-# `opencode-port-free` oneshot runs before openchamber, and
-# `opencode-service-publish` makes the OpenCode child discoverable.
+# Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and
+# `opencode-port-free` is the first command of the opencode-server run script.
 "~/.local/libexec/sklein-devbox/pinentry-tmux"      = { mode = "copy", permissions = "0755" }
 "~/.local/libexec/sklein-devbox/opencode-port-free" = { mode = "copy", permissions = "0755" }
-"~/.local/libexec/sklein-devbox/opencode-service-publish" = { mode = "copy", permissions = "0755" }
+
+# `serve --service` registers itself, so the daemon that published OpenChamber's
+# child is gone. `apply` never deletes a file: remove the deployed copy.
+"~/.local/libexec/sklein-devbox/opencode-service-publish" = { mode = "absent" }
 
 # Moved from ~/bin to ~/.local/libexec/sklein-devbox: `apply` never deletes a
 # file, so remove the old copies explicitly; they were reachable from PATH.

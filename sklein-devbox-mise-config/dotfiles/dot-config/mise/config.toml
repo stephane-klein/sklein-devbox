@@ -71,11 +71,11 @@ exclude = ["gopass"]
 [tools]
 age = "latest"
 gopass = "latest"
-fnox = { version = "1.48.0", workflow = "release.yml" }
+fnox = { version = "1.50.0", workflow = "release.yml" }
 tmux = "3.8"
 fzf = "0.75.0"
-atuin = "18.24.8"
-pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main" }
+atuin = "18.25.1"
+pitchfork = { version = "2.36.0", workflow = "release.yml@refs/heads/main" }
 
 # Multi-command shell completion engine: dynamic completions for jj, gh,
 # kubectl, k9s, helm, ... Loaded from dotfiles/dot-zshrc.
@@ -95,13 +95,13 @@ starship = "1.27.0"
 # gum for the input prompts, petname for the default window name, and pipx
 # which mise's pipx backend needs to install the Python tools.
 "aqua:charmbracelet/gum" = "2.0.2"
-pipx = "1.18.16"
+pipx = "1.18.19"
 "pipx:petname" = "2.9"
 
-opencode = { version = "2.3.0", allow_builds = ["@opencode/cli"] }
-"pipx:opentab-ai" = "v1.35.0"
+opencode = { version = "2.3.2", allow_builds = ["@opencode/cli"] }
+"pipx:opentab-ai" = "v1.36.0"
 
-"npm:@opencode/browse" = "0.0.17"
+"npm:@opencode/browse" = "0.1.5"
 
 # https://github.com/Shlomob/ocmonitor-share
 "pipx:opencode-monitor" = "1.0.5"
@@ -113,10 +113,10 @@ go = "latest"
 neovim = "nightly"
 glow = "3.0.0"
 tree-sitter = "0.27.2"
-usage = { version = "7.3.0", workflow = "publish-cli.yml" }
-delta = "0.20.1"
-rtk = "1.2.0"
-github-cli = "2.104.0"
+usage = { version = "7.4.0", workflow = "publish-cli.yml" }
+delta = "0.21.2"
+rtk = "1.2.1"
+github-cli = "2.105.0"
 
 claude-code = "2.1.319"
 
@@ -140,14 +140,14 @@ lsd = "1.2.0"
 "github:lxc/incus" = { version = "7.6", bin = "incus" }
 
 # Tooling for OpenCode
-"npm:@upstash/context7-mcp" = "4.7.0"
-"pipx:mcp-server-fetch" = "2026.11.11"
+"npm:@upstash/context7-mcp" = "4.7.3"
+"pipx:mcp-server-fetch" = "2026.11.18"
 "npm:tavily-mcp" = "0.2.22"
-"npm:mcp-searxng" = "2.10.1"
-"npm:exa-mcp-server" = "3.4.3"
-"npm:cc-safety-net" = "2.7.13"
-"npm:@playwright/mcp" = "0.0.85"
-"npm:@openchamber/web" = "2.7.2"
+"npm:mcp-searxng" = "2.11.0"
+"npm:exa-mcp-server" = "3.5.1"
+"npm:cc-safety-net" = "2.8.1"
+"npm:@playwright/mcp" = "0.0.86"
+"npm:@openchamber/web" = "2.8.0"
 "pipx:opencode-history-mcp" = "latest"
 
 # `ttok` (tiktoken) counts the tokens of the system blocks captured by

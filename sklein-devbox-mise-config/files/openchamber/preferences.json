@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "fields": {
+    "defaultModel": { "value": "opencode-go/deepseek-v4.1-flash" },
+    "defaultAgent": { "value": "chat" },
+    "smallModelUseDefault": { "value": true },
+    "smallModelOverride": { "value": "opencode-go/deepseek-v4.1-flash" }
+  }
+}

@@ -184,9 +184,19 @@ fi
 # the binary's inode and `mise install` replaces the binary, so a freshly
 # installed pitchfork cannot bind :443: the proxy dies with "Permission denied"
 # and every ingress URL stops answering, while the DNS daemon keeps running and
-# hides the cause. `pitchfork proxy setup` is the only thing that grants it. The
-# getcap test keeps sudo off the common path, and `sudo -n` keeps a password
-# prompt from hanging a non-interactive apply.
+# hides the cause. `pitchfork proxy setup` is the only thing that grants it.
+#
+# Test the binary the supervisor will run, never the one this shell resolves.
+# `mise activate` pins a versioned path
+# (installs/pitchfork/<version>/.mise-bins/pitchfork), so a shell opened before
+# an upgrade keeps calling the previous release, whose inode still carries the
+# capability: the test passed, `proxy setup` was skipped, and the restart
+# started `latest` without it (2026-11-19, 2026-11-22 13:24, "Failed to bind
+# proxy server to port 443: Permission denied"). `settings.boot.executable` is
+# what the unit runs; use that same binary for `boot enable` and `proxy setup`,
+# so the capability lands on the inode that binds. `sudo -n` keeps a password
+# prompt from hanging a non-interactive apply: when sudo would prompt, the
+# setup is skipped here and the listener check below reports the dead proxy.
 #
 # systemd starts the user unit at boot only when lingering is enabled. Without
 # it the unit waits for the first login, and the boot_start daemons stay down
@@ -196,25 +206,110 @@ fi
   loginctl enable-linger "$USER" >/dev/null 2>&1 || true
 
 if command -v pitchfork >/dev/null 2>&1; then
-  if ! getcap "$(readlink -f "$(command -v pitchfork)")" 2>/dev/null |
-    grep -q cap_net_bind_service &&
-    sudo -n true 2>/dev/null; then
-    pitchfork proxy setup --yes >/dev/null 2>&1 || true
+  pf_bin="$(pitchfork settings get boot.executable 2>/dev/null)"
+  if [ -z "$pf_bin" ] || [ ! -x "$pf_bin" ]; then
+    pf_bin="$HOME/.local/share/mise/installs/pitchfork/latest/pitchfork"
   fi
-  pitchfork boot enable >/dev/null 2>&1 || true
+  if [ ! -x "$pf_bin" ]; then
+    pf_bin="$(command -v pitchfork)"
+  fi
+
+  if ! getcap "$(readlink -f "$pf_bin")" 2>/dev/null |
+    grep -q cap_net_bind_service; then
+    if sudo -n true 2>/dev/null; then
+      "$pf_bin" proxy setup --yes >/dev/null 2>&1 ||
+        echo "post-dotfiles: pitchfork proxy setup failed; nothing will listen on :443 (repair: sklein-devbox-ingress up)" >&2
+    else
+      echo "post-dotfiles: $pf_bin has no cap_net_bind_service and sudo needs a password; the ingress proxy cannot bind :443 (repair: sklein-devbox-ingress up)" >&2
+    fi
+  fi
+  "$pf_bin" boot enable >/dev/null 2>&1 || true
+
   # `systemctl --user` resolves the user bus from XDG_RUNTIME_DIR, and the foot
   # host's ssh client leaks a foreign value (/tmp) into the instance: pin it the
   # way ~/bin/sklein-devbox-ingress does.
   if [ -d "/run/user/$(id -u)" ]; then
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"
   fi
+
+  # proxy_listening - the pitchfork proxy answers on :443. `pitchfork proxy
+  # status` reads the config FILE, not the running proxy, so it cannot tell
+  # whether the listener exists.
+  proxy_listening() {
+    ss -lntH 2>/dev/null | awk '{print $4}' | grep -qE ':443$'
+  }
+  # wait_proxy - give the supervisor up to 15 s to bind :443 (the supervisor
+  # starts its daemons while it binds, so this is not instant).
+  wait_proxy() {
+    i=0
+    while [ "$i" -lt 30 ]; do
+      proxy_listening && return 0
+      sleep 0.5
+      i=$((i + 1))
+    done
+    proxy_listening
+  }
+  # wait_no_supervisor - the supervisor that was just handed over is really
+  # gone. The unit's proxy binds :443 at start, and a stopping supervisor still
+  # holds it: without this wait the unit starts, fails to bind and leaves the
+  # ingress dead while the old proxy answers a few more seconds.
+  wait_no_supervisor() {
+    i=0
+    while [ "$i" -lt 30 ]; do
+      "$pf_bin" supervisor status >/dev/null 2>&1 || return 0
+      sleep 0.5
+      i=$((i + 1))
+    done
+    return 1
+  }
+
   if systemctl --user cat pitchfork >/dev/null 2>&1; then
     systemctl --user daemon-reload
-    systemctl --user restart pitchfork ||
-      echo "post-dotfiles: the pitchfork supervisor did not restart; the ingress proxy stays down until it does" >&2
+    # A supervisor may run outside the unit: an on-demand client auto-start
+    # (`pitchfork cd` from the shell hook, `pitchfork list`, ...) or a manual
+    # `pitchfork supervisor start --force`. It runs without `--boot`, so the
+    # boot_start daemons (openchamber, the OpenCode publisher, the ingress DNS)
+    # stay down while the proxy answers, and every ingress URL returns 502 "No
+    # daemon found for host". Hand that supervisor over to systemd instead of
+    # leaving two: the unit is `Restart=on-failure` and sees a clean exit when
+    # another process kills it, so it never comes back by itself.
+    if systemctl --user is-active --quiet pitchfork; then
+      systemctl --user restart pitchfork ||
+        echo "post-dotfiles: the pitchfork supervisor did not restart; the ingress proxy stays down until it does" >&2
+    else
+      if "$pf_bin" supervisor status >/dev/null 2>&1; then
+        echo "post-dotfiles: a pitchfork supervisor runs outside the systemd unit; handing it over" >&2
+        "$pf_bin" supervisor stop >/dev/null 2>&1 || true
+        wait_no_supervisor ||
+          echo "post-dotfiles: the supervisor outside the unit did not stop; the unit cannot bind :443 (repair: sklein-devbox-ingress up)" >&2
+      fi
+      systemctl --user start pitchfork ||
+        echo "post-dotfiles: the pitchfork supervisor did not start; the ingress proxy stays down until it does" >&2
+    fi
+    # Verify the listener instead of trusting the exit status: the capability
+    # can still be missing (sudo without NOPASSWD above, or a binary replaced
+    # between the test and the start). One repair attempt, then say it plainly.
+    if ! wait_proxy; then
+      if sudo -n true 2>/dev/null; then
+        echo "post-dotfiles: nothing listens on :443 after the restart; re-running pitchfork proxy setup" >&2
+        "$pf_bin" proxy setup --yes >/dev/null 2>&1 || true
+        systemctl --user restart pitchfork >/dev/null 2>&1 || true
+      fi
+      wait_proxy ||
+        echo "post-dotfiles: nothing listens on :443; every ingress URL is down (repair: sklein-devbox-ingress up)" >&2
+    fi
+    # Only ask when the unit is active: a client call with no supervisor behind
+    # it auto-starts one without --boot, which is the state this block repairs.
+    if systemctl --user is-active --quiet pitchfork &&
+      ! "$pf_bin" status global/openchamber 2>/dev/null | grep -qi running; then
+      echo "post-dotfiles: global/openchamber is not running; its ingress URL answers 502 until it does (start: pitchfork start global/openchamber)" >&2
+    fi
   else
-    # No systemd unit: start the boot_start daemons explicitly.
-    pitchfork start global/openchamber >/dev/null 2>&1 || true
+    # No systemd unit: start the boot_start daemons explicitly, in dependency
+    # order, the way boot mode would.
+    for d in opencode-service-publish sklein-devbox-ingress-dns openchamber; do
+      "$pf_bin" start "global/$d" >/dev/null 2>&1 || true
+    done
   fi
 fi
 '''

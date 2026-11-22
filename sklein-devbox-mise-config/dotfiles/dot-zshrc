@@ -23,9 +23,24 @@ eval "$(fnox activate zsh)"
 eval "$(mise completion zsh)"
 
 # Pitchfork's chpwd hook: starts/stops the daemons declared in a project's
-# pitchfork.toml on enter/exit. pitchfork is a mise-managed tool, so this
-# block belongs after `mise activate`.
-eval "$(pitchfork activate zsh)"
+# pitchfork.toml on enter/exit. `pitchfork activate zsh` is not used: the
+# function it prints bakes in the versioned binary path
+# (installs/pitchfork/<version>/pitchfork), so a shell opened before an upgrade
+# keeps calling the previous release. The supervisor then logs "Client version X
+# differs from supervisor version Y. Restart the supervisor with: pitchfork
+# supervisor start --force" on every cd, and following that advice kills the
+# systemd unit and starts a supervisor without --boot, which leaves every
+# ingress URL on 502. Calling the `latest` symlink -- the binary the systemd
+# unit runs -- keeps the hook on the installed version without reopening the
+# shell. pitchfork is a mise-managed tool, so this block belongs after `mise
+# activate`.
+__pitchfork() {
+  local bin="$HOME/.local/share/mise/installs/pitchfork/latest/pitchfork"
+  [ -x "$bin" ] || bin="$(command -v pitchfork)" || return 0
+  "$bin" cd --shell-pid $$
+}
+chpwd_functions+=(__pitchfork)
+__pitchfork
 
 # Carapace - multi-command completion engine (jj, gh, kubectl, k9s, helm, ...).
 # carapace is a mise-managed tool: it must be on PATH, so load it after the

@@ -153,6 +153,16 @@ The container's configuration is the **deployed** form of this repo's
   OpenCode child stayed off after the 2026-10-28 reload and let a client take
   port 4096. Reload with `systemctl --user restart pitchfork`;
   `~/bin/sklein-devbox-ingress up` does exactly that.
+- A supervisor outside the unit shows up as `502 No daemon found for host` on
+  every ingress URL, not as a dead port: the proxy runs, the `boot_start`
+  daemons do not. The `30-restart.conf` drop-in sets `Restart=always`, so the
+  unit replaces a supervisor killed from outside (a manual `--force`, or the
+  on-demand start that any pitchfork command triggers), and the
+  `post-dotfiles` hook hands one it finds beside an inactive unit over to
+  systemd. Stop the supervisor for good with `systemctl --user stop pitchfork`,
+  never with `pitchfork supervisor stop`, which systemd now undoes.
+  `~/bin/sklein-devbox-doctor` reports a supervisor whose pid is not the unit's
+  `MainPID`, an inactive unit, and an active unit without a `:443` listener.
 - `global/opencode-port-free` is a oneshot dependency of `openchamber`: it runs
   before every start and stops an unsupervised `opencode` process holding port
   4096, so a client that took the port during a restart cannot block the child.
@@ -179,13 +189,16 @@ The container's configuration is the **deployed** form of this repo's
 - `mise dot apply` ends with `systemctl --user restart pitchfork`, because the
   supervisor and the daemons keep the binary, plugin modules and environment
   they started with. The hook re-runs `pitchfork proxy setup --yes` first when
-  the capability check (`getcap` on the binary `latest` resolves to) fails:
-  `mise install` replaces the binary and the inode loses `cap_net_bind_service`,
-  so a restarted supervisor would fail to bind `:443` and every ingress URL
-  would stop answering. The apply therefore kills running OpenCode sessions: run
-  it from a plain SSH shell, never from an OpenCode tool call. Configuration
-  files under `~/.config/opencode` are hot-reloaded by the server and need no
-  restart; a TUI plugin change only requires reopening the TUI.
+  the capability check fails: `mise install` replaces the binary and the inode
+  loses `cap_net_bind_service`, so a restarted supervisor would fail to bind
+  `:443` and every ingress URL would stop answering. The check and the `proxy
+  setup` / `boot enable` calls use the binary of `settings.boot.executable`,
+  the one the unit runs, not the versioned pitchfork of the invoking shell.
+  After the restart the hook waits for the `:443` listener and retries the setup
+  once. The apply therefore kills running OpenCode sessions: run it from a
+  plain SSH shell, never from an OpenCode tool call. Configuration files under
+  `~/.config/opencode` are hot-reloaded by the server and need no restart; a TUI
+  plugin change only requires reopening the TUI.
 
 ## If you are already inside the container
 

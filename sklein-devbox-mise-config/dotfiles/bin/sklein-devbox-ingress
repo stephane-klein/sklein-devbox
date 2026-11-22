@@ -253,10 +253,25 @@ cmd_up() {
   local config_path="$HOME/.config/pitchfork/config.toml" sup_pid="" unit=false
   systemctl --user cat pitchfork >/dev/null 2>&1 && unit=true
 
+  # wait_stopped_supervisor - a supervisor asked to stop keeps :443 until its
+  # daemons are gone (~10 s). The unit starts right after, and its proxy would
+  # find the port taken, fail to bind, and leave the ingress dead.
+  wait_stopped_supervisor() {
+    local i=0
+    while [ "$i" -lt 30 ]; do
+      pitchfork supervisor status >/dev/null 2>&1 || return 0
+      sleep 0.5
+      i=$((i + 1))
+    done
+    return 1
+  }
+
   if $unit && ! systemctl --user is-active --quiet pitchfork; then
     if pitchfork supervisor status >/dev/null 2>&1; then
       info "handing the supervisor over to systemd"
       pitchfork supervisor stop
+      wait_stopped_supervisor \
+        || die "the supervisor outside the unit did not stop; the unit cannot bind :443"
     fi
     info "starting the pitchfork supervisor (systemd unit, boot mode)"
     systemctl --user start pitchfork
@@ -275,6 +290,17 @@ cmd_up() {
   fi
 
   pitchfork proxy doctor || true
+
+  # A supervisor restarted in boot mode starts openchamber itself; one that was
+  # already running with openchamber stopped (after a crash, or after an
+  # on-demand `pitchfork stop`) does not. Its URL answers 502 "No daemon found
+  # for host" until the daemon runs, so `up` is not complete without it.
+  if ! pitchfork status global/openchamber 2>/dev/null | grep -qi running; then
+    info "starting openchamber (stopped)"
+    pitchfork start global/openchamber \
+      || die "openchamber did not start (see: pitchfork logs global/openchamber)"
+  fi
+  ok "openchamber running"
 
   info "starting the DNS daemon ($DNS_DAEMON)"
   if ! pitchfork status "$DNS_DAEMON" 2>/dev/null | grep -qi running; then

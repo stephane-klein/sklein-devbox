@@ -4,8 +4,9 @@
 #
 # Runs `mise doctor`, then compares the version of the running pitchfork
 # supervisor and of the OpenCode child OpenChamber launches and OpenChamber with
-# the version on PATH, then walks through the capabilities the link provides: a
-# desktop notification, audio playback and URL opening -- plus a
+# the version on PATH, checks that the supervisor runs under its systemd unit
+# with the proxy listening on :443, then walks through the capabilities the link
+# provides: a desktop notification, audio playback and URL opening -- plus a
 # transport-aware clipboard (OSC 52) check, which does not depend on the link
 # carrier. For each it runs the command and asks whether the effect was
 # perceived, so a transport failure (missing socket, no carrier) is reported
@@ -64,8 +65,9 @@ $PROG - check the sklein-devbox remote-desktop link from inside the instance.
 
 Runs \`mise doctor\`, compares the version of the running pitchfork supervisor
 and of the OpenCode child OpenChamber launches and OpenChamber with the version
-on PATH, checks the homelab CA (trust store, gopass, curl and Node probes,
-daemon NODE_OPTIONS), then guides you through the link checks (a desktop
+on PATH, checks that the supervisor runs under its systemd unit with the proxy
+listening on :443, checks the homelab CA (trust store, gopass, curl and Node
+probes, daemon NODE_OPTIONS), then guides you through the link checks (a desktop
 notification, an audio playback and opening a URL) and a clipboard (OSC 52)
 check, asking after each whether you perceived the effect on the foot host.
 
@@ -429,6 +431,70 @@ test_versions() {
   check_openchamber_version
 }
 
+# --- ingress supervisor -------------------------------------------------------
+# The proxy, the boot_start daemons and the :443 listener all depend on the
+# systemd unit running `pitchfork supervisor run --boot`. Two failures look like
+# a broken ingress and are easy to misdiagnose:
+#   - a supervisor started outside the unit (on-demand client auto-start, or a
+#     manual `pitchfork supervisor start --force`) runs without --boot, so
+#     openchamber and the ingress DNS stay down: every URL answers 502 "No
+#     daemon found for host". The unit stays inactive because it saw a clean
+#     exit (Restart=on-failure, now overridden to always by 30-restart.conf).
+#   - the unit is up but the proxy could not bind :443, because a freshly
+#     installed pitchfork lost cap_net_bind_service.
+# Both are repaired by `sklein-devbox-ingress up`.
+check_supervisor_unit() {
+  local unit_pid sup_pid
+  if ! command -v pitchfork >/dev/null 2>&1; then
+    record_skip "supervisor: pitchfork not found in PATH"
+    return
+  fi
+  if ! command -v systemctl >/dev/null 2>&1; then
+    record_skip "supervisor: systemctl not found"
+    return
+  fi
+  # `systemctl --user` resolves the user bus from XDG_RUNTIME_DIR, and the foot
+  # host's ssh client leaks a foreign value (/tmp) into the instance.
+  if [ -d "/run/user/$(id -u)" ]; then
+    XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    export XDG_RUNTIME_DIR
+  fi
+  if ! systemctl --user cat pitchfork >/dev/null 2>&1; then
+    record_skip "supervisor: no systemd user unit (pitchfork boot enable)"
+    return
+  fi
+  if ! pgrep -f '[p]itchfork supervisor run' >/dev/null 2>&1; then
+    record_fail "supervisor: not running, the ingress answers nothing (repair: sklein-devbox-ingress up)"
+    return
+  fi
+  if ! systemctl --user is-active --quiet pitchfork; then
+    record_fail "supervisor: runs outside the systemd unit, so it has no --boot and the boot_start daemons stay down (every ingress URL answers 502 \"No daemon found for host\"; repair: sklein-devbox-ingress up)"
+    return
+  fi
+  # The supervisor answers on the IPC socket and reports its own pid; compare it
+  # with the unit's MainPID to catch a second supervisor beside the unit.
+  unit_pid="$(systemctl --user show pitchfork -p MainPID --value 2>/dev/null)"
+  sup_pid="$(pitchfork status global/pitchfork --json 2>/dev/null \
+             | sed -n 's/.*"pid": *\([0-9]\{1,\}\).*/\1/p' | head -n1)"
+  if [ -n "$unit_pid" ] && [ "$unit_pid" != 0 ] && [ -n "$sup_pid" ] &&
+    [ "$sup_pid" != "$unit_pid" ]; then
+    record_fail "supervisor: pid $sup_pid answers, the unit's MainPID is $unit_pid (a supervisor was started beside the unit; repair: sklein-devbox-ingress up)"
+    return
+  fi
+  if ! command -v ss >/dev/null 2>&1; then
+    record_skip "supervisor: under systemd (pid ${unit_pid:-?}), ss not found to check :443"
+  elif ss -lntH 2>/dev/null | awk '{print $4}' | grep -qE ':443$'; then
+    record_pass "supervisor: under systemd (pid ${unit_pid:-?}), proxy listening on :443"
+  else
+    record_fail "supervisor: under systemd (pid ${unit_pid:-?}) but nothing listens on :443 (the bind capability is missing; repair: sklein-devbox-ingress up)"
+  fi
+}
+
+test_supervisor() {
+  step "ingress supervisor"
+  check_supervisor_unit
+}
+
 # --- TLS trust (homelab CA) ---------------------------------------------------
 # The CA lives in gopass and is installed into the Fedora trust store by
 # ~/bin/install-homelab-ca (called by the driver's post-dotfiles hook). Nothing
@@ -764,6 +830,9 @@ main() {
   # No `--only-versions`: the check is cheap, offline, and a stale supervisor or
   # server is exactly the kind of drift a manual pass should always reveal.
   test_versions
+  # Same reason: a supervisor outside the unit or a dead :443 listener is the
+  # drift that silently breaks every ingress URL.
+  test_supervisor
   if want ca; then
     test_homelab_ca
   fi

@@ -414,7 +414,15 @@ The only privileged step is `pitchfork proxy setup` (bind capability for
 installed pitchfork binary: the capability lives on the file's inode and
 `mise install` replaces the binary, so an upgrade would otherwise leave the
 supervisor unable to bind `:443` — and the DNS daemon still answers, which
-hides the cause. Everything else runs as `devbox`.
+hides the cause. The hook tests the binary named by `settings.boot.executable`,
+the one the systemd unit runs, and calls `proxy setup` and `boot enable` with
+it. Testing `command -v pitchfork` instead would look at this shell's
+pitchfork, which `mise activate` pins to a versioned path: after an upgrade a
+shell opened before it still resolves the previous release, whose inode kept
+the capability, so the test passed while the unit started `latest` without it
+(2026-11-19, 2026-11-22 13:24). The hook then waits for the `:443` listener and
+retries the setup once instead of trusting the restart's exit status.
+Everything else runs as `devbox`.
 
 Recovery, when `status` reports the `:443` listener and the `127.0.0.1:15353`
 stub dead while dnsmasq keeps answering (and `system resolution` fails, because
@@ -426,6 +434,21 @@ start/reload decision, and the supervisor reloads whenever the `:443` listener
 is absent, not only when the config file is newer. The restart takes every
 `boot_start` daemon down with it, so run it from a plain SSH shell, not from an
 OpenCode session.
+
+The other way the ingress breaks looks different: the proxy answers, but with
+`502 No daemon found for host`, because a supervisor runs without `--boot` and
+the `boot_start` daemons are stopped. Any pitchfork command that needs the
+supervisor starts one on demand (the `chpwd` hook, `pitchfork list`, …) and so
+does `pitchfork supervisor start --force`; both leave a supervisor beside the
+unit, which is `Restart=on-failure` and sees a clean exit, so it never comes
+back by itself. Three things keep that from lasting: `30-restart.conf` turns the
+unit into `Restart=always`, the `post-dotfiles` hook hands a supervisor found
+outside an inactive unit over to systemd (stop it, wait for `:443` to be free,
+start the unit), and `~/bin/sklein-devbox-doctor` reports a supervisor whose pid
+is not the unit's `MainPID` or a unit that is active without a listener. `up`
+remains the manual repair, and it now also starts `openchamber` when it is
+stopped. Stop the supervisor for good with `systemctl --user stop pitchfork`,
+not `pitchfork supervisor stop`.
 
 ### Why the namespace is not the host FQDN
 

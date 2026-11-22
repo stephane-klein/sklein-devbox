@@ -53,6 +53,13 @@ if command -v carapace &> /dev/null; then
     export CARAPACE_BRIDGES='zsh,bash'
     zstyle ':completion:*' format $'%{\e[2;37m%}Completing %d%{\e[m%}'
     source <(carapace _carapace)
+    # `carapace _carapace` unconditionally prepends its shim directory
+    # (~/.config/carapace/bin, used for runnable specs only) to PATH. Because
+    # this block runs after `mise activate`, that entry lands before the mise
+    # tool directories and `mise doctor` warns about it. Move it to the end of
+    # PATH: a mise-managed tool must win over a shim of the same name, and a
+    # shim still resolves under its own name.
+    path=(${path:#$HOME/.config/carapace/bin} $HOME/.config/carapace/bin)
 fi
 
 # gopass has no carapace completer: use its native zsh completion.

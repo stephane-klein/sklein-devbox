@@ -12,7 +12,7 @@ return {
   -- Python
   "python",
   -- Infrastructure
-  "dockerfile", "terraform", "yaml",
+  "dockerfile", "terraform", "helm", "yaml",
   -- Data
   "json", "json5", "toml",
   -- SQL

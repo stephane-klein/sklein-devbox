@@ -113,6 +113,7 @@ return {
         'svelte',
         'taplo',
         'lua_ls',
+        'helm_ls',
       })
     end,
 

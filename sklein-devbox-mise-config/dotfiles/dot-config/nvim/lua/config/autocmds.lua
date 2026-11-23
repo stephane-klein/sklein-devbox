@@ -35,7 +35,11 @@ vim.api.nvim_create_autocmd({ "BufEnter", "WinEnter" }, {
 vim.api.nvim_create_autocmd({"BufRead", "BufNewFile"}, {
   pattern = "*.tpl",
   callback = function()
-    vim.bo.filetype = "gotmpl"
+    -- Un .tpl dans un chart est déjà `helm` via ftdetect/helm.lua ; le parseur
+    -- helm gère aussi le Go template, avec le YAML en plus.
+    if vim.bo.filetype ~= "helm" then
+      vim.bo.filetype = "gotmpl"
+    end
   end,
 })
 

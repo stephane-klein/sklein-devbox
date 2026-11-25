@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# sklein-devbox-backup-opencode - back up ~/.local/share/opencode and keep the
+# last two `opencode` snapshots of this host.
+#
+# The log and snapshot directories are rebuildable and take most of the volume.
+# The globs are anchored with `**/opencode/` because the walker matches on the
+# full path: this keeps the patterns independent of $HOME.
+
+set -euo pipefail
+
+source_dir="${HOME}/.local/share/opencode"
+
+"$HOME/bin/sklein-devbox-rustic" backup "$source_dir" \
+  --init \
+  --host "$(uname -n)" \
+  --tag "machine-id-$(cat /etc/machine-id)" \
+  --tag opencode \
+  --glob '!**/opencode/account.json' \
+  --glob '!**/opencode/auth.json*' \
+  --glob '!**/opencode/log' \
+  --glob '!**/opencode/snapshot'
+
+# The bucket is shared between hosts: filter on this host so this instance
+# never prunes another machine's snapshots.
+"$HOME/bin/sklein-devbox-rustic" forget \
+  --filter-tags opencode \
+  --filter-host "$(uname -n)" \
+  --keep-last 2 \
+  --prune

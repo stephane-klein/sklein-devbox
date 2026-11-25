@@ -122,6 +122,10 @@ delta = "0.21.2"
 rtk = "1.2.1"
 github-cli = "2.105.0"
 
+# Backups: rustic to Scaleway Object Storage, driven by the
+# ~/bin/sklein-devbox-backup* scripts (see README, "Backups (rustic)").
+rustic = "0.12.0"
+
 claude-code = "2.1.319"
 
 # Forgejo CLI (fj) + extension Actions (fj-ex)

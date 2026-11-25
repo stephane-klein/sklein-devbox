@@ -378,6 +378,12 @@ exclude = ["*.tera"]
 # walk leaves the subtree to this entry.
 "~/.config/nvim"                    = {}
 
+# Named so each one can be re-applied on its own:
+# `mise dot apply '~/.config/rustic/rustic.toml'`.
+"~/.zshrc"                          = {}
+"~/.config/mise/config.toml"        = {}
+"~/.config/rustic/rustic.toml"      = {}
+
 # Permissions the plain copy walk cannot express.
 "~/.ssh/config"                     = { mode = "copy", permissions = "0600" }
 
@@ -398,6 +404,12 @@ exclude = ["*.tera"]
 "~/bin/install-homelab-ca"          = { mode = "copy", permissions = "0755" }
 "~/bin/install-pitchfork-ca"        = { mode = "copy", permissions = "0755" }
 "~/bin/sklein-generate-opencode-context-report" = { mode = "copy", permissions = "0755" }
+
+# rustic backups (see README, "Backups (rustic)")
+"~/bin/sklein-devbox-rustic"          = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-devbox-backup"          = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-devbox-backup-opencode" = { mode = "copy", permissions = "0755" }
+"~/bin/sklein-devbox-backup-try"      = { mode = "copy", permissions = "0755" }
 
 # Internal helpers, kept off PATH: gpg-agent runs pinentry-tmux, and
 # `opencode-port-free` is the first command of the opencode-server run script.

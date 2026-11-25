@@ -67,6 +67,13 @@ if command -v gopass &> /dev/null; then
     source <(gopass completion zsh)
 fi
 
+# rustic has no carapace completer: use its native zsh completion. The wrapper
+# only forwards its arguments, so it shares the same function.
+if command -v rustic &> /dev/null; then
+    source <(rustic completions zsh)
+    compdef _rustic sklein-devbox-rustic
+fi
+
 # fzf-tab - replace zsh's completion menu with an fzf picker (needs the fzf
 # binary, hence after `mise activate`; and after `compinit`). The plugin is
 # vendored by scripts/sync-fzf-tab.sh into ~/.config/zsh/fzf-tab.

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# sklein-devbox-rustic - run rustic against the Scaleway repository described
+# by ~/.config/rustic/rustic.toml.
+#
+# The credentials live in gopass. They are exported as the OPENDAL_* variables
+# the `opendal:s3` backend reads. gopass is looked up with fallbacks because a
+# script started outside an interactive zsh (a timer, for example) does not
+# inherit mise's PATH; the directory found is prepended so the
+# `password-command` of rustic.toml resolves the same binary. rustic is resolved
+# the same way: a shell opened before the tool was installed does not see it.
+
+set -euo pipefail
+
+SECRET_PREFIX="scaleway/sklein-devbox-rustic-backup"
+
+find_gopass() {
+  local candidate
+  if candidate="$(command -v gopass 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  for candidate in \
+    "$HOME/.local/share/mise/installs/gopass/latest/gopass" \
+    "$HOME/.local/bin/gopass" \
+    /usr/bin/gopass; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+gopass="$(find_gopass)" || {
+  echo "sklein-devbox-rustic: gopass not found" >&2
+  exit 1
+}
+export PATH="$(dirname "$gopass"):$PATH"
+
+find_rustic() {
+  local candidate
+  if candidate="$(command -v rustic 2>/dev/null)"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if candidate="$(mise which rustic 2>/dev/null)" && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  candidate="$(ls -d "$HOME"/.local/share/mise/installs/rustic/*/rustic 2>/dev/null |
+    sort -V | tail -1)"
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+rustic_bin="$(find_rustic)" || {
+  echo "sklein-devbox-rustic: rustic not found" >&2
+  exit 1
+}
+
+export OPENDAL_ACCESS_KEY_ID="$("$gopass" show -o "$SECRET_PREFIX/SCW_ACCESS_KEY")"
+export OPENDAL_SECRET_ACCESS_KEY="$("$gopass" show -o "$SECRET_PREFIX/SCW_SECRET_KEY")"
+
+exec "$rustic_bin" "$@"

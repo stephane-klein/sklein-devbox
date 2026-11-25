@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# sklein-devbox-backup - back up a directory to the rustic repository.
+#
+# Usage: sklein-devbox-backup <path> [tag...]
+
+set -euo pipefail
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: sklein-devbox-backup <path> [tag...]" >&2
+  exit 1
+fi
+
+source_dir="$1"
+shift
+
+args=(--init --host "$(uname -n)" --tag "machine-id-$(cat /etc/machine-id)")
+for tag in "$@"; do
+  args+=(--tag "${tag#--}")
+done
+
+exec "$HOME/bin/sklein-devbox-rustic" backup "$source_dir" "${args[@]}"

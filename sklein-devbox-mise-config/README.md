@@ -124,7 +124,10 @@ section: `devbox-dot apply` applies only the `[dotfiles]` entries (and installs
 
 - **mise** — `eval "$(mise completion zsh)"`. `mise activate` only wires completions for managed tools that ship one (fnox, pitchfork, ...), never for the `mise` command itself, which needs its own line.
 - **carapace** — the multi-command completion engine (`carapace` in the global `[tools]`). A single `source <(carapace _carapace)` dispatches to per-command completers, so no per-tool script is needed. Supported completers: <https://carapace-sh.github.io/carapace-bin/completers.html>
-- **gopass** — native `source <(gopass completion zsh)` (carapace has no gopass completer).
+- **gopass, bd and rustic** — these have no carapace completer, so `dot-zshrc`
+  sources their own zsh completion (`gopass completion zsh`, `bd completion
+  zsh`, `rustic completions zsh`). The rustic function is also bound to
+  `sklein-devbox-rustic`, which forwards its arguments.
 - **fzf-tab** — turns zsh's completion menu into an fzf picker. The plugin is vendored into `~/.config/zsh/fzf-tab` by `scripts/sync-fzf-tab.sh` (not committed; fetched by the driver's `pre-dotfiles` hook, refresh with `mise -C ~/.local/share/sklein-devbox/sklein-devbox-mise-config run update-fzf-tab`).
 
 ## Applying dotfiles
@@ -395,6 +398,39 @@ the deployed `~/.config/mise/config.toml` directly: it writes the driver source,
 which mutagen syncs back to the workstation. In git-bootstrapped mode (no
 mutagen) the edit stays in the container clone and must be committed from the
 workstation to persist.
+
+## Backups (rustic)
+
+`dotfiles/bin/sklein-devbox-rustic` is deployed to `~/bin/sklein-devbox-rustic`.
+It runs `rustic` against the Scaleway Object Storage repository described by
+`~/.config/rustic/rustic.toml` (bucket `sklein-devbox-rustic-backup`, region
+`fr-par`). The access key, the secret key and the repository password are read
+from gopass under `scaleway/sklein-devbox-rustic-backup/`; nothing is stored in
+the repository.
+
+Three helpers wrap it:
+
+- `~/bin/sklein-devbox-backup <path> [tag...]` backs up an arbitrary directory.
+- `~/bin/sklein-devbox-backup-opencode` backs up `~/.local/share/opencode`,
+  skipping `account.json`, `auth.json*`, `log/` and `snapshot/`, then keeps the
+  last two `opencode` snapshots of this host.
+- `~/bin/sklein-devbox-backup-try` backs up `~/tries`, skipping `node_modules`,
+  `.venv`, `dist` and `.git`, with the same two-snapshot retention.
+
+Every snapshot is tagged `machine-id-<id>` and hosted under `uname -n`. The
+bucket is shared by every host that uses these scripts, so the `forget`
+commands add `--filter-host "$(uname -n)"`: a host never prunes another host's
+snapshots.
+
+`~/.local/share/opencode/opencode.db` is copied while the OpenCode server writes
+to it (`opencode.db-wal`, `opencode.db-shm`), so a restore gives the state at
+read time, not a transactionally consistent dump.
+
+```sh
+~/bin/sklein-devbox-backup-try
+~/bin/sklein-devbox-backup-opencode
+~/bin/sklein-devbox-rustic snapshots
+```
 
 ## Wildcard subdomains (`sklein-devbox-ingress`)
 

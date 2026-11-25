@@ -1,0 +1,11 @@
+# Repository of the ~/bin/sklein-devbox-backup* scripts. The bucket is shared
+# by every host that uses these scripts; each snapshot is hosted under
+# `uname -n` and the forget policies filter on that host.
+[repository]
+repository = "opendal:s3"
+password-command = "gopass show -o scaleway/sklein-devbox-rustic-backup/RUSTIC_PASSWORD"
+
+[repository.options]
+bucket = "sklein-devbox-rustic-backup"
+region = "fr-par"
+endpoint = "https://s3.fr-par.scw.cloud"

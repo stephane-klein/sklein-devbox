@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# sklein-devbox-backup-try - back up ~/tries (try-rs) and keep the last two
+# `try` snapshots of this host.
+
+set -euo pipefail
+
+source_dir="${HOME}/tries"
+
+"$HOME/bin/sklein-devbox-rustic" backup "$source_dir" \
+  --init \
+  --host "$(uname -n)" \
+  --tag "machine-id-$(cat /etc/machine-id)" \
+  --tag try \
+  --glob '!**/node_modules' \
+  --glob '!**/.venv' \
+  --glob '!**/dist' \
+  --glob '!**/.git'
+
+"$HOME/bin/sklein-devbox-rustic" forget \
+  --filter-tags try \
+  --filter-host "$(uname -n)" \
+  --keep-last 2 \
+  --prune

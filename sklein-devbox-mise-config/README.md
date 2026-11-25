@@ -183,6 +183,22 @@ global config. The driver declares a `post-dotfiles` bootstrap hook with
 the command's first line; `--verbose` prints the command. `MISE_NO_HOOKS=1`
 skips both hook phases, and with them the `mise install`.
 
+### A file the application rewrites: `merge = "missing"`
+
+`~/.config/opencode/opencode.jsonc` is edited from OpenChamber, which changes
+its `mcp.servers` and `plugins` keys from the Settings → MCP panel. A whole-file
+`template` entry fights it, so the target is an edit entry with
+`merge = "missing"` in `[dotfiles]`: mise writes the file when it is absent and
+otherwise adds only the keys the file lacks, without touching the values
+already there. `status` and `diff` look at those keys alone, so a toggle made
+in the UI never shows up as drift, and `secret()` is accepted only with this
+merge mode.
+
+Two consequences. A key rotated in gopass does not reach the file: delete that
+key, or the server holding it, from `~/.config/opencode/opencode.jsonc`, then
+apply to fill it again. And a key added to the source, such as a new MCP server
+or a new plugin, reaches only a machine that does not have it yet.
+
 ## Remote-desktop link
 
 The foot host gives the headless instance access to its desktop (open URLs,

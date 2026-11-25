@@ -431,13 +431,13 @@ exclude = ["*.tera"]
 "~/.config/opencode/certs/homelab-ca.crt" = { mode = "absent" }
 
 # Templates (sources end in .tera, excluded from the walk above; the source is
-# relative to the group root, i.e. dotfiles/).
+# relative to the group root, i.e. dotfiles/). `opencode.jsonc` is not here:
+# OpenChamber rewrites it, so it is an edit entry in `[dotfiles]` below.
 "~/.config/pitchfork/config.toml"    = { source = "dot-config/pitchfork/config.toml.tera", mode = "template" }
 "~/.config/gnupg/gpg-agent.conf"     = { source = "dot-config/gnupg/gpg-agent.conf.tera", mode = "template" }
 "~/.config/incus/client.crt"         = { source = "dot-config/incus/client.crt.tera", mode = "template" }
 "~/.config/incus/client.key"         = { source = "dot-config/incus/client.key.tera", mode = "template" }
 "~/.config/gh/hosts.yml"             = { source = "dot-config/gh/hosts.yml.tera", mode = "template" }
-"~/.config/opencode/opencode.jsonc"  = { source = "dot-config/opencode/opencode.jsonc.tera", mode = "template" }
 "~/.local/share/opencode/credentials.json" = { source = "dot-local/share/opencode/credentials.json.tera", mode = "template", permissions = "0600" }
 # Application token of the Forgejo CLI (`fj`), read from this file at startup.
 "~/.local/share/forgejo-cli/keys.json" = { source = "dot-local/share/forgejo-cli/keys.json.tera", mode = "template", permissions = "0600" }
@@ -466,6 +466,19 @@ exclude = ["*.tera"]
   source = "files/openchamber/preferences.json",
   merge = "missing",
   permissions = "0644"
+}
+
+# OpenChamber rewrites this file from its Settings → MCP panel, so mise cannot
+# own it whole. `merge = "missing"` seeds a fresh machine and fills the keys
+# the file lacks, and leaves the values already there alone: a toggle made in
+# the UI survives an apply, and `status`/`diff` never report drift on a key the
+# file already has. `secret()` is accepted only with `merge = "missing"`, which
+# is why the API keys stay in the source. A key rotated in gopass therefore
+# does not reach the file: delete the key, then apply, to fill it again.
+"~/.config/opencode/opencode.jsonc/mise" = {
+  source = "dotfiles/dot-config/opencode/opencode.jsonc.tera",
+  template = "tera",
+  merge = "missing"
 }
 
 [bootstrap.directories."~/.kube/"]

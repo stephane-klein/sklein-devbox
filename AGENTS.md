@@ -126,9 +126,12 @@ The container's configuration is the **deployed** form of this repo's
   come from the OpenChamber plugin listed in
   `~/.config/opencode/opencode.jsonc` (`plugins`), not from the server's
   environment: the plugin reads `~/.config/openchamber/runtime-bridge.json` and
-  stays dormant while OpenChamber is down. This is why adding the plugin from
-  the UI is not enough; the dotfile template must carry it, otherwise the next
-  `mise dot apply` removes it.
+  stays dormant while OpenChamber is down. `~/.config/opencode/opencode.jsonc`
+  is an edit entry with `merge = "missing"`, because OpenChamber rewrites it
+  from its MCP panel: the `.tera` source seeds a fresh machine and fills the
+  keys the file lacks, and an apply never overwrites a value the file already
+  has. A plugin added from the UI therefore stays, while a plugin or server
+  added to the source reaches only a machine that does not have the key yet.
 - `sklein-devbox-doctor` checks that `opencode-server` runs with `--service`,
   that `service.json` names its pid, version and a password that authenticates,
   and that OpenChamber's shared-service setting and the plugin are in place.

@@ -6,10 +6,14 @@
 # import`, using the project directory recorded in the export.
 #
 # Usage:
-#   import-opencode-v1-sessions <path>...
+#   import-opencode-v1-sessions [--mode json|db] <path>...
 #
-# <path> is a directory that contains manifest.json, or one or more V1 JSON
-# export files.
+# In json mode (default), <path> is a directory that contains manifest.json,
+# or one or more V1 JSON export files.
+#
+# In db mode, <path> is an OpenCode V1 data directory (the one that contains
+# opencode.db) or an opencode.db file. Sessions are read from the session,
+# message and part tables, and the database is opened read-only.
 #
 # Pass --replace to delete and re-import sessions that already exist. This is
 # destructive: the existing session and its messages are removed first.
@@ -17,13 +21,16 @@
 import argparse
 import json
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ZERO_TOKENS = {"input": 0, "output": 0, "reasoning": 0, "cache": {"read": 0, "write": 0}}
 FINISH_VALUES = {"stop", "length", "tool-calls", "content-filter", "error", "unknown"}
+DB_TABLES = ("session", "message", "part")
 
 
 def die(message):
@@ -34,7 +41,7 @@ def die(message):
 def load_session(path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError) as exc:
         raise ValueError(f"cannot read file ({exc})")
     if not isinstance(data, dict) or "info" not in data or "messages" not in data:
         raise ValueError("this file is not a V1 session export")
@@ -43,8 +50,8 @@ def load_session(path):
     return data
 
 
-def resolve_target(source_dir):
-    """Map a source-machine path to a local project directory."""
+def target_path(source_dir):
+    """Map a source-machine path to a local project path, existing or not."""
     if not source_dir:
         return None
 
@@ -54,17 +61,101 @@ def resolve_target(source_dir):
 
     # /home/<user>/... -> <local home>/...
     parts = source.parts
-    if len(parts) > 3 and parts[1] == "home":
-        candidate = Path.home().joinpath(*parts[3:])
-        if candidate.is_dir():
-            return candidate
+    if len(parts) >= 3 and parts[1] == "home":
+        rest = parts[3:]
+        return Path.home().joinpath(*rest) if rest else Path.home()
 
     # Fallback for projects kept under ~/tries on both machines.
-    candidate = Path.home() / "tries" / source.name
-    if candidate.is_dir():
-        return candidate
+    return Path.home() / "tries" / source.name
 
+
+def resolve_target(source_dir):
+    """Return the local project directory when it already exists."""
+    candidate = target_path(source_dir)
+    if candidate is not None and candidate.is_dir():
+        return candidate
     return None
+
+
+def create_target(target, created):
+    """Create target and its missing parents, recording each new directory."""
+    missing = []
+    current = target
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+
+    for path in reversed(missing):
+        if path.exists():
+            if not path.is_dir():
+                raise NotADirectoryError(f"{path} exists and is not a directory")
+            continue
+        path.mkdir()
+        created.add(path)
+        print(f"  + {path}")
+
+
+def is_empty_dir(path):
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        return True
+    return False
+
+
+def cleanup_directories(manifest_path, dry_run):
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        die(f"cannot read {manifest_path} ({exc})")
+
+    failed = manifest.get("failed") or 0
+    if failed:
+        die(f"{manifest_path} records {failed} failed session(s); cleanup refused")
+
+    paths = [Path(item) for item in manifest.get("directories", [])]
+    paths.sort(key=lambda path: len(path.parts), reverse=True)
+
+    removed = skipped = 0
+    for path in paths:
+        if path == Path.home() or path == Path("/"):
+            print(f"  = {path}: protected, skipped")
+            skipped += 1
+            continue
+        try:
+            path.relative_to(Path.home())
+        except ValueError:
+            print(f"  = {path}: outside home, skipped")
+            skipped += 1
+            continue
+        if path.is_symlink() or not path.is_dir():
+            print(f"  = {path}: not a directory, skipped")
+            skipped += 1
+            continue
+        try:
+            empty = is_empty_dir(path)
+        except OSError as exc:
+            print(f"  ! {path}: cannot read ({exc})")
+            skipped += 1
+            continue
+        if not empty:
+            print(f"  = {path}: not empty, skipped")
+            skipped += 1
+            continue
+        if dry_run:
+            print(f"  · {path}: empty, would be removed")
+            removed += 1
+            continue
+        try:
+            path.rmdir()
+        except OSError as exc:
+            print(f"  ! {path}: cannot remove ({exc})")
+            skipped += 1
+            continue
+        print(f"  - {path}: removed")
+        removed += 1
+
+    print(f"Done: {removed} removed, {skipped} skipped.")
 
 
 def convert_info(info, target):
@@ -106,17 +197,42 @@ def convert_user(message):
 def convert_tool(part, message_info, stamps):
     state = part.get("state") or {}
     status = state.get("status")
-    converted = {"status": status, "input": state.get("input") or {}}
+    raw_input = state.get("input")
+    if not isinstance(raw_input, dict):
+        raw_input = {} if raw_input is None else {"value": raw_input}
+    metadata = state.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
 
-    if status == "completed":
+    if status in ("running", "pending"):
+        # V2 has no "pending" state; a tool that has not started is running.
+        converted = {"status": "running", "input": raw_input, "metadata": metadata}
+    elif status == "streaming":
+        raw_stream = state.get("input")
+        if not isinstance(raw_stream, str):
+            raw_stream = json.dumps(raw_stream or {})
+        converted = {"status": "streaming", "input": raw_stream}
+    elif status == "completed":
+        converted = {"status": "completed", "input": raw_input}
         converted["content"] = [{"type": "text", "text": state.get("output") or ""}]
-        if state.get("metadata") is not None:
-            converted["metadata"] = state["metadata"]
+        if metadata:
+            converted["metadata"] = metadata
     elif status == "error":
-        converted["error"] = {"type": "unknown", "message": str(state.get("error") or "")}
-    elif status in ("running", "streaming"):
-        if state.get("metadata") is not None:
-            converted["metadata"] = state["metadata"]
+        converted = {
+            "status": "error",
+            "input": raw_input,
+            "error": {"type": "unknown", "message": str(state.get("error") or "")},
+        }
+    else:
+        # Unknown V1 state: keep the tool in the transcript as an error.
+        converted = {
+            "status": "error",
+            "input": raw_input,
+            "error": {
+                "type": "unknown",
+                "message": f"Unknown tool state: {status}",
+            },
+        }
 
     times = state.get("time") or {}
     created = times.get("start") or message_info["time"]["created"]
@@ -205,14 +321,17 @@ def convert(session, target):
     return {"info": convert_info(info, target), "messages": messages}
 
 
-def collect(paths):
+def collect_json(paths):
     files = []
     for raw in paths:
         path = Path(raw).expanduser()
         if path.is_dir():
             manifest_path = path / "manifest.json"
             if not manifest_path.is_file():
-                die(f"{path} does not contain manifest.json")
+                die(
+                    f"{path} does not contain manifest.json "
+                    "(use --mode=db for an OpenCode data directory)"
+                )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             for entry in manifest.get("sessions", []):
                 name = entry.get("file")
@@ -223,6 +342,76 @@ def collect(paths):
         else:
             die(f"path not found: {path}")
     return files
+
+
+def load_json_sessions(paths):
+    loaded = []
+    for path in collect_json(paths):
+        try:
+            loaded.append((path, load_session(path)))
+        except ValueError as exc:
+            die(f"{path}: {exc}")
+    return loaded
+
+
+def database_path(path):
+    if path.is_dir():
+        database = path / "opencode.db"
+        if not database.is_file():
+            die(f"{path} does not contain opencode.db")
+        return database
+    if not path.is_file():
+        die(f"path not found: {path}")
+    return path
+
+
+def connect_database(path, workdir):
+    """Open a V1 database read-only; copy it when SQLite cannot read the WAL."""
+    connection = None
+    try:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        connection.execute("select count(*) from sqlite_master").fetchone()
+    except sqlite3.Error:
+        if connection is not None:
+            connection.close()
+        print(f"  note: copying {path} to read it", file=sys.stderr)
+        copy_dir = Path(tempfile.mkdtemp(prefix="db-", dir=workdir))
+        copy_path = copy_dir / path.name
+        for suffix in ("", "-wal", "-shm"):
+            source = Path(f"{path}{suffix}")
+            if source.is_file():
+                shutil.copy2(source, Path(f"{copy_path}{suffix}"))
+        connection = sqlite3.connect(copy_path)
+        connection.row_factory = sqlite3.Row
+
+    tables = {
+        row[0]
+        for row in connection.execute("select name from sqlite_master where type='table'")
+    }
+    missing = [name for name in DB_TABLES if name not in tables]
+    if missing:
+        connection.close()
+        die(
+            f"{path} is not an OpenCode V1 database "
+            f"(missing table: {', '.join(missing)})"
+        )
+    return connection
+
+
+def collect_databases(paths, workdir):
+    databases = []
+    for raw in paths:
+        path = Path(raw).expanduser()
+        if not path.exists():
+            die(f"path not found: {path}")
+        database = database_path(path)
+        connection = connect_database(database, workdir)
+        rows = connection.execute(
+            "select id, parent_id from session order by time_created, id"
+        ).fetchall()
+        databases.append((database, connection, rows))
+    return databases
 
 
 def order_sessions(items):
@@ -246,6 +435,124 @@ def order_sessions(items):
     return ordered
 
 
+def order_rows(rows):
+    by_id = {row["id"]: row for row in rows}
+    ordered, done = [], set()
+
+    def visit(session_id, stack):
+        if session_id in done or session_id in stack:
+            return
+        row = by_id.get(session_id)
+        if row is None:
+            return
+        parent = row["parent_id"]
+        if parent:
+            visit(parent, stack | {session_id})
+        done.add(session_id)
+        ordered.append(row)
+
+    for row in rows:
+        visit(row["id"], set())
+    return ordered
+
+
+def db_session_info(row):
+    row = dict(row)
+    info = {
+        "id": row["id"],
+        "projectID": row["project_id"],
+        "directory": row.get("directory") or "",
+        "title": row.get("title") or "",
+        "version": row.get("version"),
+        "slug": row.get("slug"),
+        "path": row.get("path") or "",
+        "summary": {
+            "additions": row.get("summary_additions") or 0,
+            "deletions": row.get("summary_deletions") or 0,
+            "files": row.get("summary_files") or 0,
+        },
+        "cost": row.get("cost") or 0,
+        "tokens": {
+            "input": row.get("tokens_input") or 0,
+            "output": row.get("tokens_output") or 0,
+            "reasoning": row.get("tokens_reasoning") or 0,
+            "cache": {
+                "read": row.get("tokens_cache_read") or 0,
+                "write": row.get("tokens_cache_write") or 0,
+            },
+        },
+        "time": {
+            "created": row["time_created"],
+            "updated": row.get("time_updated") or row["time_created"],
+        },
+    }
+    if row.get("parent_id"):
+        info["parentID"] = row["parent_id"]
+    if row.get("agent"):
+        info["agent"] = row["agent"]
+    if row.get("model"):
+        try:
+            info["model"] = json.loads(row["model"])
+        except json.JSONDecodeError:
+            pass
+    return info
+
+
+def load_db_session(connection, session_id):
+    row = connection.execute(
+        "select * from session where id=?", (session_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"session {session_id} disappeared")
+
+    parts_by_message = {}
+    for part in connection.execute(
+        "select id, message_id, data from part "
+        "where session_id=? order by message_id, id",
+        (session_id,),
+    ):
+        data = json.loads(part["data"])
+        data["id"] = part["id"]
+        data["sessionID"] = session_id
+        data["messageID"] = part["message_id"]
+        parts_by_message.setdefault(part["message_id"], []).append(data)
+
+    messages = []
+    for message in connection.execute(
+        "select id, data, time_created from message "
+        "where session_id=? order by time_created, id",
+        (session_id,),
+    ):
+        info = json.loads(message["data"])
+        info["id"] = message["id"]
+        info["sessionID"] = session_id
+        time = info.get("time")
+        if not isinstance(time, dict):
+            time = {}
+        time.setdefault("created", message["time_created"])
+        info["time"] = time
+        messages.append(
+            {"info": info, "parts": parts_by_message.get(message["id"], [])}
+        )
+
+    return {"info": db_session_info(row), "messages": messages}
+
+
+def iter_db_sessions(databases):
+    for database, connection, rows in databases:
+        print(f"Source: {database} ({len(rows)} session(s))")
+        try:
+            for row in order_rows(rows):
+                try:
+                    session = load_db_session(connection, row["id"])
+                except (KeyError, ValueError, json.JSONDecodeError) as exc:
+                    yield database, None, f"session {row['id']}: cannot read ({exc})"
+                    continue
+                yield database, session, None
+        finally:
+            connection.close()
+
+
 def run_import(opencode, target, path):
     result = subprocess.run(
         [opencode, "session", "import", "--directory", str(target), str(path)],
@@ -266,9 +573,43 @@ def run_delete(opencode, session_id):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Import OpenCode V1 sessions into OpenCode V2."
+        description="Import OpenCode V1 sessions into OpenCode V2.",
+        epilog=(
+            "examples:\n"
+            "  import-opencode-v1-sessions ~/opencode-session/my-project\n"
+            "  import-opencode-v1-sessions export-1.json export-2.json\n"
+            "  import-opencode-v1-sessions --mode=db --dry-run ~/.local/share/opencode\n"
+            "  import-opencode-v1-sessions --mode=db ~/restore/opencode/opencode.db\n"
+            "  import-opencode-v1-sessions --mode=db --create-dirs ~/.local/share/opencode\n"
+            "  import-opencode-v1-sessions --cleanup-empty-dirs \\\n"
+            "      /tmp/opencode-v1-import-dirs-20261125T152349Z.json --dry-run\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("paths", nargs="+", metavar="PATH")
+    parser.add_argument("paths", nargs="*", metavar="PATH")
+    parser.add_argument(
+        "--mode",
+        choices=("json", "db"),
+        default="json",
+        help=(
+            "source format: 'json' (default) reads V1 export files, or a directory "
+            "containing manifest.json; 'db' reads an OpenCode V1 data directory or an "
+            "opencode.db file, using the session, message and part tables"
+        ),
+    )
+    parser.add_argument(
+        "--create-dirs",
+        action="store_true",
+        help=(
+            "create missing project directories before importing; the created "
+            "directories are recorded in a timestamped manifest under /tmp"
+        ),
+    )
+    parser.add_argument(
+        "--cleanup-empty-dirs",
+        action="store_true",
+        help="remove empty directories listed in the manifest PATH, then exit",
+    )
     parser.add_argument("-n", "--dry-run", action="store_true", help="convert without importing")
     parser.add_argument(
         "-r",
@@ -278,33 +619,72 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.cleanup_empty_dirs:
+        if args.create_dirs:
+            die("--cleanup-empty-dirs cannot be combined with --create-dirs")
+        if len(args.paths) != 1:
+            die("--cleanup-empty-dirs requires exactly one manifest path")
+        cleanup_directories(Path(args.paths[0]).expanduser(), args.dry_run)
+        return
+
+    if not args.paths:
+        die("at least one PATH is required")
+    if args.create_dirs and args.dry_run:
+        die("--create-dirs cannot be combined with --dry-run")
+
     opencode = shutil.which("opencode")
     if not opencode and not args.dry_run:
         die("opencode binary not found in PATH")
 
-    files = collect(args.paths)
-    loaded = []
-    for path in files:
-        try:
-            loaded.append((path, load_session(path)))
-        except ValueError as exc:
-            die(f"{path}: {exc}")
-
-    print(f"Importing {len(loaded)} session(s)")
+    manifest_path = None
+    if args.create_dirs:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        manifest_path = Path("/tmp") / f"opencode-v1-import-dirs-{stamp}.json"
+        print(f"Directories manifest: {manifest_path}")
 
     with tempfile.TemporaryDirectory(prefix="opencode-v1-import-") as tmpdir:
         outdir = Path(tmpdir)
         imported = replaced = skipped = failed = 0
         last_target = None
+        created_dirs = set()
 
-        for path, session in order_sessions(loaded):
-            title = session["info"].get("title") or path.stem
+        if args.mode == "json":
+            loaded = load_json_sessions(args.paths)
+            print(f"Importing {len(loaded)} session(s)")
+            sessions = (
+                (path, session, None) for path, session in order_sessions(loaded)
+            )
+        else:
+            databases = collect_databases(args.paths, tmpdir)
+            total = sum(len(rows) for _, _, rows in databases)
+            print(f"Importing {total} session(s)")
+            sessions = iter_db_sessions(databases)
+
+        for source, session, error in sessions:
+            if error:
+                failed += 1
+                print(f"  ✗ {error}")
+                continue
+
+            title = session["info"].get("title") or session["info"]["id"]
             source_dir = session["info"].get("directory")
             target = resolve_target(source_dir)
             if target is None:
-                failed += 1
-                print(f"  ✗ {title}: project not found for {source_dir}")
-                continue
+                if not args.create_dirs:
+                    failed += 1
+                    print(f"  ✗ {title}: project not found for {source_dir}")
+                    continue
+                target = target_path(source_dir)
+                if target is None:
+                    failed += 1
+                    print(f"  ✗ {title}: cannot map project for {source_dir}")
+                    continue
+                try:
+                    create_target(target, created_dirs)
+                except OSError as exc:
+                    failed += 1
+                    print(f"  ✗ {title}: cannot create {target} ({exc})")
+                    continue
 
             if target != last_target:
                 print(f"Target: {target}")
@@ -317,7 +697,11 @@ def main():
                 print(f"  ✗ {title}: conversion failed ({exc})")
                 continue
 
-            destination = outdir / f"{path.stem}.v2.json"
+            if args.mode == "json":
+                name = source.stem
+            else:
+                name = session["info"]["id"]
+            destination = outdir / f"{name}.v2.json"
             destination.write_text(
                 json.dumps(converted, ensure_ascii=False, indent=2), encoding="utf-8"
             )
@@ -360,10 +744,37 @@ def main():
                 failed += 1
                 print(f"  ✗ {title}: unexpected response ({output})")
 
+        if args.create_dirs:
+            manifest = {
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "sources": [str(Path(path).expanduser()) for path in args.paths],
+                "failed": failed,
+                "directories": sorted(str(path) for path in created_dirs),
+            }
+            try:
+                manifest_path.parent.mkdir(parents=True, exist_ok=True)
+                manifest_path.write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError as exc:
+                print(f"  ! cannot write {manifest_path} ({exc})", file=sys.stderr)
+
     print(
         f"Done: {imported} imported, {replaced} replaced, "
         f"{skipped} skipped, {failed} failed."
     )
+
+    if manifest_path is not None:
+        print(f"Directories created: {len(created_dirs)} (manifest: {manifest_path})")
+        if failed:
+            print("Cleanup refused while sessions failed; fix the failures and retry.")
+        else:
+            print("Remove the empty directories with:")
+            print(
+                f"  {Path(sys.argv[0]).name} --cleanup-empty-dirs "
+                f"{manifest_path} --dry-run"
+            )
 
 
 if __name__ == "__main__":

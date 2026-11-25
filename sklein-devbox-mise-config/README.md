@@ -199,6 +199,14 @@ key, or the server holding it, from `~/.config/opencode/opencode.jsonc`, then
 apply to fill it again. And a key added to the source, such as a new MCP server
 or a new plugin, reaches only a machine that does not have it yet.
 
+### The kubeconfig is seeded once
+
+`~/.kube/config.d/homelab-stephane-klein-info.kubeconfig` is a `template` entry
+with `create_if_missing = true`: mise writes it when it is absent and never
+compares it again. kubens re-encodes every file of `KUBECONFIG` on each
+namespace switch, so a managed render would report drift after every call. To
+deploy a rotated kubeconfig, delete the file and apply the entry again.
+
 ## Remote-desktop link
 
 The foot host gives the headless instance access to its desktop (open URLs,

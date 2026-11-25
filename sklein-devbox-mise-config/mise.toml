@@ -441,7 +441,16 @@ exclude = ["*.tera"]
 "~/.local/share/opencode/credentials.json" = { source = "dot-local/share/opencode/credentials.json.tera", mode = "template", permissions = "0600" }
 # Application token of the Forgejo CLI (`fj`), read from this file at startup.
 "~/.local/share/forgejo-cli/keys.json" = { source = "dot-local/share/forgejo-cli/keys.json.tera", mode = "template", permissions = "0600" }
-"~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = { source = "dot-kube/config.d/homelab-stephane-klein-info.kubeconfig.tera", mode = "template", permissions = "0600" }
+# kubens 0.11 rewrites every file of KUBECONFIG on each namespace switch, so a
+# managed render would report drift after every call. The file is seeded once
+# and then belongs to kubens; to apply a rotated kubeconfig, delete it and
+# apply this entry again.
+"~/.kube/config.d/homelab-stephane-klein-info.kubeconfig" = {
+  source = "dot-kube/config.d/homelab-stephane-klein-info.kubeconfig.tera",
+  mode = "template",
+  permissions = "0600",
+  create_if_missing = true
+}
 
 # Entries whose source lives outside the group root, or that use inline content.
 [dotfiles]

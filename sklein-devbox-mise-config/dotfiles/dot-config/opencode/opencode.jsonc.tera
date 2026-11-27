@@ -145,7 +145,16 @@
         "environment": {
           "OPENCODE_BROWSER_RUNTIME": "auto-update"
         }
-      }
+      },
+      "corpus-stephane-klein": {
+        "type": "remote",
+        "url": "https://corpus.stephane-klein.info/mcp/readonly/",
+        "headers": {
+          "Authorization": "Bearer {{ secret(name="CORPUS_STEPHANE_KLEIN_INFO_STEPHANE_KLEIN_MCP_READONLY_TOKEN") }}"
+
+        },
+        "disabled": true
+    }
     }
   },
   // OpenCode 2: one entry loads both the server and the TUI parts of a plugin.

@@ -33,6 +33,8 @@ BROWSER_CONTROL_MCP_EXTENSION_SECRET       = { provider = "gopass", value = "bro
 MEMEX_SKLEIN_XYZ_MCP_READER_OPENCODE_TOKEN = { provider = "gopass", value = "memex.sklein.xyz/mcp-reader/opencode_token" }
 HOMELAB_THE_ARTIFACT_MCP_TOKEN             = { provider = "gopass", value = "homelab/the-artifact/mcp-token" }
 
+CORPUS_STEPHANE_KLEIN_INFO_STEPHANE_KLEIN_MCP_READONLY_TOKEN = { provider = "gopass", value = "corpus.stephane-klein.info/stephane-klein/mcp-readonly-token" }
+
 
 # NetBird PAT, used by sklein-devbox-ingress to auto-configure the wildcard DNS
 # zone and nameserver through the public API.
